@@ -1,0 +1,217 @@
+:root {
+    /*--color-brand: #b77a4a;*/
+    /*--color-dark: #1a1a1a;*/
+    /*--color-light: #f9f9f9;*/
+    --radius-sm: 8px;
+    --radius-md: 16px;
+    --radius-lg: 24px;
+    --shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* theme.css — кастомные классы и стили для Hero/Swiper */
+
+.hero-left-overlay {
+    /* если нужно дополнительное позиционирование/фон — можно использовать */
+    backdrop-filter: blur(6px);
+}
+
+/* Swiper bullets + navigation */
+.swiper-pagination-bullet {
+    background: var(--color-gray);
+    opacity: 0.45;
+    width: 10px;
+    height: 10px;
+}
+
+.swiper-pagination-bullet-active {
+    background: var(--color-black);
+    opacity: 1;
+}
+
+.swiper-button-next,
+.swiper-button-prev {
+    color: var(--color-black);
+    opacity: 0.9;
+    transition: opacity .18s ease;
+}
+
+.swiper-button-next:hover,
+.swiper-button-prev:hover {
+    opacity: 1;
+}
+
+/* ensure the fade effect covers both columns */
+.swiper-slide {
+    overflow: hidden;
+}
+
+
+.choice-swiper .swiper-button-next,
+.choice-swiper .swiper-button-prev {
+    color: #000;
+    top: 45%;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transition: all 0.2s ease;
+}
+
+.choice-swiper .swiper-button-next:hover,
+.choice-swiper .swiper-button-prev:hover {
+    background: #000;
+    color: #fff;
+}
+
+.choice-swiper .swiper-pagination-bullet {
+    background: #a3a3a3;
+    opacity: 0.4;
+}
+
+.choice-swiper .swiper-pagination-bullet-active {
+    background: #000;
+    opacity: 1;
+}
+
+
+/* === ОГРАНИЧЕНИЕ СЛАЙДЕРА ВНУТРИ КОНТЕЙНЕРА === */
+/* --- FIX: отключаем глобальные стрелки Swiper, если используем свои --- */
+.swiper-button-next,
+.swiper-button-prev {
+    all: unset;
+}
+
+/* предотвращаем наследование глобальных !important от других swiper-ов */
+.swiper-container-box {
+    position: relative;
+    overflow: visible;
+}
+
+
+/* === ПОЗИЦИОНИРОВАНИЕ СТРЕЛОК ОТНОСИТЕЛЬНО ВНУТРЕННЕГО БЛОКА === */
+.container-inner .swiper-button-prev {
+    left: -59px !important;
+}
+
+.container-inner .swiper-button-next {
+    right: -59px !important;
+}
+
+@media (max-width: 1024px) {
+    .container-inner .swiper-button-prev {
+        left: 8px !important;
+    }
+
+    .container-inner .swiper-button-next {
+        right: 8px !important;
+    }
+}
+
+/* === FIX SWIPER WIDTH LOGIC === */
+.popular-swiper {
+    width: 100%;
+    max-width: 1062px;
+    margin: 0 auto;
+    overflow: hidden !important;
+}
+
+/* каждый слайд — по контенту */
+.story-swipper.swiper-slide {
+    width: auto !important;
+    flex-shrink: 0;
+}
+
+/* фикс для wrapper, чтобы не растягивался */
+.story-swipper.swiper-wrapper {
+    display: flex;
+    justify-content: center;
+    width: auto !important;
+    max-width: 1062px;
+    margin: 0 auto;
+    transform: translate3d(0, 0, 0) !important;
+}
+
+/* убираем старые global swiper стили, если есть */
+.story-swipper .swiper,
+.story-swipper .swiper-container {
+    max-width: none !important;
+    width: 100% !important;
+}
+
+@media (min-width: 1024px) {
+    .story-swipper .swiper-wrapper {
+        overflow: hidden !important;
+    }
+
+}
+
+/* === Mobile fix: популярные ароматы === */
+@media (max-width: 768px) {
+    .popular-scents-grid {
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        scroll-snap-type: x mandatory;
+        gap: 16px !important;
+        padding: 0 16px;
+    }
+
+    .popular-scents-grid::-webkit-scrollbar {
+        display: none;
+    }
+
+    .popular-scents-grid > div {
+        flex: 0 0 80% !important;
+        scroll-snap-align: start;
+        width: 80% !important;
+        max-width: 320px;
+        margin: 0 auto;
+    }
+
+
+    /* === MOBILE FIX: карточки продуктов === */
+    .products-grid {
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        gap: 16px !important;
+        padding: 0 16px;
+        scroll-snap-type: x mandatory;
+    }
+
+    .products-grid::-webkit-scrollbar {
+        display: none;
+    }
+
+    .products-grid > div {
+        flex: 0 0 80% !important;
+        max-width: 320px !important;
+        scroll-snap-align: start;
+    }
+
+    /* faq */
+    .grid-cols-\[96px_1fr\] {
+        grid-template-columns: 96px 1fr;
+    }
+
+    .faq-left-image {
+        width: 96px;
+        border-radius: 22px;
+        overflow: hidden;
+    }
+
+    .faq-right {
+        padding-left: 12px;
+    }
+
+}
+
+@media (min-width: 768px) {
+}
+
+
+
+
+
+
