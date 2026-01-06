@@ -1,6 +1,8 @@
-export const mockFaq = [
+import {FaqItem} from '@/types/faq'
+
+export const mockFaq : FaqItem[] = [
   {
-    id: '1',
+    id: 10,
     title: 'Сложный вопрос №1',
     shortText: 'Понятный ответ на вопрос №1',
     answer:
@@ -8,7 +10,7 @@ export const mockFaq = [
   },
 
   {
-    id: '2',
+    id: 12,
     title: 'Сложный вопрос №2',
     shortText: 'Понятный ответ на вопрос №2',
     answer:
@@ -16,7 +18,7 @@ export const mockFaq = [
   },
 
   {
-    id: '3',
+    id: 13,
     title: 'Сложный вопрос №3',
     shortText: 'Понятный ответ на вопрос №3',
     answer:
@@ -24,7 +26,7 @@ export const mockFaq = [
   },
 
   {
-    id: '4',
+    id: 24,
     title: 'Сложный вопрос №4',
     shortText: 'Понятный ответ на вопрос №4',
     answer:
@@ -32,7 +34,7 @@ export const mockFaq = [
   },
 
   {
-    id: '5',
+    id: 15,
     title: 'Сложный вопрос №5',
     shortText: 'Понятный ответ на вопрос №5',
     answer:
@@ -40,7 +42,7 @@ export const mockFaq = [
   },
 
   {
-    id: '6',
+    id: 16,
     title: 'Сложный вопрос №6',
     shortText: 'Понятный ответ на вопрос №6',
     answer:
@@ -48,7 +50,7 @@ export const mockFaq = [
   },
 
   {
-    id: '7',
+    id: 17,
     title: 'Сложный вопрос №7',
     shortText: 'Понятный ответ на вопрос №7',
     answer:
@@ -56,7 +58,7 @@ export const mockFaq = [
   },
 
   {
-    id: '8',
+    id: 18,
     title: 'Сложный вопрос №8',
     shortText: 'Понятный ответ на вопрос №8',
     answer:

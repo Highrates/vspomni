@@ -8,79 +8,52 @@ import { Swiper, SwiperSlide } from 'swiper/react'
 
 import { motion } from 'framer-motion'
 import ChoiceCard, { ChoiceCardProps } from './ChoiceCard'
-
-export const mockChoices: ChoiceCardProps[] = [
-  {
-    id: 1,
-    image: '/images/choice-1.jpg',
-    name: 'Анастасия Волочкова',
-    perfume: 'Кашемир и слива',
-    date: '17 мая 2025',
-    oldPrice: '15 250 ₽',
-    price: '12 890 ₽',
-    locked: true,
-  },
-  {
-    id: 2,
-    image: '/images/choice-2.jpg',
-    name: 'Эльдар',
-    perfume: 'Глубина ночи',
-    date: '14 мая 2025',
-    oldPrice: '15 250 ₽',
-    price: '12 890 ₽',
-  },
-  {
-    id: 3,
-    image: '/images/choice-3.jpg',
-    name: 'Алексей',
-    perfume: 'Лес после дождя',
-    date: '10 мая 2025',
-    oldPrice: '15 250 ₽',
-    price: '12 890 ₽',
-  },
-  {
-    id: 4,
-    image: '/images/choice-4.jpg',
-    name: 'Мария',
-    perfume: 'Цветы в окне',
-    date: '7 мая 2025',
-    oldPrice: '15 250 ₽',
-    price: '12 890 ₽',
-  },
-]
+import { useStarChoiceStore  } from '@/stores/useStarChoice'
+import { useEffect } from 'react'
 
 export default function Choice() {
+
+  const { products,  fetchProducts } = useStarChoiceStore();
+
+     useEffect(()=>{
+        fetchProducts();
+      },[])
+
+  // Дублируем продукты для проверки скролла (временно)
+  const extendedProducts = [...products, ...products.map((p, i) => ({ ...p, id: `${p.id}-copy-${i}` }))]
+
   return (
-    <section className="mt-20 px-2">
-      <h2 className="text-[28px] sm:text-[32px] font-semibold text-black mb-8 flex items-center gap-2">
+    <section className="mt-6 sm:mt-10 md:mt-14 lg:mt-20 py-4 px-2">
+      <h2 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold text-black mb-6 sm:mb-8 flex items-center gap-2">
         Выбор <span className="text-[20px] sm:text-[24px]">⭐</span>
       </h2>
 
       <Swiper
         modules={[Autoplay, Pagination, Navigation]}
-        spaceBetween={20}
+        slidesPerView="auto"
+        spaceBetween={12}
         grabCursor
+        allowTouchMove
         autoplay={{ delay: 5500, disableOnInteraction: false }}
-        navigation
-        className="choice-swiper pb-10 rounded-[20px]"
+        navigation={{
+          enabled: true,
+        }}
+        className="choice-swiper pb-10 rounded-[20px] [&_.swiper-button-prev]:hidden [&_.swiper-button-next]:hidden sm:[&_.swiper-button-prev]:flex sm:[&_.swiper-button-next]:flex"
         breakpoints={{
-          0: { slidesPerView: 1, spaceBetween: 16 },          // mobile
-          480: { slidesPerView: 1.2, spaceBetween: 18 },       // small devices
-          640: { slidesPerView: 1.5, spaceBetween: 20 },       // tablets
-          768: { slidesPerView: 2, spaceBetween: 22 },         // medium
-          1024: { slidesPerView: 2.5, spaceBetween: 24 },      // laptop
-          1280: { slidesPerView: 3, spaceBetween: 24 },        // large desktop
+          640: { spaceBetween: 20 },
+          768: { spaceBetween: 22 },
+          1024: { spaceBetween: 24 },
         }}
       >
-        {mockChoices.map((card) => (
-          <SwiperSlide key={card.id} className="!w-auto">
+        {extendedProducts.map((product) => (
+          <SwiperSlide key={product.id} className="!w-auto">
             <motion.div
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.4 }}
-              className="w-[280px] sm:w-[340px] md:w-[420px] lg:w-[498px] h-auto"
+              className="w-[calc(100vw-48px)] sm:w-[340px] md:w-[420px] lg:w-[420px] h-auto"
             >
-              <ChoiceCard {...card} />
+              <ChoiceCard product={product} />
             </motion.div>
           </SwiperSlide>
         ))}

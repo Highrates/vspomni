@@ -1,7 +1,7 @@
 import Hero from '@/components/home/Hero'
 import ProductGrid from '@/components/home/ProductGrid'
 import StoryBlock from '@/components/features/StoryBlock'
-import PopularScents from '@/components/features/PopularScents'
+import PopularScentsAlt from '@/components/features/PopularScentsAlt'
 import ComingSoon from '@/components/features/ComingSoon'
 import Choice from '@/components/home/Choice'
 import NewsBlock from '@/components/news/NewsBlock'
@@ -13,7 +13,7 @@ export default function Home() {
     <>
       <Hero />
       <StoryBlock />
-      <PopularScents />
+      <PopularScentsAlt />
       <ComingSoon />
       <Choice />
       <HistoryLine />

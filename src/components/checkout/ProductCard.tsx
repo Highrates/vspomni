@@ -1,48 +1,55 @@
 'use client'
 
-type ProductCardProps = {
+type Product = {
+  id: string
   title: string
-  volume: string
-  quantity: string
-  oldPrice: string
-  newPrice: string
-  imageUrl: string
+  price: number
+  thumbnail: string
+  capacity: string[]
+  groups: string[]
+  overview: string
+  about: {
+    description: string
+    specs: string
+    contain: string
+  }
+  image: string[]
 }
 
-export const ProductCard = ({
-  title,
-  volume,
-  quantity,
-  oldPrice,
-  newPrice,
-  imageUrl,
-}: ProductCardProps) => {
+type ProductCardProps = {
+  product: Product
+}
+
+export const ProductCard = ({ product }: ProductCardProps) => {
   return (
-    <div className="flex items-center gap-4 p-[11px] border rounded-lg shadow-md mb-4">
+    <div className="flex items-center gap-4 p-[11px] border rounded-lg shadow-md mb-4 hover:shadow-lg transition-shadow cursor-pointer">
       <img
-        src={imageUrl}
-        alt={title}
+        src={product.thumbnail}
+        alt={product.title}
         className="w-24 h-24 object-cover rounded-[20px]"
       />
       <div className="flex-1 flex flex-col justify-around h-24">
         <div className="mb-2.5">
-          {' '}
           <div className="font-semibold mb-1 text-5 truncate">
-            {' '}
-            <span>{title}</span>
+            <span>{product.title}</span>
           </div>
           <div className="text-sm text-black-500">
-            <span>{volume}</span>
+            <span>{product.capacity.join(', ')}</span>
           </div>
         </div>
-        <div className="font-semibold text-xl">{quantity}</div>{' '}
+        <div className="flex gap-1.5">
+          {product.groups.slice(0, 3).map((group, index) => (
+            <span
+              key={index}
+              className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600"
+            >
+              {group}
+            </span>
+          ))}
+        </div>
       </div>
       <div className="text-right flex h-24 items-end">
-        {' '}
-        <div className="mr-1.5 line-through font-semibold text-xl text-gray-400">
-          {oldPrice}
-        </div>
-        <div className="font-semibold text-xl">{newPrice}</div>
+        <div className="font-semibold text-xl">{product.price} ₽</div>
       </div>
     </div>
   )

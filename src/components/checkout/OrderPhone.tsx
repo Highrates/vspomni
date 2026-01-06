@@ -1,25 +1,32 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import PhoneInput from '../ui/PhoneInput'
+import { useUserStore } from '@/stores/useUser'
 
 const OrderPhone = () => {
-  const [phone, setPhone] = useState<string>('+900 999 99 00')
+  const { user, setUser } = useUserStore()
+  const [phone, setPhone] = useState<string>(user.phone || '')
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setPhone(e.target.value)
+  // Подтягиваем телефон из профиля при загрузке
+  useEffect(() => {
+    if (user.phone) {
+      setPhone(user.phone)
+    }
+  }, [user.phone])
+
+  const handlePhoneChange = (value: string) => {
+    setPhone(value)
+    // Обновляем телефон в сторе пользователя
+    setUser({ ...user, phone: value })
   }
+  
   return (
     <>
       <div className="mb-10">
-        <label className="text-sm font-medium text-black/40 block mb-1">
-          Телефон
-        </label>
-        <input
-          type="email"
-          name="email"
-          className="border-[0.5px] border-black/8 bg-[#FAFAFA] rounded-sm p-2 w-full"
+        <PhoneInput
+          onChange={(value) => handlePhoneChange(value)}
           value={phone}
-          onChange={handleChange}
         />
       </div>
     </>

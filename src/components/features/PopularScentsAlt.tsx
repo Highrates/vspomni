@@ -1,18 +1,29 @@
+'use client'
+
+import { useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import ProductCard from '@/components/home/ProductCardAlt'
-import { mockProductsGrid, productsGridItem } from '@/lib/mock/products'
+import ProductCard from '@/components/home/ProductCard'
+import {  ProductCardItem } from '@/types/product'
+import { usePopularScentsStore } from '@/stores/usePopularScents'
 
 export default function PopularScentsAlt() {
+  const { greed, fetchGrid } = usePopularScentsStore()
+
+  useEffect(() => {
+    fetchGrid()
+  }, [])
+
   return (
-    <section className="mb-45 mt-45 px-2">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8 sm:mb-14 gap-3">
-        <h3 className="text-2xl sm:text-[40px] lg:text-[48px] font-semibold select-none ">
+    <section className="mb-8 mt-8 sm:mb-12 sm:mt-12 md:mb-20 md:mt-20 lg:mb-45 lg:mt-45 px-2 py-4">
+      <div className="flex items-center justify-between mb-6 sm:mb-10 md:mb-14 gap-3">
+        <h3 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none">
           Популярные ароматы
         </h3>
-
-        <Link href="/product" className="text-base text-black font-medium flex items-center -ml-5">
+        <Link
+          href="/catalog"
+          className="text-base text-black font-medium flex items-center -ml-5"
+        >
           <span className="text-md font-medium">Все</span>
           <Image
             src="/to_right.svg"
@@ -23,11 +34,9 @@ export default function PopularScentsAlt() {
           />
         </Link>
       </div>
-
-      {/* Responsive Product Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-        {mockProductsGrid.slice(0, 4).map((product: productsGridItem) => (
-          <ProductCard product={product} key={product.id} />
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5 p-2 -m-2">
+        {greed.slice(0, 4).map((product: ProductCardItem, index: number) => (
+          <ProductCard product={product} key={product.id} isNew={index === 0} />
         ))}
       </div>
     </section>

@@ -8,22 +8,30 @@ import 'swiper/css/navigation'
 import 'swiper/css/effect-fade'
 
 import { motion } from 'framer-motion'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { getSlider, SliderItem } from '@/graphql/queries/slider.service'
 
-const slides = [
+interface HeroSlide {
+  id: string
+  image: string
+  logoText: string
+  badgeImage: string
+  title: string
+  text: string
+}
+
+const defaultSlides: HeroSlide[] = [
   {
-    id: 1,
-    leftImage: '/images/hero-left-1.jpg',
-    rightImage: '/images/hero-right-1.jpg',
+    id: 'default-1',
+    image: '/images/hero-left-1.jpg',
     logoText: 'ВСПОМНИ',
     badgeImage: '/images/hero-badge.png',
-    title: 'АРОМАТ, ЧТО ОСТАЁТСЯ',
+    title: 'Аромат, что остаётся. История, что звучит в памяти',
     text: 'Каждый аромат — это история, сотканная из чувств, мгновений и памяти.',
   },
   {
-    id: 2,
-    leftImage: '/images/hero-left-1.jpg',
-    rightImage: '/images/hero-right-1.jpg',
+    id: 'default-2',
+    image: '/images/hero-left-1.jpg',
     logoText: 'ВСПОМНИ',
     badgeImage: '/images/hero-badge.png',
     title: 'ВСПОМНИ ТО, ЧТО ДОРОГО',
@@ -33,9 +41,49 @@ const slides = [
 
 export default function Hero() {
   const [activeIndex, setActiveIndex] = useState(0)
+  const [slides, setSlides] = useState<HeroSlide[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchSlider = async () => {
+      try {
+        const data = await getSlider()
+        if (data.length > 0) {
+          const heroSlides: HeroSlide[] = data.map((slide, index) => {
+            const defaultSlide = defaultSlides[index % defaultSlides.length]
+            return {
+              id: slide.id,
+              image: slide.image || defaultSlide.image,
+              logoText: defaultSlide.logoText,
+              badgeImage: defaultSlide.badgeImage,
+              title: defaultSlide.title,
+              text: defaultSlide.text,
+            }
+          })
+          setSlides(heroSlides)
+        } else {
+          setSlides(defaultSlides)
+        }
+      } catch (error) {
+        console.error('Failed to fetch slider:', error)
+        setSlides(defaultSlides)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchSlider()
+  }, [])
+
+  if (loading) {
+    return null
+  }
+
+  if (slides.length === 0) {
+    return null
+  }
 
   return (
-    <section className="relative w-full overflow-hidden">
+    <section className="relative w-full overflow-hidden px-2">
       <Swiper
         modules={[Autoplay, Pagination, Navigation, EffectFade]}
         autoplay={{ delay: 6000, disableOnInteraction: false }}
@@ -45,92 +93,70 @@ export default function Hero() {
         effect="fade"
         speed={900}
         onSlideChange={(swiper) => setActiveIndex(swiper.realIndex)}
-        className="w-full h-[80vh] sm:h-[85vh] md:h-[90vh]"
+        className="w-full h-[70vh]  sm:h-[80vh] md:h-[85vh] lg:h-[90vh] [&_.swiper-button-prev]:hidden [&_.swiper-button-next]:hidden sm:[&_.swiper-button-prev]:flex sm:[&_.swiper-button-next]:flex"
       >
         {slides.map((slide, index) => (
           <SwiperSlide key={slide.id}>
-            <div className="flex flex-col md:flex-row w-full h-full">
-              {/* ===== LEFT COLUMN ===== */}
-              <div
-                className={`relative flex-1 h-[60vh] sm:h-[380px] md:h-full overflow-hidden
-              ${index === activeIndex ? 'z-10' : 'z-0'}
-              rounded-[24px] md:rounded-l-[24px] md:rounded-tr-none md:rounded-br-none
-            `}
-              >
-                <img
-                  src={slide.leftImage}
-                  alt="left"
-                  className="object-cover w-full h-full"
-                />
+            <div className="relative w-full h-full overflow-hidden rounded-[12px] sm:rounded-md md:rounded-[20px] lg:rounded-lg">
+              {/* Единая цельная картинка на весь слайд */}
+              <img
+                src={slide.image}
+                alt={slide.title || 'Slider'}
+                className="object-cover w-full h-full"
+              />
 
-                {/* ЛОГО */}
-                <motion.div
-                  key={activeIndex + '-logo'}
-                  initial={{ opacity: 0, x: -40 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.6, ease: 'easeOut' }}
-                  className="absolute top-4 left-4 sm:top-6 sm:left-6 text-[20px] sm:text-[28px] md:text-[32px] font-bold text-black"
-                >
-                  {slide.logoText}
-                </motion.div>
-
-                {/* ТЕКСТОВАЯ ПЛАШКА */}
-                <motion.div
-                  key={activeIndex + '-badge'}
-                  initial={{ opacity: 0, y: 40 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }}
-                  className="absolute left-3 right-3 sm:left-6 sm:right-6 bottom-4 md:bottom-8 flex items-center gap-3 sm:gap-5 bg-white/70 backdrop-blur-md rounded-[10px] p-3 sm:p-6 shadow-[0_4px_20px_rgba(0,0,0,0.08)]"
-                >
-                  {/* Левая мини-картинка */}
+              {/* Контент только на левой половине */}
+              <div className="absolute inset-0 flex">
+                <div className="relative lg:flex-1 w-full h-full items-center">
+                  {/* ТЕКСТОВАЯ ПЛАШКА */}
                   <motion.div
-                    key={activeIndex + '-img'}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.5, delay: 0.3 }}
-                    className="w-[60px] h-[60px] sm:w-[90px] sm:h-[90px] flex-shrink-0"
+                    key={activeIndex + '-badge'}
+                    initial={{ opacity: 0, y: 40 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }}
+                    className="absolute left-3 right-3 md:left-6 md:right-6 bottom-4 md:bottom-8 hidden sm:flex flex-row gap-3 md:gap-5 bg-white/30 backdrop-blur-md rounded-4xl p-3 md:p-2.5 shadow-[0_4px_20px_rgba(0,0,0,0.08)]"
                   >
-                    <img
-                      src={slide.badgeImage}
-                      alt="badge"
-                      className="object-contain w-full h-full"
-                    />
-                  </motion.div>
+                    {/* Левая мини-картинка - квадратная */}
+                    <motion.div
+                      key={activeIndex + '-img'}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.5, delay: 0.3 }}
+                      className="w-[70px] h-[70px] sm:w-[100px] sm:h-[100px] md:w-[122px] md:h-[122px] rounded-xl overflow-hidden shrink-0"
+                    >
+                      <img
+                        src={slide.badgeImage}
+                        alt="badge"
+                        className="w-full h-full object-cover rounded-xl"
+                      />
+                    </motion.div>
 
-                  {/* Текст справа */}
-                  <motion.div
-                    key={activeIndex + '-text'}
-                    initial={{ opacity: 0, x: 15 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.5, delay: 0.35 }}
-                    className="flex flex-col justify-center text-black"
-                  >
-                    <h2 className="text-[15px] sm:text-[18px] md:text-[20px] font-semibold mb-1 leading-tight">
-                      {slide.title}
-                    </h2>
-                    <p className="text-[13px] sm:text-[15px] text-black/70 leading-snug max-w-[90%] sm:max-w-[430px]">
-                      {slide.text}
-                    </p>
+                    {/* Текст справа */}
+                    <motion.div
+                      key={activeIndex + '-text'}
+                      initial={{ opacity: 0, x: 15 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.5, delay: 0.35 }}
+                      className="flex flex-col justify-center text-black text-left flex-1 min-w-0"
+                    >
+                      <h2 className="text-[11px] sm:text-[16px] md:text-[20px] font-semibold mb-0.5 sm:mb-2 leading-tight">
+                        {slide.title.split('.')[0]}
+                        {slide.title.split('.')[1] ? (
+                          <>
+                            <br className="hidden sm:block" />
+                            <span className="sm:hidden">, </span>
+                            {slide.title.split('.')[1]}
+                          </>
+                        ) : null}
+                      </h2>
+                      <p className="text-[9px] sm:text-[13px] md:text-[15px] text-black/80 leading-snug line-clamp-3">
+                        {slide.text}
+                      </p>
+                    </motion.div>
                   </motion.div>
-                </motion.div>
+                </div>
+                <div className="flex-1"></div>
               </div>
-
-              {/* ===== RIGHT COLUMN ===== */}
-              <motion.div
-                key={activeIndex + '-right'}
-                initial={{ opacity: 0, x: 40 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.8, ease: 'easeOut', delay: 0.25 }}
-                className="relative hidden md:flex flex-1 h-full items-center justify-center bg-white overflow-hidden
-              rounded-[24px] md:rounded-r-[24px] md:rounded-tl-none md:rounded-bl-none
-            "
-              >
-                <img
-                  src={slide.rightImage}
-                  alt="product"
-                  className="object-cover w-full h-full"
-                />
-              </motion.div>
             </div>
           </SwiperSlide>
         ))}

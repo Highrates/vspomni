@@ -1,139 +1,74 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { Swiper, SwiperSlide } from 'swiper/react'
 import { Navigation } from 'swiper/modules'
 import 'swiper/css'
 import 'swiper/css/navigation'
 import StoryViewer from './StoryViewer'
+import { getAllStories, StoryNode } from '@/graphql/queries/stories.service'
 
 export default function StoryBlock() {
   const swiperRef = useRef<any>(null)
-  const [activeStoryGroup, setActiveStoryGroup] = useState<number | null>(null)
+  const [activeStoryGroup, setActiveStoryGroup] = useState<string | null>(null)
+  const [stories, setStories] = useState<StoryNode[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const storyGroups = [
-    {
-      id: 1,
-      title: 'Ароматы',
-      stories: [
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-      ],
-    },
-    {
-      id: 2,
-      title: 'Дом',
-      stories: [
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-      ],
-    },
-    {
-      id: 3,
-      title: 'Комната',
-      stories: [
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-      ],
-    },
-    {
-      id: 4,
-      title: 'Подарки',
-      stories: [
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-      ],
-    },
-    {
-      id: 5,
-      title: 'Ароматы',
-      stories: [
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-      ],
-    },
-    {
-      id: 6,
-      title: 'Дом',
-      stories: [
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-      ],
-    },
-    {
-      id: 7,
-      title: 'Комната',
-      stories: [
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-      ],
-    },
-    {
-      id: 8,
-      title: 'Подарки',
-      stories: [
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-      ],
-    },
-    {
-      id: 9,
-      title: 'Ароматы',
-      stories: [
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-      ],
-    },
-    {
-      id: 10,
-      title: 'Дом',
-      stories: [
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-      ],
-    },
-    {
-      id: 11,
-      title: 'Комната',
-      stories: [
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-      ],
-    },
-    {
-      id: 12,
-      title: 'Подарки',
-      stories: [
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-        '/images/image_faq_3.png',
-      ],
-    },
-  ]
+  useEffect(() => {
+    const fetchStories = async () => {
+      try {
+        const data = await getAllStories()
+        setStories(data)
+      } catch (error) {
+        console.error('Failed to fetch stories:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchStories()
+  }, [])
+
+  if (loading) {
+    return null
+  }
+
+  if (stories.length === 0) {
+    return null
+  }
+
+  const storyGroups = stories
+    .filter(
+      (story) => story.isPublished && story.items && story.items.length > 0,
+    )
+    .sort((a, b) => a.order - b.order)
+    .map((story) => ({
+      id: story.id,
+      title: story.title,
+      stories: story.items
+        .sort((a, b) => a.order - b.order)
+        .map((item) => item.image),
+    }))
+
+  const activeGroup = storyGroups.find((g) => g.id === activeStoryGroup)
 
   return (
     <>
       <section className="mt-6 sm:mt-8 md:mt-10 lg:mt-[40px] mb-8 sm:mb-10 md:mb-12 ">
         <div className="relative flex justify-center lg:overflow-hidden ">
-          <div className="relative w-full max-w-[1062px] px-4 sm:px-6 md:px-8 lg:px-10 ">
+          <div className="relative w-full max-w-[1062px]  pl-4 sm:pl-6 md:pl-8 lg:pl-16 pr-4 sm:pr-6 md:pr-8 lg:pr-10 ">
             {/* Left Navigation Button */}
             <button
               onClick={() => swiperRef.current?.slidePrev()}
-              className="absolute top-1/2 -translate-y-1/2 z-20 flex items-center justify-center w-[40px] h-[40px] sm:w-[45px] sm:h-[45px] md:w-[49px] md:h-[49px] rounded-full bg-white shadow hover:shadow-lg transition-shadow -left-1 sm:left-0 max-lg:hidden block"
+              className="absolute top-1/2 -translate-y-1/2 z-20 flex items-center justify-center w-[40px] h-[40px] sm:w-[45px] sm:h-[45px] md:w-[49px] md:h-[49px] rounded-full bg-white shadow hover:shadow-lg transition-shadow left-10 sm:left-0 max-md:hidden  border border-gray-300"
               aria-label="Previous"
             >
-              <svg width="7" height="14" viewBox="0 0 7 14" fill="none" className="w-[6px] h-[12px] sm:w-[7px] sm:h-[14px]">
+              <svg
+                width="7"
+                height="14"
+                viewBox="0 0 7 14"
+                fill="none"
+                className="w-[6px] h-[12px] sm:w-[7px] sm:h-[14px]"
+              >
                 <path
                   d="M6 13L1 7L6 1"
                   stroke="rgba(0,0,0,0.4)"
@@ -161,7 +96,7 @@ export default function StoryBlock() {
                   spaceBetween: 18,
                 },
               }}
-              className="popular-swiper !overflow-hidden lg:!overflow-visible "
+              className="popular-swiper overflow-hidden lg:overflow-visible pl-24 sm:pl-28 md:pl-32"
             >
               {storyGroups.map((group) => (
                 <SwiperSlide
@@ -174,7 +109,11 @@ export default function StoryBlock() {
                   >
                     <div className="w-[62px] h-[62px] sm:w-[72px] sm:h-[72px] md:w-[79px] md:h-[79px] lg:w-[87px] lg:h-[87px] rounded-full overflow-hidden bg-white">
                       <img
-                        src={group.stories[0]}
+                        src={
+                          group.stories[0] ||
+                          stories.find((s) => s.id === group.id)?.image ||
+                          '/images/image_faq_3.png'
+                        }
                         alt={group.title}
                         className="w-full h-full object-cover rounded-full"
                       />
@@ -190,10 +129,16 @@ export default function StoryBlock() {
             {/* Right Navigation Button */}
             <button
               onClick={() => swiperRef.current?.slideNext()}
-              className="absolute top-1/2 -translate-y-1/2 z-20 flex items-center justify-center w-[40px] h-[40px] sm:w-[45px] sm:h-[45px] md:w-[49px] md:h-[49px] rounded-full bg-white shadow hover:shadow-lg transition-shadow -right-1 sm:right-0 "
+              className="absolute top-1/2 -translate-y-1/2 z-20 flex items-center justify-center w-[40px] h-[40px] sm:w-[45px] sm:h-[45px] md:w-[49px] md:h-[49px] rounded-full bg-white shadow hover:shadow-lg transition-shadow -right-1 sm:right-0 max-md:hidden border border-gray-300"
               aria-label="Next"
             >
-              <svg width="7" height="14" viewBox="0 0 7 14" fill="none" className="w-[6px] h-[12px] sm:w-[7px] sm:h-[14px]">
+              <svg
+                width="7"
+                height="14"
+                viewBox="0 0 7 14"
+                fill="none"
+                className="w-[6px] h-[12px] sm:w-[7px] sm:h-[14px]"
+              >
                 <path
                   d="M1 13L6 7L1 1"
                   stroke="rgba(0,0,0,0.4)"
@@ -206,9 +151,9 @@ export default function StoryBlock() {
         </div>
       </section>
 
-      {activeStoryGroup && (
+      {activeStoryGroup && activeGroup && (
         <StoryViewer
-          group={storyGroups.find((g) => g.id === activeStoryGroup)!}
+          group={activeGroup}
           onClose={() => setActiveStoryGroup(null)}
         />
       )}

@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 interface StoryGroup {
-  id: number
+  id: string
   title: string
   stories: string[]
 }
@@ -20,6 +20,25 @@ export default function StoryViewer({
   const [progress, setProgress] = useState(0)
   const [direction, setDirection] = useState<'next' | 'prev' | null>(null)
 
+  // Сброс индекса при изменении группы
+  useEffect(() => {
+    setIndex(0)
+    setProgress(0)
+    setDirection(null)
+  }, [group.id])
+
+  const handleNext = useCallback(() => {
+    setIndex((prev) => {
+      if (prev < group.stories.length - 1) {
+        setDirection('next')
+        return prev + 1
+      } else {
+        onClose()
+        return prev
+      }
+    })
+  }, [group.stories.length, onClose])
+
   // авто-переключение
   useEffect(() => {
     setProgress(0)
@@ -27,19 +46,13 @@ export default function StoryViewer({
     const timer = setInterval(() => {
       const elapsed = (Date.now() - start) / 4000
       setProgress(Math.min(elapsed * 100, 100))
-      if (elapsed >= 1) handleNext()
+      if (elapsed >= 1) {
+        handleNext()
+      }
     }, 50)
     return () => clearInterval(timer)
-  }, [index])
+  }, [index, handleNext])
 
-  const handleNext = () => {
-    if (index < group.stories.length - 1) {
-      setDirection('next')
-      setIndex((prev) => prev + 1)
-    } else {
-      onClose()
-    }
-  }
 
   const handlePrev = () => {
     if (index > 0) {
@@ -54,6 +67,7 @@ export default function StoryViewer({
     <AnimatePresence>
       <motion.div
         className="fixed inset-0 z-[999] flex items-center justify-center bg-black/90 touch-none"
+        style={{ height: '100dvh', minHeight: '-webkit-fill-available' }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}

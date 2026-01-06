@@ -27,45 +27,55 @@ interface Props {
 export default function OrdersTabs({ orders }: Props) {
   const [activeTab, setActiveTab] = useState<'all' | 'active'>('all')
 
+  // Активные заказы - это те, у которых статус НЕ "Доставлено" (FULFILLED)
   const filteredOrders =
     activeTab === 'active'
-      ? orders.filter((o) => o.status === 'В процессе')
+      ? orders.filter((o) => o.status !== 'Доставлено' && o.status !== 'FULFILLED')
       : orders
+
+  const activeOrdersCount = orders.filter((o) => o.status !== 'Доставлено' && o.status !== 'FULFILLED').length
 
   return (
     <>
-      <div className="flex items-center gap-14 mb-8">
+      <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-14 mb-6 sm:mb-8">
         <button
-          className={`cursor-pointer relative font-semibold text-2xl ${
+          className={`cursor-pointer relative font-semibold text-xl sm:text-2xl whitespace-nowrap ${
             activeTab === 'all' ? 'text-black' : 'text-textgrey'
           }`}
           onClick={() => setActiveTab('all')}
         >
           Все заказы{' '}
           <span
-            className={`absolute top-0 -right-7 text-left font-normal text-sm ${activeTab === 'all' ? 'text-black' : 'text-textgrey'}`}
+            className={`absolute top-0 left-full ml-2 font-normal text-sm whitespace-nowrap ${activeTab === 'all' ? 'text-black' : 'text-textgrey'}`}
           >
-            (10)
+            ({orders.length})
           </span>
         </button>
         <button
-          className={`cursor-pointer relative font-semibold text-2xl ${
+          className={`cursor-pointer relative font-semibold text-xl sm:text-2xl whitespace-nowrap text-right ${
             activeTab === 'active' ? 'text-black' : 'text-textgrey'
           }`}
           onClick={() => setActiveTab('active')}
         >
           Активные заказы
           <span
-            className={`absolute top-0 -right-7 text-left font-normal text-sm ${activeTab === 'active' ? 'text-black' : 'text-textgrey'}`}
+            className={`absolute top-0 left-full ml-2 font-normal text-sm whitespace-nowrap ${activeTab === 'active' ? 'text-black' : 'text-textgrey'}`}
           >
-            (10)
+            ({activeOrdersCount})
           </span>
         </button>
       </div>
 
       {/* Orders */}
       <div className="space-y-8">
-        {filteredOrders.map((order) => (
+        {filteredOrders.length === 0 ? (
+          <p className="text-black/40 text-center py-10">
+            {activeTab === 'active' 
+              ? 'У вас нет активных заказов' 
+              : 'У вас пока нет заказов'}
+          </p>
+        ) : (
+          filteredOrders.map((order) => (
           <div key={order.id} className="space-y-8">
             <div className="flex items-center justify-between">
               <div className="space-y-2">
@@ -104,9 +114,11 @@ export default function OrdersTabs({ orders }: Props) {
                   </div>
 
                   <div className="flex items-center gap-2 text-xl font-semibold">
-                    <p className="text-textgrey line-through">
-                      {item.oldPrice.toLocaleString()} ₽
-                    </p>
+                    {item.oldPrice > 0 && item.oldPrice > item.price && (
+                      <p className="text-textgrey line-through">
+                        {item.oldPrice.toLocaleString()} ₽
+                      </p>
+                    )}
                     <p className="text-black">
                       {item.price.toLocaleString()} ₽
                     </p>
@@ -115,7 +127,8 @@ export default function OrdersTabs({ orders }: Props) {
               ))}
             </div>
           </div>
-        ))}
+          ))
+        )}
       </div>
     </>
   )

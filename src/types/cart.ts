@@ -1,10 +1,12 @@
 import { productsGridItem } from "@/lib/mock/products"
+import { ProductCardItem } from "@/types/product"
 
 export interface CartItem {
     id: string
-    product: productsGridItem
+    product: ProductCardItem
     quantity: number
     size: string
+    variantId?: string // ID варианта товара для Saleor checkout
 }
 
 export interface Cart {

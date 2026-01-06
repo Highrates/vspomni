@@ -51,7 +51,7 @@ export default function PopularScents() {
           viewport={{ once: true }}
           className="flex items-center justify-between mb-8 sm:mb-10 md:mb-12"
         >
-          <h2 className="text-[28px] sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold text-black leading-tight">
+          <h2 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold text-black leading-tight">
             Популярные ароматы
           </h2>
 
@@ -60,12 +60,12 @@ export default function PopularScents() {
             className="flex items-center gap-[6px] text-[14px] sm:text-[15px] md:text-[16px] font-medium text-black hover:opacity-70 transition whitespace-nowrap"
           >
             Все{' '}
-            <svg
+            <svg 
               width="8"
               height="14"
               viewBox="0 0 8 14"
               fill="none"
-              xmlns="http://www.w3.org/2000/svg"
+              xmlns="http://www.w3.org/2000/svg" 
               className="flex-shrink-0"
             >
               <path
@@ -80,7 +80,7 @@ export default function PopularScents() {
         </motion.div>
 
         {/* Сетка карточек */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 md:gap-6 popular-scents-grid">
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-5 md:gap-6 popular-scents-grid">
           {scents.map((item, i) => (
             <motion.div
               key={item.id}

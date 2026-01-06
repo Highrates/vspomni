@@ -22,6 +22,7 @@ export interface productsGridItem {
   overview: string
   price: number;
   image: string[];
+  thumbnail: string;
   groups: productGroupItem[];
   about: aboutItem;
   capacity: string[];
@@ -44,6 +45,7 @@ export const mockProductsGrid: productsGrid = [
     overview: 'Аромат спокойствия, который наполняет дом чувственностью и теплом',
     price: 12890,
     image: ['/images/productGallery.jpg', '/images/productGallery2.jpg', '/images/productGallery3.jpg'],
+    thumbnail: '/images/productGallery.jpg',
     groups: ['flower', 'wood', 'sweet'],
     about: {
       description: `"Кашемир и слива". Этот изысканный аромат сочетает в себе мягкие, теплые ноты кашемира 
@@ -67,6 +69,7 @@ export const mockProductsGrid: productsGrid = [
     overview: 'Аромат спокойствия, который наполняет дом чувственностью и теплом',
     price: 12890,
     image: ['/images/productGallery2.jpg', '/images/productGallery.jpg', '/images/productGallery3.jpg'],
+    thumbnail: '/images/productGallery.jpg',
     groups: ['flower', 'wood', 'sweet'],
     about: {
       description: `"Кашемир и слива". Этот изысканный аромат сочетает в себе мягкие, теплые ноты кашемира 
@@ -85,6 +88,7 @@ export const mockProductsGrid: productsGrid = [
     overview: 'Аромат спокойствия, который наполняет дом чувственностью и теплом',
     price: 12890,
     image: ['/images/productGallery3.jpg', '/images/productGallery.jpg', '/images/productGallery2.jpg'],
+    thumbnail: '/images/productGallery.jpg',
     groups: ['flower', 'wood', 'sweet'],
     about: {
       description: `"Кашемир и слива"...`,
@@ -102,6 +106,7 @@ export const mockProductsGrid: productsGrid = [
     overview: 'Аромат спокойствия, который наполняет дом чувственностью и теплом',
     price: 12890,
     image: ['/images/productGallery.jpg', '/images/productGallery2.jpg', '/images/productGallery3.jpg'],
+    thumbnail: '/images/productGallery.jpg',
     groups: ['flower', 'wood', 'sweet'],
     about: {
       description: `"Кашемир и слива"...`,
@@ -119,6 +124,7 @@ export const mockProductsGrid: productsGrid = [
     overview: 'Аромат спокойствия, который наполняет дом чувственностью и теплом',
     price: 12890,
     image: ['/images/productGallery2.jpg', '/images/productGallery.jpg', '/images/productGallery3.jpg'],
+    thumbnail: '/images/productGallery.jpg',
     groups: ['flower', 'wood', 'sweet'],
     about: {
       description: `"Кашемир и слива"...`,
@@ -136,6 +142,7 @@ export const mockProductsGrid: productsGrid = [
     overview: 'Аромат спокойствия, который наполняет дом чувственностью и теплом',
     price: 12890,
     image: ['/images/productGallery3.jpg', '/images/productGallery.jpg', '/images/productGallery2.jpg'],
+    thumbnail: '/images/productGallery.jpg',
     groups: ['flower', 'wood', 'sweet'],
     about: {
       description: `"Кашемир и слива"...`,
@@ -153,6 +160,7 @@ export const mockProductsGrid: productsGrid = [
     overview: 'Аромат спокойствия, который наполняет дом чувственностью и теплом',
     price: 12890,
     image: ['/images/productGallery.jpg', '/images/productGallery2.jpg', '/images/productGallery3.jpg'],
+    thumbnail: '/images/productGallery.jpg',
     groups: ['flower', 'wood', 'sweet'],
     about: {
       description: `"Кашемир и слива"...`,
@@ -170,6 +178,7 @@ export const mockProductsGrid: productsGrid = [
     overview: 'Аромат спокойствия, который наполняет дом чувственностью и теплом',
     price: 12890,
     image: ['/images/productGallery2.jpg', '/images/productGallery.jpg', '/images/productGallery3.jpg'],
+    thumbnail: '/images/productGallery.jpg',
     groups: ['flower', 'wood', 'sweet'],
     about: {
       description: `"Кашемир и слива"...`,
@@ -187,6 +196,7 @@ export const mockProductsGrid: productsGrid = [
     overview: 'Аромат спокойствия, который наполняет дом чувственностью и теплом',
     price: 12890,
     image: ['/images/productGallery3.jpg', '/images/productGallery.jpg', '/images/productGallery2.jpg'],
+    thumbnail: '/images/productGallery.jpg',
     groups: ['flower', 'wood', 'sweet'],
     about: {
       description: `"Кашемир и слива"...`,

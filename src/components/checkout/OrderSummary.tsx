@@ -1,63 +1,72 @@
 'use client'
 
-import { useState } from 'react'
-import { ProductCard } from './ProductCard'
 import { PromoCodeInput } from './PromoCodeInput'
 import { Summary } from './Summary'
+import { useCartStore } from '@/stores/useCart'
+import CartCard from '../cart/CartCard'
+
 
 export default function OrderSummary() {
-  const [total] = useState('50 250 ₽')
-  const [discount] = useState('-800 ₽')
-  const [promoDiscount] = useState('-1 000 ₽')
+  const {
+    items,
+    totalItems,
+    totalPrice,
+    discount,
+    discountAmount,
+    discountType,
+    appliedPromoCode,
+    decreaseQuantity,
+    increaseQuantity,
+    removeItem,
+  } = useCartStore()
 
-  const products = [
-    {
-      id: 1,
-      title: 'Кашемир и слива',
-      volume: '100 мл',
-      quantity: '1 шт.',
-      oldPrice: '15 250 ₽',
-      newPrice: '12 890 ₽',
-      imageUrl: '/images/product1.png',
-    },
-    {
-      id: 2,
-      title: 'Кашемир и слива',
-      volume: '100 мл',
-      quantity: '1 шт.',
-      oldPrice: '15 250 ₽',
-      newPrice: '12 890 ₽',
-      imageUrl: '/images/product2.png',
-    },
-    {
-      id: 3,
-      title: 'Кашемир и слива',
-      volume: '100 мл',
-      quantity: '1 шт.',
-      oldPrice: '15 250 ₽',
-      newPrice: '12 890 ₽',
-      imageUrl: '/images/product1.png',
-    },
-  ]
+  const subtotal = items.reduce(
+    (sum, item) => sum + item.product.price * item.quantity,
+    0,
+  )
 
+  const effectiveDiscountAmount =
+    typeof discountAmount === 'number'
+      ? discountAmount
+      : discount > 0
+        ? (subtotal * discount) / 100
+        : 0
   return (
     <section className="select-none">
-      <h2 className="text-[32px] leading-tight font-bold mb-20 mt-8">
+      <h2 className="text-2xl sm:text-3xl lg:text-[32px] leading-tight font-bold mb-8 sm:mb-12 lg:mb-20 mt-4 sm:mt-6 lg:mt-8">
         ВСПОМНИ.
       </h2>
 
-      <div>
-        {products.map((product) => (
-          <ProductCard key={product.id} {...product} />
-        ))}
+      <div className='flex flex-col gap-3 sm:gap-4'>
+
+        {items.length > 0 ? (
+                    items.map((item) => (
+                      <CartCard
+                        key={item.id}
+                        product={item.product}
+                        quantity={item.quantity}
+                        size={item.size}
+                        onDecrease={() => decreaseQuantity(item.id)}
+                        onIncrease={() => increaseQuantity(item.id)}
+                        onRemove={() => removeItem(item.id)}
+                      />
+                    ))
+                  ) : (
+                    <p className="text-black/60 text-center py-10">Корзина пуста</p>
+                  )}
       </div>
 
-      <PromoCodeInput />
+      <PromoCodeInput checkoutId='sample-checkout-id' />
 
       <Summary
-        total={total}
-        discount={discount}
-        promoDiscount={promoDiscount}
+        total={totalPrice}
+        subtotal={subtotal}
+        discount={effectiveDiscountAmount}
+        promoDiscount={effectiveDiscountAmount}
+        appliedPromoCode={appliedPromoCode}
+        discountPercent={discount}
+        totalItems={totalItems}
+        discountType={discountType}
       />
     </section>
   )
