@@ -1,6 +1,7 @@
 'use client'
 
 import { FormEvent, useState, useEffect } from 'react'
+import Image from 'next/image'
 import { useAuthStore } from '@/stores/useAuth'
 import { useRouter } from 'next/navigation'
 import { CustomButton as Button } from '../common/CustomButton'
@@ -43,7 +44,15 @@ export const LoginForm = ({ onForgotPass, onRegister }: TProps) => {
   return (
     <div className="space-y-8">
       <div className="text-start">
-        <h1 className="text-4xl font-bold mb-8">ВСПОМНИ.</h1>
+        <div className="mb-8">
+          <Image
+            src="/logo/logo-vspomni.svg"
+            alt="ВСПОМНИ."
+            width={150}
+            height={30}
+            className="h-8 w-auto"
+          />
+        </div>
         <h2 className="text-2xl font-semibold mb-2">Вход в аккаунт</h2>
         <p className="text-gray-500">
           Впервые у нас?{' '}

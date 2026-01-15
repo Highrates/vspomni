@@ -1,7 +1,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
-import { ShoppingBag, ChevronLeft, ChevronRight } from 'lucide-react'
-import { useState, useCallback } from 'react'
+import { ShoppingBag } from 'lucide-react'
+import { useState, useCallback, useRef } from 'react'
 import AddCartBtn from '@/components/ui/addCartBtn'
 import { ProductCardItem } from '@/types/product'
 
@@ -16,44 +16,103 @@ export default function ProductCard({ product, isNew = false } :ProductCardProps
     : [product.image]
 
   const [currentIndex, setCurrentIndex] = useState(0)
+  const [isTransitioning, setIsTransitioning] = useState(false)
+  const touchStartX = useRef<number | null>(null)
+  const touchStartY = useRef<number | null>(null)
+  const isDragging = useRef(false)
 
   const goTo = useCallback(
     (index: number) => {
-      if (!images.length) return
+      if (!images.length || isTransitioning) return
       const safeIndex = ((index % images.length) + images.length) % images.length
+      setIsTransitioning(true)
       setCurrentIndex(safeIndex)
+      setTimeout(() => setIsTransitioning(false), 300)
     },
-    [images.length],
+    [images.length, isTransitioning],
   )
 
-  const handlePrev = (e: React.MouseEvent) => {
-    e.preventDefault()
-    goTo(currentIndex - 1)
-  }
-
-  const handleNext = (e: React.MouseEvent) => {
-    e.preventDefault()
-    goTo(currentIndex + 1)
-  }
-
-  // Простая поддержка свайпов на мобильных
-  const [touchStartX, setTouchStartX] = useState<number | null>(null)
-
+  // Улучшенная поддержка свайпов с плавной анимацией
   const onTouchStart = (e: React.TouchEvent) => {
-    setTouchStartX(e.touches[0].clientX)
+    touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
+    isDragging.current = false
+  }
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null) return
+    const diffX = e.touches[0].clientX - touchStartX.current
+    const diffY = e.touches[0].clientY - touchStartY.current
+    
+    // Определяем, что это горизонтальный свайп, а не вертикальный скролл
+    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 10) {
+      isDragging.current = true
+      e.preventDefault()
+    }
   }
 
   const onTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX === null) return
-    const diff = e.changedTouches[0].clientX - touchStartX
-    if (Math.abs(diff) > 30) {
+    if (touchStartX.current === null) {
+      touchStartX.current = null
+      touchStartY.current = null
+      isDragging.current = false
+      return
+    }
+    
+    const diff = e.changedTouches[0].clientX - touchStartX.current
+    const threshold = 50 // Минимальное расстояние для срабатывания свайпа
+    
+    // Если был свайп (перетаскивание)
+    if (isDragging.current && Math.abs(diff) > threshold) {
+      e.preventDefault()
+      e.stopPropagation()
       if (diff > 0) {
         goTo(currentIndex - 1)
       } else {
         goTo(currentIndex + 1)
       }
+    } 
+    // Если был простой тап (без перетаскивания) и больше одной картинки
+    else if (!isDragging.current && images.length > 1) {
+      e.preventDefault()
+      e.stopPropagation()
+      const touchEndX = e.changedTouches[0].clientX
+      const target = e.currentTarget as HTMLElement
+      const rect = target.getBoundingClientRect()
+      const clickX = touchEndX - rect.left
+      const width = rect.width
+      
+      // Левая половина - предыдущее, правая - следующее
+      if (clickX < width / 2) {
+        goTo(currentIndex - 1)
+      } else {
+        goTo(currentIndex + 1)
+      }
     }
-    setTouchStartX(null)
+    
+    touchStartX.current = null
+    touchStartY.current = null
+    isDragging.current = false
+  }
+
+  // Обработчик клика для десктопа (аналогично тапу)
+  const handleImageClick = (e: React.MouseEvent) => {
+    if (images.length <= 1 || isTransitioning) return
+    
+    e.preventDefault()
+    e.stopPropagation()
+    
+    const target = e.currentTarget as HTMLElement
+    const rect = target.getBoundingClientRect()
+    const clickX = e.clientX - rect.left
+    const width = rect.width
+    
+    // Левая половина - предыдущее, правая - следующее
+    if (clickX < width / 2) {
+      goTo(currentIndex - 1)
+    } else {
+      goTo(currentIndex + 1)
+    }
   }
 
   return (
@@ -63,53 +122,54 @@ export default function ProductCard({ product, isNew = false } :ProductCardProps
     >
       {/* Image Container */}
       <div
-        className="w-full aspect-square sm:aspect-[369/384] relative overflow-hidden rounded-[12px] sm:rounded-[16px] transition-all duration-500 bg-neutral-50"
+        className="w-full aspect-square sm:aspect-[369/384] relative overflow-hidden rounded-[12px] sm:rounded-[16px] bg-neutral-50 cursor-pointer"
         onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
+        onClick={handleImageClick}
       >
-        <Image
-          key={images[currentIndex]}
-          src={images[currentIndex]}
-          alt={product.name}
-          fill
-          sizes="(max-width: 640px) 50vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, (max-width: 1600px) 25vw, 369px"
-          className="rounded-[12px] sm:rounded-[16px] object-cover transition-transform duration-500 group-hover:scale-105"
-        />
-
-        {/* Навигация по слайдеру (показываем, только если больше одной картинки) */}
-        {images.length > 1 && (
-          <>
-            <button
-              className="absolute left-2 top-1/2 -translate-y-1/2 z-10 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/80 flex items-center justify-center shadow-sm hover:bg-white transition cursor-pointer"
-              onClick={handlePrev}
-              aria-label="Предыдущее фото"
+        {/* Slider Container with smooth transition */}
+        <div 
+          className="w-full h-full flex transition-transform duration-300 ease-out"
+          style={{
+            transform: `translateX(-${currentIndex * 100}%)`,
+          }}
+        >
+          {images.map((image, idx) => (
+            <div
+              key={idx}
+              className="w-full h-full flex-shrink-0 relative"
             >
-              <ChevronLeft className="w-4 h-4 text-black" />
-            </button>
-            <button
-              className="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/80 flex items-center justify-center shadow-sm hover:bg-white transition cursor-pointer"
-              onClick={handleNext}
-              aria-label="Следующее фото"
-            >
-              <ChevronRight className="w-4 h-4 text-black" />
-            </button>
-            {/* Пагинация-точки */}
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
-              {images.map((_, idx) => (
-                <button
-                  key={idx}
-                  aria-label={`Перейти к фото ${idx + 1}`}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    goTo(idx)
-                  }}
-                  className={`w-1.5 h-1.5 rounded-full transition ${
-                    idx === currentIndex ? 'bg-white' : 'bg-white/40'
-                  }`}
-                />
-              ))}
+              <Image
+                src={image}
+                alt={`${product.name} - изображение ${idx + 1}`}
+                fill
+                sizes="(max-width: 640px) 50vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, (max-width: 1600px) 25vw, 369px"
+                className="rounded-[12px] sm:rounded-[16px] object-cover transition-transform duration-300 group-hover:scale-105"
+                priority={idx === 0}
+              />
             </div>
-          </>
+          ))}
+        </div>
+
+        {/* Пагинация-точки (показываем, только если больше одной картинки) */}
+        {images.length > 1 && (
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
+            {images.map((_, idx) => (
+              <button
+                key={idx}
+                aria-label={`Перейти к фото ${idx + 1}`}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  goTo(idx)
+                }}
+                className={`w-1.5 h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
+                  idx === currentIndex ? 'bg-white w-4' : 'bg-white/40 hover:bg-white/60'
+                }`}
+              />
+            ))}
+          </div>
         )}
 
         {/* Top-left badges: NEW above, then discount */}

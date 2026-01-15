@@ -1,6 +1,7 @@
 'use client'
 
 import { FormEvent, useState } from 'react'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { toast } from 'react-toastify'
 import PhoneInput from '@/components/ui/PhoneInput'
@@ -87,7 +88,15 @@ const RegisterForm = ({ onVerify, onLogin }: TPropss) => {
         <span className="font-medium text-[16px]">вернуться назад</span>
       </button>
       <div className="text-start">
-        <h1 className="text-4xl font-bold mb-8">ВСПОМНИ.</h1>
+        <div className="mb-8">
+          <Image
+            src="/logo/logo-vspomni.svg"
+            alt="ВСПОМНИ."
+            width={150}
+            height={30}
+            className="h-8 w-auto"
+          />
+        </div>
         <h2 className="text-2xl font-semibold mb-2">Регистрация</h2>
         <p className="text-gray-500">
           Уже есть аккаунт?{' '}

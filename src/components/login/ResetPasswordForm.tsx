@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { useState } from "react"
+import Image from "next/image"
 import { toast } from "react-toastify"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useAuthStore } from "@/stores/useAuth"
@@ -103,7 +104,15 @@ const ResetPasswordForm = ({ email: emailProp, onBack }: TProps) => {
       )}
       
       <div className="text-start">
-        <h1 className="text-4xl font-bold mb-8">ВСПОМНИ.</h1>
+        <div className="mb-8">
+          <Image
+            src="/logo/logo-vspomni.svg"
+            alt="ВСПОМНИ."
+            width={150}
+            height={30}
+            className="h-8 w-auto"
+          />
+        </div>
         <h2 className="text-2xl font-semibold">Придумайте пароль</h2>
       </div>
       <form onSubmit={handleSubmit} className="space-y-4 ">

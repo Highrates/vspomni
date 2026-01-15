@@ -8,7 +8,6 @@ import { CustomButton as Button } from '../common/CustomButton'
 import { AddressInfo } from '@/graphql/types/auth.types'
 import { createAddress, updateAddress } from '@/graphql/queries/adress.service'
 import PhoneInput from '../ui/PhoneInput'
-import CountrySelect from '../checkout/CountrySelect'
 import CdekPvzList, { CdekPvzInfo } from '../ui/CdekPvzList'
 import { useUserStore } from '@/stores/useUser'
 
@@ -157,7 +156,7 @@ export default function AddressModal({
     if (!formData.firstName.trim()) newErrors.firstName = 'Обязательное поле'
     if (!formData.lastName.trim()) newErrors.lastName = 'Обязательное поле'
     if (!formData.phone.trim()) newErrors.phone = 'Обязательное поле'
-    if (!formData.country) newErrors.country = 'Обязательное поле'
+    // country всегда 'RU' по умолчанию, валидация не нужна
     if (!formData.countryArea.trim()) newErrors.countryArea = 'Обязательное поле'
     
     // Crucial check: City is required
@@ -387,51 +386,23 @@ export default function AddressModal({
             error={errors.phone}
           />
 
-          <div className="flex flex-col">
-            <label className="text-sm font-medium mb-2">
-              Название компании
-            </label>
-            <input
-              type="text"
-              value={formData.companyName}
-              onChange={(e) => handleInputChange('companyName', e.target.value)}
-              className={`h-12 px-4 rounded-xl border text-base outline-none transition ${
-                errors.companyName
-                  ? 'border-red-500'
-                  : 'border-black/10 focus:border-black/30'
-              }`}
-            />
-            {errors.companyName && (
-              <span className="text-red-500 text-sm mt-1">
-                {errors.companyName}
-              </span>
-            )}
-          </div>
-
-          <CountrySelect
-            value={formData.country}
-            onChange={(value) => handleInputChange('country', value)}
-            error={errors.country}
-          />
-
-          {formData.country === 'RU' && (
-            <div className="flex flex-col gap-3 p-4 border border-black/10 rounded-xl bg-gray-50/50">
-              <div>
-                <h3 className="text-base font-semibold mb-1">
-                  Выбрать пункт выдачи СДЭК
-                </h3>
-                <p className="text-sm text-black/60">
-                  Выберите пункт выдачи заказа в списке или на карте Яндекс,
-                  чтобы автоматически заполнить адресные поля
-                </p>
-              </div>
-              <CdekPvzList
-                onChoose={handleCdekPvzChoose}
-                defaultCity="Москва"
-                initialMode="map"
-              />
+          {/* СДЭК доступен для России (по умолчанию) */}
+          <div className="flex flex-col gap-3 p-4 border border-black/10 rounded-xl bg-gray-50/50">
+            <div>
+              <h3 className="text-base font-semibold mb-1">
+                Выбрать пункт выдачи СДЭК
+              </h3>
+              <p className="text-sm text-black/60">
+                Выберите пункт выдачи заказа в списке или на карте Яндекс,
+                чтобы автоматически заполнить адресные поля
+              </p>
             </div>
-          )}
+            <CdekPvzList
+              onChoose={handleCdekPvzChoose}
+              defaultCity="Москва"
+              initialMode="map"
+            />
+          </div>
 
           <div className="flex flex-col">
             <label className="text-sm font-medium mb-2">Регион *</label>

@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
+import Image from "next/image"
 import { toast } from "react-toastify"
 import { useRouter } from "next/navigation"
 import { useAuthStore } from '@/stores/useAuth'
@@ -131,7 +132,15 @@ const VerifyForm = ({ email, onChangeEmail, onBack }: TProps) => {
       )}
       
       <div className="text-start">
-        <h1 className="text-4xl font-bold mb-8">ВСПОМНИ.</h1>
+        <div className="mb-8">
+          <Image
+            src="/logo/logo-vspomni.svg"
+            alt="ВСПОМНИ."
+            width={150}
+            height={30}
+            className="h-8 w-auto"
+          />
+        </div>
         <h2 className="text-2xl font-semibold mb-4">Подтверждение почты</h2>
         <p className="text-black/40 text-sm leading-relaxed">
           Мы отправили 'Одноразовый код доступа' на указанный вами бизнес-адрес электронной почты.
