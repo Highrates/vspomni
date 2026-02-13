@@ -27,6 +27,7 @@ export const useCategoriesStore = create<CategoriesState>()(
         })
       },
       fetchProductsByCategorySlug: async (slug: string) => {
+        set({ items: [] })
         await getProductsByCategorySlug(slug).then((res: any) => {
           if (res.length > 0) {
             set({

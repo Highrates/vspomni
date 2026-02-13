@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { useAuthStore } from '@/stores/useAuth'
 import { useRouter } from 'next/navigation'
 import { CustomButton as Button } from '../common/CustomButton'
-import { getToken } from '@/graphql/queries/auth.service'
+import { getToken, getYandexAuthUrl } from '@/graphql/queries/auth.service'
 import { toast } from 'react-toastify'
 
 interface TProps {
@@ -40,6 +40,19 @@ export const LoginForm = ({ onForgotPass, onRegister }: TProps) => {
   useEffect(() => {
     isAuthenticated ? router.push('/') : null
   }, [isAuthenticated])
+
+  const handleYandexLogin = async () => {
+    try {
+      const redirectUri = `${window.location.origin}/login`
+      const authUrl = await getYandexAuthUrl(redirectUri)
+      // Сохраняем текущий URL для возврата после авторизации
+      sessionStorage.setItem('yandex_auth_return_url', window.location.pathname)
+      window.location.href = authUrl
+    } catch (error: any) {
+      console.error('Yandex auth error:', error)
+      toast.error(error.message || 'Ошибка при авторизации через Яндекс')
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -101,6 +114,25 @@ export const LoginForm = ({ onForgotPass, onRegister }: TProps) => {
           <h2 className="font-semibold">Войти</h2>
         </Button>
       </form>
+
+      {/* Яндекс авторизация */}
+      <div className="flex items-center gap-4 my-6">
+        <div className="flex-1 h-px bg-gray-300"></div>
+        <span className="text-sm text-gray-500">или</span>
+        <div className="flex-1 h-px bg-gray-300"></div>
+      </div>
+
+      <button
+        type="button"
+        onClick={handleYandexLogin}
+        className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-full font-medium transition-colors duration-200 bg-[#FFCC00] text-black hover:bg-[#FFD633]"
+      >
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10 0C4.48 0 0 4.48 0 10C0 15.52 4.48 20 10 20C15.52 20 20 15.52 20 10C20 4.48 15.52 0 10 0ZM10 18C5.59 18 2 14.41 2 10C2 5.59 5.59 2 10 2C14.41 2 18 5.59 18 10C18 14.41 14.41 18 10 18Z" fill="currentColor"/>
+          <path d="M10 5L7 10L10 15L13 10L10 5Z" fill="currentColor"/>
+        </svg>
+        <span>Войти через Яндекс</span>
+      </button>
     </div>
   )
 }

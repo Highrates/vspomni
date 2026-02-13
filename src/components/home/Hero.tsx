@@ -1,15 +1,16 @@
 'use client'
 
 import { Swiper, SwiperSlide } from 'swiper/react'
-import { Autoplay, Pagination, Navigation, EffectFade } from 'swiper/modules'
+import { Pagination } from 'swiper/modules'
 import 'swiper/css'
 import 'swiper/css/pagination'
 import 'swiper/css/navigation'
 import 'swiper/css/effect-fade'
 
 import { motion } from 'framer-motion'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getSlider, SliderItem } from '@/graphql/queries/slider.service'
+import { useMobile } from '@/lib/hooks'
 
 interface HeroSlide {
   id: string
@@ -43,6 +44,8 @@ export default function Hero() {
   const [activeIndex, setActiveIndex] = useState(0)
   const [slides, setSlides] = useState<HeroSlide[]>([])
   const [loading, setLoading] = useState(true)
+  const swiperRef = useRef<any>(null)
+  const isMobile = useMobile()
 
   useEffect(() => {
     const fetchSlider = async () => {
@@ -85,15 +88,26 @@ export default function Hero() {
   return (
     <section className="relative w-full overflow-hidden px-2">
       <Swiper
-        modules={[Autoplay, Pagination, Navigation, EffectFade]}
-        autoplay={{ delay: 6000, disableOnInteraction: false }}
-        pagination={{ clickable: true }}
-        navigation
-        loop
-        effect="fade"
-        speed={900}
+        modules={[Pagination]}
+        pagination={{
+          clickable: true,
+          dynamicBullets: true,
+          enabled: isMobile,
+        }}
+        spaceBetween={0}
+        slidesPerView={1}
+        grabCursor
+        allowTouchMove
+        simulateTouch={true}
+        threshold={5}
+        touchRatio={1}
+        preventClicks={true}
+        preventClicksPropagation={true}
+        onSwiper={(swiper) => {
+          swiperRef.current = swiper
+        }}
         onSlideChange={(swiper) => setActiveIndex(swiper.realIndex)}
-        className="w-full h-[70vh]  sm:h-[80vh] md:h-[85vh] lg:h-[90vh] [&_.swiper-button-prev]:hidden [&_.swiper-button-next]:hidden sm:[&_.swiper-button-prev]:flex sm:[&_.swiper-button-next]:flex"
+        className="hero-swiper w-full h-[70vh] sm:h-[80vh] md:h-[85vh] lg:h-[90vh]"
       >
         {slides.map((slide, index) => (
           <SwiperSlide key={slide.id}>

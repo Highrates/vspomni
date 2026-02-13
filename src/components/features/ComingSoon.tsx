@@ -37,7 +37,7 @@ export default function ComingSoon() {
 
   if (loading) {
     return (
-      <section className="mt-6 sm:mt-10 md:mt-16 lg:mt-24 mb-8 sm:mb-12 md:mb-20 lg:mb-28 px-2">
+      <section className="mt-4 sm:mt-6 md:mt-8 lg:mt-10 mb-4 sm:mb-6 md:mb-8 lg:mb-10 px-2">
         <div className="mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {[1, 2].map((i) => (
@@ -57,7 +57,7 @@ export default function ComingSoon() {
   }
 
   return (
-    <section className="mt-6 sm:mt-10 md:mt-16 lg:mt-24 mb-8 sm:mb-12 md:mb-20 lg:mb-28 px-2">
+    <section className="mt-4 sm:mt-6 md:mt-8 lg:mt-10 mb-4 sm:mb-6 md:mb-8 lg:mb-10 px-2">
       <div className="mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {categories.map((category, i) => (
@@ -90,10 +90,6 @@ export default function ComingSoon() {
                 </div>
 
                 <div className="absolute inset-0 bg-black/20 group-hover:bg-black/35 transition-all duration-500" />
-
-                <div className="absolute top-4 left-4 text-[16px] font-medium text-white">
-                  Скоро в продаже
-                </div>
 
                 <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between">
                   <h3 className="text-white md:text-logo sm:text-[25px] text-xl font-semibold drop-shadow-md">

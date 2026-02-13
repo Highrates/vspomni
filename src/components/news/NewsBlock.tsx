@@ -32,10 +32,10 @@ export default function NewsBlock() {
 
   if (loading) {
     return (
-      <section className="mb-8 sm:mb-12 md:mb-20 lg:mb-45 container  px-4 max-sm:px-2">
-        <div className="flex items-center justify-between mb-6 sm:mb-8 md:mb-14">
+      <section className="mb-4 sm:mb-6 md:mb-8 lg:mb-10 container  px-4 max-sm:px-2">
+        <div className="flex items-center justify-between mb-4 sm:mb-5 md:mb-6">
           <h3 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none">
-            Новости и статьи
+            Новости Вспомни.
           </h3>
         </div>
         <div className="grid md:grid-cols-2 grid-cols-1 gap-5">
@@ -51,10 +51,10 @@ export default function NewsBlock() {
   }
 
   return (
-    <section className="mb-8 sm:mb-12 md:mb-20 lg:mb-45  p-2">
-      <div className="flex items-center justify-between mb-6 sm:mb-8 md:mb-14">
+    <section className="mb-4 sm:mb-6 md:mb-8 lg:mb-10  p-2">
+      <div className="flex items-center justify-between mb-4 sm:mb-5 md:mb-6">
         <h3 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none">
-          Новости и статьи
+          Новости Вспомни.
         </h3>
         <Link href="/news" className="text-base text-black font-medium flex">
           <span className="text-md font-medium">Все</span>
@@ -73,7 +73,7 @@ export default function NewsBlock() {
           const date = formatArticleDate(article.publishedAt || article.created);
           const shortText = extractArticleText(article.content);
           const imageUrl = article.imageUrl || '/images/blog1.png';
-          
+
           return (
             <NewsCard
               key={article.id}

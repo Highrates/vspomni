@@ -7,6 +7,7 @@ import { ArrowUpRight } from 'lucide-react'
 import PopularScentsAlt from '@/components/features/PopularScentsAlt'
 import { useCategoriesStore } from '@/stores/useCategories'
 import { Category } from '@/types/category'
+import PageTransition from '@/components/layout/PageTransition'
 
 export default function CatalogPage() {
   const { categories, fetchCategories } = useCategoriesStore()
@@ -16,7 +17,7 @@ export default function CatalogPage() {
   }, [])
 
   return (
-    <div className="px-0 -mt-63 sm:-mt-74 md:-mt-90">
+    <PageTransition className="px-0 -mt-63 sm:-mt-74 md:-mt-90">
       {/* Hero Section */}
       <section className="relative mb-23 z-20">
         <div className="container mx-auto px-4 sm:px-6 md:px-8 pt-24 sm:pt-28 md:pt-40 pb-6 sm:pb-8 md:pb-12">
@@ -26,12 +27,13 @@ export default function CatalogPage() {
         </div>
       </section>
       {/* Product Sections */}
-      <div className="flex w-full flex-col gap-5 sm:gap-6 md:gap-8 lg:gap-10 mb-16 sm:mb-20 md:mb-32 lg:mb-45">
+      <div className="flex w-full flex-col gap-5 sm:gap-6 md:gap-8 lg:gap-10 mb-10 sm:mb-12 md:mb-16 lg:mb-20">
         {categories.map((category: Category, i: number) => (
           <Link
             key={category.id}
-            href={'/category/' + category.slug}
-            className="block w-full h-[280px] sm:h-[350px] md:h-[450px] lg:h-[598px] rounded-[10px] sm:rounded-[12px] lg:rounded-[20px] z-1 relative group overflow-hidden"
+            href={'/category/' + encodeURIComponent(category.slug)}
+            className="block w-full h-[280px] sm:h-[350px] md:h-[450px] lg:h-[598px] rounded-[10px] sm:rounded-[12px] lg:rounded-[20px] z-1 relative group overflow-hidden touch-manipulation"
+            prefetch={false}
           >
             <div
               className={
@@ -69,6 +71,6 @@ export default function CatalogPage() {
       </div>
 
       <PopularScentsAlt />
-    </div>
+    </PageTransition>
   )
 }

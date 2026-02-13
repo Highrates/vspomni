@@ -46,6 +46,22 @@
 }
 
 
+/* курсор как у слайдера картинок в карточке товара */
+.choice-swiper {
+    cursor: grab;
+}
+.choice-swiper.swiper-grab {
+    cursor: grabbing;
+}
+
+/* главный слайдер Hero — тот же курсор grab/grabbing */
+.hero-swiper {
+    cursor: grab;
+}
+.hero-swiper.swiper-grab {
+    cursor: grabbing;
+}
+
 .choice-swiper .swiper-button-next,
 .choice-swiper .swiper-button-prev {
     color: #000;

@@ -52,7 +52,7 @@ export default function PopularScents() {
           className="flex items-center justify-between mb-8 sm:mb-10 md:mb-12"
         >
           <h2 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold text-black leading-tight">
-            Популярные ароматы
+            Диффузоры для дома
           </h2>
 
           <Link

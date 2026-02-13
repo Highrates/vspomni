@@ -131,7 +131,11 @@ export async function POST(request: NextRequest) {
 
 
     if (!response.ok) {
-      console.error('Saleor REST API error:', result)
+      console.error('Saleor REST API error:', {
+        status: response.status,
+        error: result.error,
+        full: result,
+      })
       return createResponse(
         { 
           error: result.error || 'Failed to create checkout',

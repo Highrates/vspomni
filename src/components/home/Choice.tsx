@@ -8,24 +8,24 @@ import { Swiper, SwiperSlide } from 'swiper/react'
 
 import { motion } from 'framer-motion'
 import ChoiceCard, { ChoiceCardProps } from './ChoiceCard'
-import { useStarChoiceStore  } from '@/stores/useStarChoice'
+import { useStarChoiceStore } from '@/stores/useStarChoice'
 import { useEffect } from 'react'
 
 export default function Choice() {
 
-  const { products,  fetchProducts } = useStarChoiceStore();
+  const { products, fetchProducts } = useStarChoiceStore();
 
-     useEffect(()=>{
-        fetchProducts();
-      },[])
-
-  // Дублируем продукты для проверки скролла (временно)
-  const extendedProducts = [...products, ...products.map((p, i) => ({ ...p, id: `${p.id}-copy-${i}` }))]
+  useEffect(() => {
+    fetchProducts();
+  }, [])
 
   return (
-    <section className="mt-6 sm:mt-10 md:mt-14 lg:mt-20 py-4 px-2">
+    <section className="mt-4 sm:mt-6 md:mt-8 lg:mt-10 py-2 px-2">
       <h2 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold text-black mb-6 sm:mb-8 flex items-center gap-2">
-        Выбор <span className="text-[20px] sm:text-[24px]">⭐</span>
+        Выбор{' '}
+        <span className="text-[20px] sm:text-[24px] leading-none">
+        ⭐
+        </span>
       </h2>
 
       <Swiper
@@ -34,6 +34,11 @@ export default function Choice() {
         spaceBetween={12}
         grabCursor
         allowTouchMove
+        simulateTouch={true}
+        threshold={5}
+        touchRatio={1}
+        preventClicks={true}
+        preventClicksPropagation={true}
         autoplay={{ delay: 5500, disableOnInteraction: false }}
         navigation={{
           enabled: true,
@@ -45,7 +50,7 @@ export default function Choice() {
           1024: { spaceBetween: 24 },
         }}
       >
-        {extendedProducts.map((product) => (
+        {products.map((product) => (
           <SwiperSlide key={product.id} className="!w-auto">
             <motion.div
               initial={{ opacity: 0, scale: 0.98 }}

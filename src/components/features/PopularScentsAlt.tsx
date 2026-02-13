@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import ProductCard from '@/components/home/ProductCard'
-import {  ProductCardItem } from '@/types/product'
+import { ProductCardItem } from '@/types/product'
 import { usePopularScentsStore } from '@/stores/usePopularScents'
 
 export default function PopularScentsAlt() {
@@ -15,10 +15,10 @@ export default function PopularScentsAlt() {
   }, [])
 
   return (
-    <section className="mb-8 mt-8 sm:mb-12 sm:mt-12 md:mb-20 md:mt-20 lg:mb-45 lg:mt-45 px-2 py-4">
-      <div className="flex items-center justify-between mb-6 sm:mb-10 md:mb-14 gap-3">
+    <section className="mb-4 mt-4 sm:mb-6 sm:mt-6 md:mb-8 md:mt-8 lg:mb-10 lg:mt-10 px-2 py-2">
+      <div className="flex items-center justify-between mb-4 sm:mb-5 md:mb-6 gap-3">
         <h3 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none">
-          Популярные ароматы
+          Диффузоры для дома
         </h3>
         <Link
           href="/catalog"

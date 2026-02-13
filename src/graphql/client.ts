@@ -15,14 +15,23 @@ export const CHANNEL = 'vspomni-site'
 export const RedirectUrl = 'http://localhost:3000/email-confirmation'
 
 
+export interface GraphQLRequestOptions {
+  /** Передать токен явно (например из профиля при сохранении) — иначе читается из localStorage */
+  token?: string | null
+}
+
 export async function graphqlRequest<T>(
   query: string,
   variables: Record<string, unknown> = {},
+  options?: GraphQLRequestOptions,
 ): Promise<T> {
   const endpoint = String(process.env.GRAPHQL_PUBLIC_API_URL || 'https://vspomni.store/graphql/')
   if (!endpoint) throw new Error('GRAPHQL_URL is not defined')
 
-  const rawToken = localStorage.getItem('token')
+  const rawToken =
+    options?.token !== undefined
+      ? (options.token ?? null)
+      : (typeof window !== 'undefined' ? localStorage.getItem('token') : null)
   const token =
     rawToken && rawToken !== 'null' && rawToken !== 'undefined'
       ? rawToken

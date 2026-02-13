@@ -53,7 +53,7 @@ export default function StoryBlock() {
 
   return (
     <>
-      <section className="mt-6 sm:mt-8 md:mt-10 lg:mt-[40px] mb-8 sm:mb-10 md:mb-12 ">
+      <section className="mt-4 sm:mt-5 md:mt-6 lg:mt-8 mb-4 sm:mb-5 md:mb-6 ">
         <div className="relative flex justify-center lg:overflow-hidden ">
           <div className="relative w-full max-w-[1062px]  pl-4 sm:pl-6 md:pl-8 lg:pl-16 pr-4 sm:pr-6 md:pr-8 lg:pr-10 ">
             {/* Left Navigation Button */}

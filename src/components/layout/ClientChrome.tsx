@@ -1,0 +1,37 @@
+'use client'
+
+import { usePathname } from 'next/navigation'
+import Footer from '@/components/layout/Footer'
+import Header from '@/components/layout/Header'
+import { ToastContainer } from 'react-toastify'
+
+export default function ClientChrome({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  const pathname = usePathname()
+
+  const hideChrome = [
+    '/login',
+    '/register',
+    '/auth/reset',
+    '/checkout',
+  ].includes(pathname)
+
+  const overlayRoutes = ['/profile', '/catalog']
+  const headerVariant = overlayRoutes.includes(pathname) ? 'overlay' : 'default'
+
+  return (
+    <>
+      {!hideChrome && <Header variant={headerVariant} />}
+      <main
+        className={`${!hideChrome ? 'pt-[86px]' : ''} w-full min-h-screen`}
+      >
+        <div className="container">{children}</div>
+      </main>
+      <ToastContainer pauseOnHover={false} theme="dark" />
+      {!hideChrome && <Footer />}
+    </>
+  )
+}

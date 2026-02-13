@@ -59,6 +59,7 @@ export async function getSingleProduct(
             name
             plainText
             reference
+            richText
             slug
             value
           }
@@ -232,6 +233,40 @@ function mapNodeToProductCard(
     discountPercent = Math.round((discountNet / fullPrice) * 100)
   }
 
+  // Извлекаем теги из атрибута "aromaty-v-kartochke-tovara"
+  const aromaAttribute = node.attributes?.find(
+    (attr: any) => attr.attribute?.slug === 'aromaty-v-kartochke-tovara'
+  )
+  const aromaValues = aromaAttribute?.values || []
+  const aromas = aromaValues.map((val: any) => val.name || val.value || '').filter(Boolean)
+
+  // Формируем group из aromas (для обратной совместимости)
+  const group = aromas.map((aroma: string, index: number) => {
+    // Определяем тип группы по тексту
+    let groupType = 'flower'
+    if (aroma.toLowerCase().includes('сладк') || aroma.includes('🤤')) {
+      groupType = 'sweet'
+    } else if (aroma.toLowerCase().includes('цветочн') || aroma.includes('🌸')) {
+      groupType = 'flower'
+    } else if (aroma.toLowerCase().includes('древесн') || aroma.includes('🪵')) {
+      groupType = 'wood'
+    }
+
+    return {
+      id: index + 1,
+      group: groupType,
+      title: aroma,
+    }
+  })
+
+  // Если тегов нет, используем дефолтные (для обратной совместимости)
+  const defaultAromas = ['Cладкий 🤤', 'Цветочный 🌸', 'Древесный 🪵']
+  const defaultGroup = [
+    { id: 1, group: 'sweet', title: 'Cладкий 🤤' },
+    { id: 2, group: 'flower', title: 'Цветочный 🌸' },
+    { id: 3, group: 'wood', title: 'Древесный 🪵' },
+  ]
+
   return {
     id: variant.id,
     name: node.name,
@@ -243,12 +278,8 @@ function mapNodeToProductCard(
     oldPrice,
     discountPercent,
     size: variant.name,
-    group: [
-      { id: 1, group: 'flower', title: 'Cладкий 🤤' },
-      { id: 2, group: 'wood', title: 'Цветочный 🌸' },
-      { id: 3, group: 'sweet', title: 'Древесный 🪵' },
-    ],
-    aromas: ['Cладкий 🤤', 'Цветочный 🌸', 'Древесный 🪵'],
+    group: group.length > 0 ? group : defaultGroup,
+    aromas: aromas.length > 0 ? aromas : defaultAromas,
   }
 }
 
@@ -404,21 +435,16 @@ export async function getGreedProducts(): Promise<any> {
             }
           }
         }
-        assignedAttributes{
-          attribute{
+        attributes {
+          attribute {
             id
             slug
             name
           }
-          
-         ... on AssignedTextAttribute{
-         value
-        }
-
-        ... on AssignedFileAttribute {
-            fileValue: value {
-              url
-            }
+          values {
+            name
+            slug
+            value
           }
         }
       }
@@ -505,21 +531,16 @@ export async function getPopularProducts(): Promise<any> {
             }
           }
         }
-        assignedAttributes{
-          attribute{
+        attributes {
+          attribute {
             id
             slug
             name
           }
-          
-         ... on AssignedTextAttribute{
-         value
-        }
-
-        ... on AssignedFileAttribute {
-            fileValue: value {
-              url
-            }
+          values {
+            name
+            slug
+            value
           }
         }
       }
@@ -551,7 +572,7 @@ export async function getChoiceProducts(): Promise<any> {
   const query = `
     query getGreedProducts($channel: String!) {
   products(
-    first: 5, 
+    first: 20, 
     channel: $channel, 
     where: { collection: {eq :"Q29sbGVjdGlvbjox" } }
     ) {
@@ -692,11 +713,183 @@ export async function getChoiceProducts(): Promise<any> {
   return result
 }
 
+/** Товары коллекции по ID (коллекция 5 — «Ваши носовые сосочки будут в восторге») */
+const COLLECTION_NOSE_ID = 'Q29sbGVjdGlvbjo1'
 
+export async function getProductsByCollectionId(
+  collectionId: string = COLLECTION_NOSE_ID,
+  first: number = 12,
+): Promise<ProductCardItem[]> {
+  const query = `
+    query getProductsByCollection($channel: String!, $collectionId: ID!, $first: Int!) {
+      products(first: $first, channel: $channel, where: { collection: { eq: $collectionId } }) {
+        edges {
+          node {
+            id
+            name
+            description
+            slug
+            rating
+            thumbnail { url alt }
+            media { id alt url }
+            collections { id name slug }
+            productVariants(first: 12) {
+              edges {
+                node {
+                  id
+                  name
+                  sku
+                  pricing {
+                    price { gross { currency amount } }
+                    priceUndiscounted { gross { currency amount } }
+                  }
+                }
+              }
+            }
+            attributes {
+              attribute { id slug name }
+              values { name slug value }
+            }
+          }
+        }
+      }
+    }
+  `
+  const variables = { channel: CHANNEL, collectionId, first }
+  const data = await graphqlRequest<BestSellersResponse>(query, variables)
+  const nodes = data.products.edges.map((edge: any) => edge.node)
+  const variantIds = nodes.map((node: any) => node.productVariants.edges[0]?.node.id).filter(Boolean)
+  const discounts = await getCatalogDiscounts(variantIds)
+  return nodes.map((node: any) => mapNodeToProductCard(node, discounts))
+}
 
+/** Slug атрибута «Аромат» в Saleor (Reference на страницы «Все ароматы») */
+const CATALOG_AROMA_ATTRIBUTE_SLUG = 'aromat'
 
+/** Товары по slug страницы аромата (аромат — Reference на Page, фильтр по pageSlugs) */
+export async function getProductsByAromaSlug(aromaSlug: string): Promise<ProductCardItem[]> {
+  const query = `
+    query getProductsByAroma($channel: String!, $first: Int!, $pageSlugs: [String!]!) {
+      products(
+        first: $first,
+        channel: $channel,
+        where: {
+          attributes: [
+            {
+              slug: "${CATALOG_AROMA_ATTRIBUTE_SLUG}",
+              value: {
+                reference: {
+                  pageSlugs: { containsAny: $pageSlugs }
+                }
+              }
+            }
+          ]
+        }
+      ) {
+        edges {
+          node {
+            id
+            name
+            description
+            slug
+            rating
+            thumbnail { url alt }
+            media { id alt url }
+            collections { id name slug }
+            productVariants(first: 12) {
+              edges {
+                node {
+                  id
+                  name
+                  sku
+                  pricing {
+                    price { gross { currency amount } }
+                    priceUndiscounted { gross { currency amount } }
+                  }
+                }
+              }
+            }
+            attributes {
+              attribute { id slug name }
+              values { name slug value }
+            }
+          }
+        }
+      }
+    }
+  `
+  const variables = { channel: CHANNEL, first: 50, pageSlugs: [aromaSlug] }
+  try {
+    const data = await graphqlRequest<BestSellersResponse>(query, variables)
+    const nodes = data.products.edges.map((edge: any) => edge.node)
+    const variantIds = nodes.map((node: any) => node.productVariants.edges[0]?.node.id).filter(Boolean)
+    const discounts = await getCatalogDiscounts(variantIds)
+    return nodes.map((node: any) => mapNodeToProductCard(node, discounts))
+  } catch (e) {
+    console.error('getProductsByAromaSlug error:', e)
+    return []
+  }
+}
 
-export async function getProductsByCategorySlug(categorySlug:string): Promise<any> {
+/** Товары по имени значения атрибута (fallback, если по slug ничего не нашлось) */
+export async function getProductsByAromaValue(aromaName: string): Promise<ProductCardItem[]> {
+  const query = `
+    query getProductsByAromaName($channel: String!, $aromaName: String!, $first: Int!) {
+      products(
+        first: $first,
+        channel: $channel,
+        where: {
+          attributes: [
+            { slug: "${CATALOG_AROMA_ATTRIBUTE_SLUG}", value: { name: { eq: $aromaName } } }
+          ]
+        }
+      ) {
+        edges {
+          node {
+            id
+            name
+            description
+            slug
+            rating
+            thumbnail { url alt }
+            media { id alt url }
+            collections { id name slug }
+            productVariants(first: 12) {
+              edges {
+                node {
+                  id
+                  name
+                  sku
+                  pricing {
+                    price { gross { currency amount } }
+                    priceUndiscounted { gross { currency amount } }
+                  }
+                }
+              }
+            }
+            attributes {
+              attribute { id slug name }
+              values { name slug value }
+            }
+          }
+        }
+      }
+    }
+  `
+  const variables = { channel: CHANNEL, aromaName, first: 50 }
+  try {
+    const data = await graphqlRequest<BestSellersResponse>(query, variables)
+    const nodes = data.products.edges.map((edge: any) => edge.node)
+    const variantIds = nodes.map((node: any) => node.productVariants.edges[0]?.node.id).filter(Boolean)
+    const discounts = await getCatalogDiscounts(variantIds)
+    return nodes.map((node: any) => mapNodeToProductCard(node, discounts))
+  } catch (e) {
+    console.error('getProductsByAromaValue error:', e)
+    return []
+  }
+}
+
+export async function getProductsByCategorySlug(categorySlug: string): Promise<any> {
   const query = `
     query getGreedProducts($channel: String! , $categorySlug: String) {
          category(slug: $categorySlug){
@@ -739,21 +932,16 @@ export async function getProductsByCategorySlug(categorySlug:string): Promise<an
             }
           }
         }
-        assignedAttributes{
-          attribute{
+        attributes {
+          attribute {
             id
             slug
             name
           }
-          
-         ... on AssignedTextAttribute{
-         value
-        }
-
-        ... on AssignedFileAttribute {
-            fileValue: value {
-              url
-            }
+          values {
+            name
+            slug
+            value
           }
         }
       }

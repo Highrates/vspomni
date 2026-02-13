@@ -8,7 +8,6 @@ import { CustomButton as Button } from '../common/CustomButton'
 import { AddressInfo } from '@/graphql/types/auth.types'
 import { createAddress, updateAddress } from '@/graphql/queries/adress.service'
 import PhoneInput from '../ui/PhoneInput'
-import CdekPvzList, { CdekPvzInfo } from '../ui/CdekPvzList'
 import { useUserStore } from '@/stores/useUser'
 
 interface AddressModalProps {
@@ -48,7 +47,6 @@ export default function AddressModal({
   const { user } = useUserStore()
   const [show, setShow] = useState(visible)
   const [loading, setLoading] = useState(false)
-  const [isCdekPvzSelected, setIsCdekPvzSelected] = useState(false)
 
   // Determine if we are in Edit Mode
   const isEditMode = !!addressToEdit
@@ -109,7 +107,6 @@ export default function AddressModal({
       const timeout = setTimeout(() => {
         setShow(false)
         setErrors({})
-        setIsCdekPvzSelected(false)
       }, 300)
       return () => clearTimeout(timeout)
     }
@@ -162,9 +159,7 @@ export default function AddressModal({
     // Crucial check: City is required
     if (!formData.city.trim()) newErrors.city = 'Обязательное поле'
     
-    if (!isCdekPvzSelected && !formData.cityArea.trim()) {
-      newErrors.cityArea = 'Обязательное поле'
-    }
+    if (!formData.cityArea.trim()) newErrors.cityArea = 'Обязательное поле'
     if (!formData.streetAddress1.trim())
       newErrors.streetAddress1 = 'Обязательное поле'
     
@@ -272,44 +267,6 @@ export default function AddressModal({
     }
   }
 
-  const handleCdekPvzChoose = (info: CdekPvzInfo) => {
-    setIsCdekPvzSelected(true)
-
-    let parsedCity = info.cityName || ''
-    let parsedAddress = info.address || info.name || ''
-
-    if (info.name && !info.address) {
-      parsedAddress = info.name
-      const parts = info.name.split(',').map((p: string) => p.trim())
-      if (parts.length >= 2) {
-        parsedCity = parts[1]
-      }
-    }
-
-    setErrors((prev) => ({
-      ...prev,
-      city: '',
-      streetAddress1: '',
-      companyName: '',
-      countryArea: '',
-      cityArea: '',
-      postalCode: '',
-    }))
-
-    setFormData((prev) => ({
-      ...prev,
-      city: parsedCity || prev.city,
-      streetAddress1: parsedAddress || prev.streetAddress1,
-      companyName: info.name || prev.companyName,
-      country: 'RU', // По умолчанию Россия
-      countryArea: parsedCity || prev.countryArea,
-      cityArea: '',
-      postalCode: info.postalCode || prev.postalCode || '101000',
-    }))
-
-    toast.success('Адрес ПВЗ выбран и заполнен')
-  }
-
   if (!show) return null
 
   return (
@@ -386,22 +343,12 @@ export default function AddressModal({
             error={errors.phone}
           />
 
-          {/* СДЭК доступен для России (по умолчанию) */}
-          <div className="flex flex-col gap-3 p-4 border border-black/10 rounded-xl bg-gray-50/50">
-            <div>
-              <h3 className="text-base font-semibold mb-1">
-                Выбрать пункт выдачи СДЭК
-              </h3>
-              <p className="text-sm text-black/60">
-                Выберите пункт выдачи заказа в списке или на карте Яндекс,
-                чтобы автоматически заполнить адресные поля
-              </p>
-            </div>
-            <CdekPvzList
-              onChoose={handleCdekPvzChoose}
-              defaultCity="Москва"
-              initialMode="map"
-            />
+          {/* Доставка курьером Яндекса по указанному адресу */}
+          <div className="flex flex-col gap-2 p-4 border border-black/10 rounded-xl bg-gray-50/50">
+            <h3 className="text-base font-semibold">Доставка Яндекса</h3>
+            <p className="text-sm text-black/60">
+              Доставка курьером по указанному адресу. Укажите город, улицу и дом ниже.
+            </p>
           </div>
 
           <div className="flex flex-col">

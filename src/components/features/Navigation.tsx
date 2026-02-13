@@ -6,17 +6,12 @@ export default function Navigation() {
       <Link href="/catalog" className="hover:text-black transition-colors">
         Каталог
       </Link>
-      <Link href="/partners" className="hover:text-black transition-colors">
-        Партнеры
-      </Link>
       <Link href="/catalog" className="hover:text-black transition-colors">
         Ароматы
       </Link>
-      <Link href="/news" className="hover:text-black transition-colors">
-        Блог
-      </Link>
+      {/* Временно скрыты пункты "Партнеры" и "Блог" */}
       <Link
-        href="https://t.me/vspomni_nice"
+        href="https://t.me/vspomni_zabota"
         target="_blank"
         rel="noopener noreferrer"
         className="hover:text-black transition-colors"

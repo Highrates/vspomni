@@ -256,8 +256,13 @@ export default function PaymentBlock() {
     } catch (error: any) {
       console.error('Error creating checkout:', error)
       let errorMessage = error.message || 'Ошибка создания заказа'
-      // Улучшаем сообщения об ошибках
-      if (errorMessage.includes('Failed to create checkout')) {
+      if (
+        errorMessage.includes('метод оплаты') &&
+        errorMessage.toLowerCase().includes('недоступен')
+      ) {
+        errorMessage =
+          'Метод оплаты недоступен. В админке Saleor: Настройки → Каналы → vspomni-site → Способы оплаты — включите хотя бы один способ (Dummy или плагин ЮKassa).'
+      } else if (errorMessage.includes('Failed to create checkout')) {
         errorMessage = 'Не удалось создать заказ. Пожалуйста, попробуйте позже.'
       }
       toast.error(errorMessage)
@@ -323,7 +328,14 @@ export default function PaymentBlock() {
       }
     } catch (error: any) {
       console.error('Error creating payment:', error)
-      const errorMessage = error.message || 'Ошибка создания платежа. Пожалуйста, попробуйте позже.'
+      let errorMessage = error.message || 'Ошибка создания платежа. Пожалуйста, попробуйте позже.'
+      if (
+        errorMessage.includes('метод оплаты') &&
+        errorMessage.toLowerCase().includes('недоступен')
+      ) {
+        errorMessage =
+          'Метод оплаты недоступен. Проверьте в личном кабинете ЮKassa: способы оплаты и валюту RUB для магазина.'
+      }
       toast.error(errorMessage)
     } finally {
       setIsCreatingPayment(false)

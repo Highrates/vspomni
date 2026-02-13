@@ -186,11 +186,20 @@ export default function ProfileIndex() {
 
   const handleSave = async () => {
     try {
+      const token =
+        typeof window !== 'undefined'
+          ? localStorage.getItem('token')
+          : null
+      if (!token || token === 'null' || token === 'undefined') {
+        toast.error('Сессия истекла. Войдите снова.')
+        return
+      }
+
       const { updateAccount, getMeInfo } = await import('@/graphql/queries/auth.service')
       const { updateAddress } = await import('@/graphql/queries/adress.service')
       
-      // Обновляем имя и фамилию
-      await updateAccount(user.name, user.familyName)
+      // Обновляем имя и фамилию (передаём токен явно для надёжности после OAuth)
+      await updateAccount(user.name, user.familyName, token)
       
       // Обновляем телефон в адресе (если есть адрес и он полный)
       if (user.phone) {
@@ -308,8 +317,9 @@ export default function ProfileIndex() {
       console.error('Update error:', error)
       let errorMessage = error.message || 'Ошибка при обновлении профиля'
       
-      // Переводим ошибки на русский
-      if (errorMessage.includes('required') || errorMessage.includes('обязательное')) {
+      if (errorMessage.includes('AUTHENTICATED_USER') || errorMessage.includes('permissions')) {
+        errorMessage = 'Нет прав на изменение профиля. Выйдите и войдите снова через Яндекс.'
+      } else if (errorMessage.includes('required') || errorMessage.includes('обязательное')) {
         errorMessage = 'Заполните все обязательные поля'
       } else if (errorMessage.includes('address') && errorMessage.includes('required')) {
         errorMessage = 'Для сохранения телефона необходимо заполнить адрес доставки'

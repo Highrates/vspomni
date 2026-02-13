@@ -10,6 +10,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
 import AddCartButton from '@/components/ui/AddCartButton'
+import PageTransition from '@/components/layout/PageTransition'
 import { toast } from 'react-toastify'
 import { formatCurrency, parseEditorJS } from '@/lib/functions'
 import { getSingleProduct, getCatalogDiscounts } from '@/graphql/queries/product.service'
@@ -73,6 +74,39 @@ export default function ProductPage() {
         console.error('Error fetching catalog discounts for PDP:', e)
       }
 
+      // Извлекаем теги из атрибутов
+      const aromaAttribute = data.attributes?.find(
+        (attr: any) => attr.attribute?.slug === 'aromaty-v-kartochke-tovara'
+      )
+      const aromaValues = aromaAttribute?.values || []
+      const aromas = aromaValues.map((val: any) => val.name || val.value || '').filter(Boolean)
+      
+      // Формируем group из aromas
+      const group = aromas.map((aroma: string, index: number) => {
+        let groupType = 'flower'
+        if (aroma.toLowerCase().includes('сладк') || aroma.includes('🤤')) {
+          groupType = 'sweet'
+        } else if (aroma.toLowerCase().includes('цветочн') || aroma.includes('🌸')) {
+          groupType = 'flower'
+        } else if (aroma.toLowerCase().includes('древесн') || aroma.includes('🪵')) {
+          groupType = 'wood'
+        }
+        
+        return {
+          id: index + 1,
+          group: groupType,
+          title: aroma,
+        }
+      })
+
+      // Дефолтные значения, если тегов нет
+      const defaultAromas = ['Cладкий 🤤', 'Цветочный 🌸', 'Древесный 🪵']
+      const defaultGroup = [
+        { id: 1, group: 'sweet', title: 'Cладкий 🤤' },
+        { id: 2, group: 'flower', title: 'Цветочный 🌸' },
+        { id: 3, group: 'wood', title: 'Древесный 🪵' },
+      ]
+
       setProductCartFormat({
         id: String(data.id),
         name: data.name,
@@ -82,14 +116,10 @@ export default function ProductPage() {
         image: data.media[0]?.url || data.thumbnail.url,
         thumbnail: data.thumbnail.url,
         slug: data.slug,
-        aromas: ['Cладкий 🤤', 'Цветочный 🌸', 'Древесный 🪵'],
+        aromas: aromas.length > 0 ? aromas : defaultAromas,
         size: firstVariant.name,
         variantId: firstVariant.id,
-        group: [
-          { id: 1, group: 'flower', title: 'Cладкий 🤤' },
-          { id: 2, group: 'wood', title: 'Цветочный 🌸' },
-          { id: 3, group: 'sweet', title: 'Древесный 🪵' },
-        ],
+        group: group.length > 0 ? group : defaultGroup,
       })
 
       if (data.productVariants?.edges?.length > 0) {
@@ -101,7 +131,22 @@ export default function ProductPage() {
     fetch()
   }, [slug])
 
-  if (!product) return <div>Loading...</div>
+  if (!product) {
+    return (
+      <PageTransition>
+        <BackButton />
+        <div className="flex flex-col lg:grid lg:grid-cols-2 gap-5 sm:gap-6 md:gap-8 px-2 sm:px-4 mt-4">
+          <div className="rounded-xl sm:rounded-2xl md:rounded-3xl bg-black/10 aspect-[4/5] max-h-[400px] sm:max-h-[500px] animate-pulse" />
+          <div className="space-y-4">
+            <div className="h-8 w-3/4 bg-black/10 rounded animate-pulse" />
+            <div className="h-4 w-full bg-black/10 rounded animate-pulse" />
+            <div className="h-4 w-1/2 bg-black/10 rounded animate-pulse" />
+            <div className="h-12 w-32 bg-black/10 rounded animate-pulse mt-6" />
+          </div>
+        </div>
+      </PageTransition>
+    )
+  }
 
   const handleSetSize = (variantId: string) => {
     const variant = product.productVariants.edges.find(
@@ -166,9 +211,8 @@ export default function ProductPage() {
     : ''
 
   return (
-    <div>
+    <PageTransition>
       <BackButton />
-      
       <div className="flex flex-col gap-8 sm:gap-10 md:gap-16 lg:gap-20 px-2 sm:px-4">
         <section className="flex flex-col lg:grid lg:grid-cols-2 gap-5 sm:gap-6 md:gap-8">
           <div className="w-full">
@@ -342,9 +386,6 @@ export default function ProductPage() {
 
               {aromas.length > 0 && (
                 <div className="flex flex-col gap-2 sm:gap-3">
-                  <p className="font-normal text-xs sm:text-sm md:text-md text-textgrey select-none">
-                    Ароматы
-                  </p>
                   <div className="flex flex-wrap gap-1.5 sm:gap-2">
                     {aromas.map(
                       (aroma: { name: string; id: string }, index: number) => (
@@ -390,7 +431,7 @@ export default function ProductPage() {
 
                   <div className="flex flex-row justify-between w-full gap-1.5 sm:gap-2.5">
                     <p className="font-normal text-xs sm:text-sm md:text-md text-textgrey select-none whitespace-nowrap shrink-0">
-                      Верхние аккорды
+                      Верхние ноты
                     </p>
                     <div className="flex grow border-b-[2px] sm:border-b-[3px] border-dotted border-textgrey mx-1 sm:mx-2"></div>
                     <p className="font-normal text-xs sm:text-sm md:text-md select-none text-right shrink-0">
@@ -434,11 +475,6 @@ export default function ProductPage() {
                         {formatCurrency(productCartFormat.oldPrice)} ₽
                       </span>
                     )}
-                  {productCartFormat?.discountPercent && productCartFormat.discountPercent > 0 && (
-                    <span className="text-sm font-semibold text-red-500">
-                      -{productCartFormat.discountPercent}%
-                    </span>
-                  )}
                 </div>
 
                 <AddCartButton
@@ -485,7 +521,7 @@ export default function ProductPage() {
 
               <div className="flex flex-col gap-3 sm:gap-4 md:gap-6">
                 <h5 className="font-semibold text-base sm:text-lg md:text-xl select-none">
-                  Верхние аккорды
+                  Верхние ноты
                 </h5>
                 <div className="flex flex-row gap-2 sm:gap-3 md:gap-4 overflow-x-auto scrollbar-hide pb-2">
                   {mockAromaNotes.slice(0, 3).map((note) => (
@@ -500,20 +536,20 @@ export default function ProductPage() {
                 <h2 className="font-semibold text-xl sm:text-2xl md:text-3xl select-none">
                   О продукте
                 </h2>
-                <Tabs defaultValue="description" className="">
+                <Tabs defaultValue="characteristics" className="">
                   <div className=" scrollbar-hide">
                     <TabsList className="flex gap-1.5 sm:gap-2 md:space-x-5">
-                      <TabsTrigger
-                        value="description"
-                        className="flex flex-row justify-center items-center py-1.5 sm:py-2 px-2 sm:px-3 md:pt-2.5 md:pb-2.5 md:pl-4 md:pr-4 rounded-full cursor-pointer select-none text-xs sm:text-sm md:text-base whitespace-nowrap"
-                      >
-                        Описание
-                      </TabsTrigger>
                       <TabsTrigger
                         value="characteristics"
                         className="flex flex-row justify-center items-center py-1.5 sm:py-2 px-2 sm:px-3 md:pt-2.5 md:pb-2.5 md:pl-4 md:pr-4 rounded-full cursor-pointer select-none text-xs sm:text-sm md:text-base whitespace-nowrap"
                       >
                         Характеристики
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="description"
+                        className="flex flex-row justify-center items-center py-1.5 sm:py-2 px-2 sm:px-3 md:pt-2.5 md:pb-2.5 md:pl-4 md:pr-4 rounded-full cursor-pointer select-none text-xs sm:text-sm md:text-base whitespace-nowrap"
+                      >
+                        Описание
                       </TabsTrigger>
                       <TabsTrigger
                         value="contain"
@@ -523,18 +559,6 @@ export default function ProductPage() {
                       </TabsTrigger>
                     </TabsList>
                   </div>
-
-                  <TabsContent
-                    value="description"
-                    className="mt-4 sm:mt-6 md:mt-8"
-                  >
-                    <div
-                      className="flex flex-col gap-3 sm:gap-4 md:gap-5 text-xs sm:text-sm md:text-base"
-                      dangerouslySetInnerHTML={{
-                        __html: descriptionContent,
-                      }}
-                    />
-                  </TabsContent>
 
                   <TabsContent
                     value="characteristics"
@@ -548,6 +572,18 @@ export default function ProductPage() {
                         }}
                       />
                     </div>
+                  </TabsContent>
+
+                  <TabsContent
+                    value="description"
+                    className="mt-4 sm:mt-6 md:mt-8"
+                  >
+                    <div
+                      className="flex flex-col gap-3 sm:gap-4 md:gap-5 text-xs sm:text-sm md:text-base"
+                      dangerouslySetInnerHTML={{
+                        __html: descriptionContent,
+                      }}
+                    />
                   </TabsContent>
 
                   <TabsContent value="contain" className="mt-4 sm:mt-6 md:mt-8">
@@ -569,6 +605,6 @@ export default function ProductPage() {
 
       <Choice />
       <PopularScentsAlt />
-    </div>
+    </PageTransition>
   )
 }

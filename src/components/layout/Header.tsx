@@ -137,18 +137,16 @@ export default function Header({ variant = 'default' }: HeaderProps) {
 
           {/* Desktop Menu */}
           <div
-            className={`hidden md:flex items-center justify-between rounded-full border px-4 lg:px-8 ${getMenuBackground()}`}
-            style={{ maxWidth: '777px', width: '100%', height: '46px' }}
+            className={`hidden md:flex items-center justify-center rounded-full border px-4 lg:px-8 shrink-0 ${getMenuBackground()}`}
+            style={{ height: '46px', width: 'auto' }}
           >
             <nav
               className={`flex items-center gap-4 lg:gap-8 text-sm lg:text-[15px] font-medium ${isOverlay && !scrolled ? 'text-white' : 'text-black/80'}`}
             >
               <Link href="/catalog" className="hover:opacity-80 transition whitespace-nowrap">Каталог</Link>
-              <Link href="/partners" className="hover:opacity-80 transition whitespace-nowrap">Партнеры</Link>
               <Link href="/category/diffuzory" className="hover:opacity-80 transition whitespace-nowrap">Ароматы</Link>
-              <Link href="/news" className="hover:opacity-80 transition whitespace-nowrap">Блог</Link>
               <Link
-                href="https://t.me/vspomni_nice"
+                href="https://t.me/vspomni_zabota"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 hover:opacity-80 transition whitespace-nowrap"
@@ -159,7 +157,7 @@ export default function Header({ variant = 'default' }: HeaderProps) {
             </nav>
 
             <div
-              className={`flex items-center gap-3 border-l pl-11 lg:gap-5 ml-4 lg:space-x-5 ${isOverlay && !scrolled ? 'border-white/50' : 'border-black/50'}`}
+              className={`flex items-center gap-3 border-l pl-6 lg:gap-5 ml-4 lg:space-x-5 ${isOverlay && !scrolled ? 'border-white/50' : 'border-black/50'}`}
             >
               <button
                 aria-label="Поиск"
@@ -293,11 +291,9 @@ export default function Header({ variant = 'default' }: HeaderProps) {
             >
               <nav className="flex flex-col px-6 py-5 text-md font-medium gap-4">
                 <Link href="/catalog" onClick={() => setMenuOpen(false)}>Каталог</Link>
-                <Link href="/partners" onClick={() => setMenuOpen(false)}>Партнеры</Link>
                 <Link href="/category/diffuzory" onClick={() => setMenuOpen(false)}>Ароматы</Link>
-                <Link href="/news" onClick={() => setMenuOpen(false)}>Блог</Link>
                 <Link
-                  href="https://t.me/vspomni_nice"
+                  href="https://t.me/vspomni_zabota"
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => setMenuOpen(false)}

@@ -9,18 +9,18 @@ export default function FaqBlock() {
   const [activeId, setActiveId] = useState<number | null | string>(null)
 
   const { faqs, fetchFaqs } = useFaqStore()
-  
-    useEffect(() => {
-      fetchFaqs()
-    }, [])
+
+  useEffect(() => {
+    fetchFaqs()
+  }, [])
 
   const toggleFaq = (id: number | string) => {
     setActiveId(activeId === id ? null : id)
   }
 
   return (
-    <section id="faq" className="mb-8 sm:mb-12  md:mb-20 lg:mb-[180px] py-4 px-2 scroll-mt-[100px]">
-      <div className="flex items-center justify-between mb-6 sm:mb-8 md:mb-12 lg:mb-14">
+    <section id="faq" className="mb-4 sm:mb-6  md:mb-8 lg:mb-10 py-2 px-2 scroll-mt-[100px]">
+      <div className="flex items-center justify-between mb-4 sm:mb-5 md:mb-6">
         <h3 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none">FAQ</h3>
       </div>
 
@@ -37,7 +37,7 @@ export default function FaqBlock() {
               className="object-cover transition-transform duration-500 hover:scale-105"
             />
           </div>
-           <div className="relative w-full lg:block hidden lg:row-span-2 rounded-2xl lg:rounded-[22px] 
+          <div className="relative w-full lg:block hidden lg:row-span-2 rounded-2xl lg:rounded-[22px] 
                           overflow-hidden transition-all duration-500 hover:-translate-y-0.5">
             <Image
               src="/images/image_faq_3.png"
@@ -53,7 +53,7 @@ export default function FaqBlock() {
               src="/images/image_faq_2.png"
               alt="faq image"
               fill
-             className="object-cover transition-transform duration-500 hover:scale-105"
+              className="object-cover transition-transform duration-500 hover:scale-105"
             />
           </div>
 
@@ -67,7 +67,7 @@ export default function FaqBlock() {
             />
           </div>
 
-    </div>
+        </div>
 
         {/* ====== FAQ LIST ====== */}
         <ul className="flex flex-col divide-y divide-borderdarkgrey border-t border-borderdarkgrey">

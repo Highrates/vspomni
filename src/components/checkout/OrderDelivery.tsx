@@ -4,7 +4,7 @@ import { getMeInfo } from '@/graphql/queries/auth.service'
 import { AddressInfo } from '@/graphql/types/auth.types'
 import { useEffect, useState } from 'react'
 import AddressModal from '../modals/AddressModal'
-import { Trash } from 'lucide-react'
+import { Trash, Truck } from 'lucide-react'
 
 import {
   AlertDialog,
@@ -23,6 +23,7 @@ import {
 } from '../ui/dropdown-menu'
 import { deleteAddress } from '@/graphql/queries/adress.service'
 import { toast } from 'react-toastify'
+import { calculateDelivery, getCheapestOffer } from '@/lib/api/yandexDelivery'
 
 export default function OrderDelivery() {
   const [selected, setSelected] = useState('')
@@ -30,6 +31,9 @@ export default function OrderDelivery() {
   const [loading, setLoading] = useState(true)
   const [modalVisible, setModalVisible] = useState(false)
   const [editingAddress, setEditingAddress] = useState<AddressInfo | null>(null)
+  const [deliveryPrice, setDeliveryPrice] = useState<number | null>(null)
+  const [deliveryLoading, setDeliveryLoading] = useState(false)
+  const [deliveryError, setDeliveryError] = useState<string | null>(null)
   useEffect(() => {
     getMeInfo()
       .then((data) => {
@@ -71,7 +75,6 @@ export default function OrderDelivery() {
       toast.success('Адрес удален')
       setAddresses(prev => {
         const remaining = prev.filter(addr => addr.id !== selected)
-        // выбираем первый оставшийся адрес, если есть
         if (remaining.length > 0) {
           const def =
             remaining.find(a => a.isDefaultShippingAddress) || remaining[0]
@@ -83,6 +86,49 @@ export default function OrderDelivery() {
       })
     })
   }
+
+  const selectedAddress = addresses.find(a => a.id === selected)
+
+  useEffect(() => {
+    setDeliveryPrice(null)
+    setDeliveryError(null)
+  }, [selected])
+
+  const handleCalculateDelivery = async () => {
+    const city =
+      selectedAddress?.city?.trim() || selectedAddress?.countryArea?.trim() || ''
+    if (!city) {
+      toast.error('Выберите адрес с указанным городом')
+      return
+    }
+    setDeliveryLoading(true)
+    setDeliveryError(null)
+    setDeliveryPrice(null)
+    try {
+      const res = await calculateDelivery({
+        city,
+        street: selectedAddress!.streetAddress1,
+        fullname: [city, selectedAddress!.streetAddress1]
+          .filter(Boolean)
+          .join(', '),
+      })
+      const offer = getCheapestOffer(res.offers || [])
+      if (offer?.price?.total_price) {
+        const price = parseFloat(offer.price.total_price)
+        setDeliveryPrice(price)
+        toast.success(`Доставка: ${Math.round(price)} ₽`)
+      } else {
+        setDeliveryError('Не удалось рассчитать стоимость для этого адреса')
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Ошибка расчёта доставки'
+      setDeliveryError(msg)
+      toast.error(msg)
+    } finally {
+      setDeliveryLoading(false)
+    }
+  }
+
   if (loading) {
     return (
       <section className="select-none">
@@ -166,6 +212,36 @@ export default function OrderDelivery() {
           >
             + Новый адрес
           </button>
+
+          {selectedAddress && (
+            <div className="mt-6 p-4 rounded-xl border border-black/10 bg-gray-50/50">
+              <div className="flex items-center gap-2 mb-2">
+                <Truck className="h-5 w-5 text-black/60" />
+                <span className="text-sm font-semibold">Доставка курьером Яндекса</span>
+              </div>
+              <p className="text-xs sm:text-sm text-black/60 mb-3">
+                Доставка по выбранному адресу:{' '}
+                {selectedAddress.city?.trim() || selectedAddress.countryArea || '—'},{' '}
+                {selectedAddress.streetAddress1}
+              </p>
+              <button
+                type="button"
+                onClick={handleCalculateDelivery}
+                disabled={deliveryLoading}
+                className="h-10 px-4 rounded-full border border-black text-sm font-medium hover:bg-black/[0.05] disabled:opacity-50 transition"
+              >
+                {deliveryLoading ? 'Расчёт…' : 'Узнать стоимость доставки'}
+              </button>
+              {deliveryError && (
+                <p className="mt-2 text-sm text-red-600">{deliveryError}</p>
+              )}
+              {deliveryPrice !== null && !deliveryError && (
+                <p className="mt-2 text-sm font-medium text-black">
+                  Стоимость доставки: <span className="font-semibold">{Math.round(deliveryPrice)} ₽</span>
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </section>
 

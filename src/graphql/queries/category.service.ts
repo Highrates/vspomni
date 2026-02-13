@@ -139,13 +139,51 @@ export async function getComingSoonCategories(): Promise<Category[]> {
   try {
     const allCategories = await getAllCategory(20);
 
-    // Жёстко выбираем нужные категории по ID и всегда показываем их
-    // в блоке "Скоро в продаже", независимо от наличия товаров.
-    const targetIds = ['Q2F0ZWdvcnk6Mw==', 'Q2F0ZWdvcnk6NA=='];
+    // Жёстко выбираем нужные категории по ID (в т.ч. категория 7)
+    const targetIds = ['Q2F0ZWdvcnk6Mw==', 'Q2F0ZWdvcnk6NA==', 'Q2F0ZWdvcnk6Nw=='];
 
     return allCategories.filter((category) => targetIds.includes(category.id));
   } catch (error) {
     console.error('Error fetching coming soon categories:', error);
     return [];
+  }
+}
+
+/** Категория по ID (для баннера «Подарочные пакеты» — Q2F0ZWdvcnk6Ng==) */
+export async function getCategoryById(id: string): Promise<Category | null> {
+  const query = `
+    query getCategoryById($id: ID!) {
+      category(id: $id) {
+        id
+        name
+        slug
+        description
+        backgroundImage { url }
+      }
+    }
+  `
+  try {
+    const data = await graphqlRequest<{ category: { id: string; name: string; slug: string; description: string; backgroundImage: { url: string } | null } | null }>(query, { id })
+    const node = data.category
+    if (!node) return null
+    let description = ''
+    try {
+      if (node.description) {
+        const parsed = JSON.parse(node.description)
+        description = parsed.blocks?.[0]?.data?.text || ''
+      }
+    } catch {
+      description = ''
+    }
+    return {
+      id: node.id,
+      name: node.name,
+      slug: node.slug,
+      description,
+      backgroundImage: node.backgroundImage?.url || '',
+    }
+  } catch (e) {
+    console.error('getCategoryById error:', e)
+    return null
   }
 }

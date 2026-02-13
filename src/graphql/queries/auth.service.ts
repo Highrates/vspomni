@@ -338,7 +338,12 @@ export async function confirmAccount(email: string, token: string) {
   return result.confirmAccount.user
 }
 
-export async function updateAccount(firstName?: string, lastName?: string) {
+export async function updateAccount(
+  firstName?: string,
+  lastName?: string,
+  /** Токен явно (для сохранения после OAuth, когда важно передать его в момент клика) */
+  token?: string | null,
+) {
   const mutation = `
     mutation AccountUpdate($input: AccountInput!) {
       accountUpdate(input: $input) {
@@ -373,7 +378,7 @@ export async function updateAccount(firstName?: string, lastName?: string) {
         lastName: string | null
       } | null
     }
-  }>(mutation, variables)
+  }>(mutation, variables, token !== undefined ? { token } : undefined)
 
   if (result.accountUpdate.errors?.length > 0) {
     throw new Error(
@@ -382,4 +387,117 @@ export async function updateAccount(firstName?: string, lastName?: string) {
   }
 
   return result.accountUpdate.user
+}
+
+// ID плагина Яндекс OAuth (должен быть настроен на бэкенде)
+// Можно также получить через переменную окружения: process.env.NEXT_PUBLIC_YANDEX_OAUTH_PLUGIN_ID
+const YANDEX_OAUTH_PLUGIN_ID = 'yandex-oauth' // Замените на реальный ID плагина из Saleor
+
+interface ExternalAuthResponse {
+  authenticationData: string | null
+  errors: Array<{ field: string; message: string; code: string }>
+}
+
+interface ExternalObtainTokensResponse {
+  token: string | null
+  refreshToken: string | null
+  csrfToken: string | null
+  user: {
+    id: string
+    email: string
+  } | null
+  errors: Array<{ field: string; message: string; code: string }>
+}
+
+/**
+ * Получить URL для авторизации через Яндекс
+ */
+export async function getYandexAuthUrl(redirectUri: string): Promise<string> {
+  const mutation = `
+    mutation ExternalAuthenticationUrl($pluginId: String!, $input: JSONString!) {
+      externalAuthenticationUrl(pluginId: $pluginId, input: $input) {
+        authenticationData
+        errors {
+          field
+          message
+          code
+        }
+      }
+    }
+  `
+
+  const input = JSON.stringify({
+    redirectUri,
+  })
+
+  const variables = {
+    pluginId: YANDEX_OAUTH_PLUGIN_ID,
+    input,
+  }
+
+  const result = await graphqlRequest<{
+    externalAuthenticationUrl: ExternalAuthResponse
+  }>(mutation, variables)
+
+  if (result.externalAuthenticationUrl.errors?.length > 0) {
+    throw new Error(
+      result.externalAuthenticationUrl.errors.map((e) => e.message).join(', ')
+    )
+  }
+
+  if (!result.externalAuthenticationUrl.authenticationData) {
+    throw new Error('Не удалось получить URL авторизации')
+  }
+
+  const authData = JSON.parse(result.externalAuthenticationUrl.authenticationData)
+  return authData.authorizationUrl || authData.url
+}
+
+/**
+ * Обменять код авторизации на токены
+ */
+export async function exchangeYandexCode(
+  code: string,
+  state: string
+): Promise<ExternalObtainTokensResponse> {
+  const mutation = `
+    mutation ExternalObtainAccessTokens($pluginId: String!, $input: JSONString!) {
+      externalObtainAccessTokens(pluginId: $pluginId, input: $input) {
+        token
+        refreshToken
+        csrfToken
+        user {
+          id
+          email
+        }
+        errors {
+          field
+          message
+          code
+        }
+      }
+    }
+  `
+
+  const input = JSON.stringify({
+    code,
+    state,
+  })
+
+  const variables = {
+    pluginId: YANDEX_OAUTH_PLUGIN_ID,
+    input,
+  }
+
+  const result = await graphqlRequest<{
+    externalObtainAccessTokens: ExternalObtainTokensResponse
+  }>(mutation, variables)
+
+  if (result.externalObtainAccessTokens.errors?.length > 0) {
+    throw new Error(
+      result.externalObtainAccessTokens.errors.map((e) => e.message).join(', ')
+    )
+  }
+
+  return result.externalObtainAccessTokens
 }
