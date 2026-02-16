@@ -1,4 +1,9 @@
-import type { YandexCalculateResponse, YandexCalculatedOffer } from '@/types/yandexDelivery'
+import type {
+  YandexCalculateResponse,
+  YandexCalculatedOffer,
+  YandexPickupPointsResponse,
+  YandexPickupPoint,
+} from '@/types/yandexDelivery'
 
 const API_BASE = '/api/yandex-delivery'
 
@@ -43,3 +48,16 @@ export function getCheapestOffer(offers: YandexCalculatedOffer[]): YandexCalcula
     return price < minPrice ? o : min
   })
 }
+
+/** Список ПВЗ Яндекса (пункты выдачи и постаматы). Опционально: geo_id, type. */
+export async function getPickupPoints(params?: {
+  geo_id?: number
+  type?: 'pickup_point' | 'terminal' | 'warehouse'
+}): Promise<YandexPickupPointsResponse> {
+  return post<YandexPickupPointsResponse>({
+    action: 'list-pickup-points',
+    ...params,
+  })
+}
+
+export type { YandexPickupPoint }

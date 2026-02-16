@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 const YANDEX_API_BASE = 'https://b2b.taxi.yandex.net'
+const YANDEX_PLATFORM_API_BASE = process.env.YANDEX_DELIVERY_PLATFORM_URL || 'https://b2b-authproxy.taxi.yandex.net'
 const CARGO_PATH = '/b2b/cargo/integration/v2'
+const PLATFORM_PICKUP_LIST_PATH = '/api/b2b/platform/pickup-points/list'
 
 function getToken(): string {
   const token = process.env.YANDEX_DELIVERY_TOKEN
@@ -47,6 +49,37 @@ function yandexErrorToMessage(resStatus: number, err: Record<string, unknown>): 
   if (raw) return raw
   if (resStatus === 502 || resStatus === 503) return 'Сервис доставки Яндекса временно недоступен. Попробуйте позже.'
   return 'Ошибка расчёта доставки Яндекса. Попробуйте позже или измените адрес.'
+}
+
+/** Запрос к B2B Platform API (ПВЗ и т.д.) — другой хост */
+async function yandexPlatformRequest<T>(
+  path: string,
+  options: { method?: string; body?: unknown } = {}
+): Promise<T> {
+  const token = getToken()
+  const url = `${YANDEX_PLATFORM_API_BASE}${path}`
+  const res = await fetch(url, {
+    method: options.method || 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Accept-Language': 'ru',
+    },
+    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+  })
+  const text = await res.text()
+  if (!res.ok) {
+    let err: Record<string, unknown>
+    try {
+      err = JSON.parse(text) as Record<string, unknown>
+    } catch {
+      err = { message: text || res.statusText }
+    }
+    console.error('Yandex Platform API raw error:', res.status, text)
+    const userMsg = yandexErrorToMessage(res.status, err)
+    throw new Error(userMsg)
+  }
+  return text ? (JSON.parse(text) as T) : ({} as T)
 }
 
 async function yandexRequest<T>(
@@ -137,33 +170,42 @@ export async function POST(req: NextRequest) {
       const fullname =
         to.fullname ||
         [to.city, to.street, to.building].filter(Boolean).join(', ')
-      const coordinates = await geocodeAddress(fullname)
+      const cityNorm = (to.city || '').trim().replace(/^МОСКВА$/i, 'Москва').replace(/^САНКТ-ПЕТЕРБУРГ$/i, 'Санкт-Петербург')
+      let fullnameForGeocode =
+        fullname
+          .replace(/\s*,\s*/g, ', ')
+          .replace(/^МОСКВА\b/i, 'Москва')
+          .replace(/^САНКТ-ПЕТЕРБУРГ\b/i, 'Санкт-Петербург')
+      let coordinates = await geocodeAddress(fullnameForGeocode || fullname)
+      if (!coordinates && fullnameForGeocode && cityNorm) {
+        const streetPart = (to.street || to.building || fullnameForGeocode)
+          .replace(new RegExp(`^${cityNorm}\\s+`, 'i'), '')
+          .trim()
+        const shortAddress = streetPart ? `${cityNorm}, ${streetPart}` : cityNorm
+        coordinates = await geocodeAddress(shortAddress)
+      }
+      if (!coordinates && fullnameForGeocode) {
+        const withCountry = fullnameForGeocode.startsWith('Россия')
+          ? fullnameForGeocode
+          : `Россия, ${fullnameForGeocode}`
+        coordinates = await geocodeAddress(withCountry)
+      }
       if (!coordinates) {
         return json({
-          error: 'Не удалось определить координаты адреса',
+          error: 'Не удалось определить координаты адреса. Проверьте город и улицу.',
           offers: [],
         }, 200)
       }
       const warehouse = getWarehousePoint()
+      const dropoffFullname =
+        cityNorm && (to.street || to.building)
+          ? `${cityNorm}, ${(to.street || '')
+              .replace(new RegExp(`^${cityNorm}\\s+`, 'i'), '')
+              .trim() || to.building}`
+          : fullname
       const route_points = [
-        {
-          id: 1,
-          coordinates: warehouse.coordinates,
-          fullname: warehouse.fullname,
-          country: 'Россия',
-          city: to.city,
-          street: to.street || '',
-          building: to.building || '',
-        },
-        {
-          id: 2,
-          coordinates,
-          fullname,
-          country: 'Россия',
-          city: to.city,
-          street: to.street || '',
-          building: to.building || '',
-        },
+        { id: 1, coordinates: warehouse.coordinates, fullname: warehouse.fullname },
+        { id: 2, coordinates, fullname: dropoffFullname },
       ]
       const items = [
         {
@@ -174,18 +216,60 @@ export async function POST(req: NextRequest) {
           dropoff_point: 2,
         },
       ]
-      const requirements = {
-        taxi_classes: ['express'],
+      const requirements: Record<string, unknown> = {
+        taxi_classes: ['express', 'courier'],
         skip_door_to_door: false,
       }
-      const result = await yandexRequest<{ offers: unknown[] }>(
+      let result = await yandexRequest<{ offers: unknown[] }>(
         `${CARGO_PATH}/offers/calculate`,
         { body: { items, route_points, requirements } }
+      )
+      if (!result.offers?.length) {
+        requirements.taxi_classes = ['courier']
+        result = await yandexRequest<{ offers: unknown[] }>(
+          `${CARGO_PATH}/offers/calculate`,
+          { body: { items, route_points, requirements } }
+        )
+      }
+      if (!result.offers?.length) {
+        requirements.taxi_classes = ['cargo']
+        ;(requirements as Record<string, unknown>).cargo_type = 'van'
+        ;(requirements as Record<string, unknown>).cargo_loaders = 0
+        result = await yandexRequest<{ offers: unknown[] }>(
+          `${CARGO_PATH}/offers/calculate`,
+          { body: { items, route_points, requirements } }
+        )
+      }
+      if (!result.offers?.length) {
+        console.warn('Yandex offers/calculate returned empty offers', {
+          dropoffFullname,
+          coordinates,
+          warehouse: warehouse.coordinates,
+        })
+      }
+      return json(result)
+    }
+
+    if (action === 'list-pickup-points') {
+      const filters = body as {
+        geo_id?: number
+        type?: 'pickup_point' | 'terminal' | 'warehouse'
+        longitude?: { from: number; to: number }
+        latitude?: { from: number; to: number }
+      }
+      const requestBody: Record<string, unknown> = {}
+      if (filters.geo_id != null) requestBody.geo_id = filters.geo_id
+      if (filters.type) requestBody.type = filters.type
+      if (filters.longitude) requestBody.longitude = filters.longitude
+      if (filters.latitude) requestBody.latitude = filters.latitude
+      const result = await yandexPlatformRequest<{ points: unknown[] }>(
+        PLATFORM_PICKUP_LIST_PATH,
+        { body: Object.keys(requestBody).length ? requestBody : {} }
       )
       return json(result)
     }
 
-    return json({ error: 'Unknown action. Use action: "calculate"' }, 400)
+    return json({ error: 'Unknown action. Use action: "calculate" or "list-pickup-points"' }, 400)
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
     console.error('Yandex Delivery API error:', message)

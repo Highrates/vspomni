@@ -72,3 +72,36 @@ export interface YandexClaimCreateResponse {
   id: string
   status?: string
 }
+
+// ——— Список ПВЗ (API b2b/platform/pickup-points/list) ———
+
+export interface YandexPickupPointAddress {
+  geoId?: number
+  country?: string
+  region?: string
+  subRegion?: string
+  /** API может отдавать в snake_case */
+  sub_region?: string
+  locality?: string
+  street?: string
+  house?: string
+  full_address?: string
+  postal_code?: string
+  comment?: string
+}
+
+export interface YandexPickupPoint {
+  id: string
+  operator_station_id?: string
+  name: string
+  type: 'pickup_point' | 'terminal' | 'warehouse'
+  position?: { latitude: number; longitude: number }
+  address?: YandexPickupPointAddress
+  instruction?: string
+  payment_methods?: string[]
+  available_for_dropoff?: boolean
+}
+
+export interface YandexPickupPointsResponse {
+  points: YandexPickupPoint[]
+}

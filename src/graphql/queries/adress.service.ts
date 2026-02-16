@@ -57,7 +57,7 @@ export async function createAddress(
       lastName: input.lastName,
       phone: input.phone,
       country: input.country,
-      countryArea: input.countryArea,
+      countryArea: input.countryArea.trim(),
       city: input.city,
       cityArea: input.cityArea,
       streetAddress1: input.streetAddress1,
@@ -75,7 +75,9 @@ export async function createAddress(
   if (errors.length > 0) {
     const errorMessages = errors.map((e) => {
       let msg = e.message || ''
-      // Переводим стандартные ошибки на русский
+      if (e.field === 'countryArea' && (msg.includes('not valid') || e.code === 'INVALID')) {
+        return 'Регион не распознан. Оставьте поле «Регион» пустым или укажите область/край (например: Москва, Московская область).'
+      }
       if (msg.includes('required') || msg.includes('обязательное')) {
         return 'Заполните все обязательные поля'
       }
@@ -137,9 +139,13 @@ export async function updateAddress(
     }
   `
 
+  const { countryArea, ...rest } = input
   const variables = {
     id,
-    input,
+    input: {
+      ...rest,
+      ...(countryArea?.trim() ? { countryArea: countryArea.trim() } : {}),
+    },
   }
 
   const result = await graphqlRequest<AddressUpdateResponse>(mutation, variables)
@@ -149,7 +155,9 @@ export async function updateAddress(
   if (errors.length > 0) {
     const errorMessages = errors.map((e) => {
       let msg = e.message || ''
-      // Переводим стандартные ошибки на русский
+      if (e.field === 'countryArea' && (msg.includes('not valid') || e.code === 'INVALID')) {
+        return 'Регион не распознан. Оставьте поле «Регион» пустым или укажите область/край.'
+      }
       if (msg.includes('required') || msg.includes('обязательное')) {
         return 'Заполните все обязательные поля'
       }

@@ -54,8 +54,12 @@ export default function OrderDelivery() {
       })
   }, [])
 
-  const handleAddressAdded = (newAddress: AddressInfo) => {
-    setAddresses((prev) => [...prev, newAddress])
+  const handleAddressAdded = (newAddress: AddressInfo, updatedList?: AddressInfo[]) => {
+    if (updatedList?.length) {
+      setAddresses(updatedList)
+    } else {
+      setAddresses((prev) => [...prev, newAddress])
+    }
     setSelected(newAddress.id)
   }
 

@@ -9,11 +9,14 @@ import { AddressInfo } from '@/graphql/types/auth.types'
 import { createAddress, updateAddress } from '@/graphql/queries/adress.service'
 import PhoneInput from '../ui/PhoneInput'
 import { useUserStore } from '@/stores/useUser'
+import YandexPvzList from '../ui/YandexPvzList'
+import type { YandexPickupPoint } from '@/types/yandexDelivery'
 
 interface AddressModalProps {
   visible: boolean
   onClose: () => void
-  onAddressAdded: (address: AddressInfo) => void
+  /** После добавления: newAddress — только что созданный, updatedList — полный список с сервера (чтобы список «прогрузился» как в СДЭК) */
+  onAddressAdded: (address: AddressInfo, updatedList?: AddressInfo[]) => void
   onAddressUpdated?: (address: AddressInfo) => void
   addressToEdit?: AddressInfo | null
 }
@@ -47,6 +50,7 @@ export default function AddressModal({
   const { user } = useUserStore()
   const [show, setShow] = useState(visible)
   const [loading, setLoading] = useState(false)
+  const [showYandexPvz, setShowYandexPvz] = useState(false)
 
   // Determine if we are in Edit Mode
   const isEditMode = !!addressToEdit
@@ -154,8 +158,9 @@ export default function AddressModal({
     if (!formData.lastName.trim()) newErrors.lastName = 'Обязательное поле'
     if (!formData.phone.trim()) newErrors.phone = 'Обязательное поле'
     // country всегда 'RU' по умолчанию, валидация не нужна
+    // Регион (countryArea) в текущей конфигурации Saleor обязателен
     if (!formData.countryArea.trim()) newErrors.countryArea = 'Обязательное поле'
-    
+
     // Crucial check: City is required
     if (!formData.city.trim()) newErrors.city = 'Обязательное поле'
     
@@ -234,9 +239,9 @@ export default function AddressModal({
           addressInput,
           formData.isDefaultShippingAddress,
         )
-
+        // Новый адрес обычно последний в ответе Saleor; передаём полный список, чтобы родитель обновил список и выбрал новый (как с СДЭК)
         const newAddress = updatedAddresses[updatedAddresses.length - 1]
-        onAddressAdded(newAddress)
+        onAddressAdded(newAddress, updatedAddresses)
         toast.success('Адрес успешно добавлен!')
       }
 
@@ -265,6 +270,33 @@ export default function AddressModal({
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: '' }))
     }
+  }
+
+  const handleYandexPvzChoose = (pvz: YandexPickupPoint) => {
+    const addr = pvz.address || {}
+    const subRegion = addr.subRegion ?? (addr as { sub_region?: string }).sub_region
+    const region = addr.region ?? ''
+    const locality = addr.locality ?? ''
+    setFormData((prev) => ({
+      ...prev,
+      country: 'RU',
+      countryArea: region || prev.countryArea,
+      city: locality || prev.city,
+      cityArea: subRegion || region || prev.cityArea,
+      streetAddress1:
+        addr.full_address ||
+        [addr.street, addr.house].filter(Boolean).join(', ') ||
+        prev.streetAddress1,
+      postalCode: addr.postal_code ?? prev.postalCode,
+    }))
+    setErrors((prev) => ({
+      ...prev,
+      countryArea: '',
+      city: '',
+      streetAddress1: '',
+      postalCode: '',
+    }))
+    setShowYandexPvz(false)
   }
 
   if (!show) return null
@@ -343,12 +375,28 @@ export default function AddressModal({
             error={errors.phone}
           />
 
-          {/* Доставка курьером Яндекса по указанному адресу */}
-          <div className="flex flex-col gap-2 p-4 border border-black/10 rounded-xl bg-gray-50/50">
-            <h3 className="text-base font-semibold">Доставка Яндекса</h3>
-            <p className="text-sm text-black/60">
-              Доставка курьером по указанному адресу. Укажите город, улицу и дом ниже.
-            </p>
+          {/* Доставка Яндекса / выбор ПВЗ */}
+          <div className="flex flex-col gap-3 p-4 border border-black/10 rounded-xl bg-gray-50/50">
+            <div>
+              <h3 className="text-base font-semibold">Доставка Яндекса</h3>
+              <p className="text-sm text-black/60">
+                Можно указать адрес вручную или выбрать пункт выдачи Яндекса — поля заполнятся автоматически.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setShowYandexPvz(true)}
+                className="inline-flex items-center justify-center px-4 h-10 rounded-full bg-black text-white text-sm font-medium hover:bg-[#3A7FE2] transition"
+              >
+                Выбрать ПВЗ Яндекса
+              </button>
+            </div>
+            {showYandexPvz && (
+              <div className="mt-2 border border-black/10 rounded-xl p-3 bg-white">
+                <YandexPvzList onChoose={handleYandexPvzChoose} />
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col">
@@ -357,6 +405,7 @@ export default function AddressModal({
               type="text"
               value={formData.countryArea}
               onChange={(e) => handleInputChange('countryArea', e.target.value)}
+              placeholder="Область, край"
               className={`h-12 px-4 rounded-xl border text-base outline-none transition ${
                 errors.countryArea
                   ? 'border-red-500'
