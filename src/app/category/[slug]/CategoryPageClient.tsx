@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useCategoriesStore } from '@/stores/useCategories'
 import { ProductCardItem } from '@/types/product'
+import CatalogCategoryBanners from '@/components/catalog/CatalogCategoryBanners'
 import BackButton from '@/components/ui/BackButton'
 import ProductCard from '@/components/home/ProductCard'
 import PageTransition from '@/components/layout/PageTransition'
@@ -122,6 +123,8 @@ export default function CategoryPageClient({
           </div>
         )}
       </section>
+
+      <CatalogCategoryBanners excludeSlug={slug} />
     </PageTransition>
   )
 }

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import Hero from '@/components/home/Hero'
 import ProductGrid from '@/components/home/ProductGrid'
 import GiftPackagesBanner from '@/components/home/GiftPackagesBanner'
@@ -15,6 +16,42 @@ import { getChoiceProducts } from '@/graphql/queries/product.service'
 
 // Обновляем главную страницу по данным моделей раз в минуту
 export const revalidate = 60
+
+const HOME_TITLE = 'Ароматы для дома и интерьера | ВСПОМНИ'
+const HOME_DESCRIPTION =
+  'Интерьерные ароматы для дома от бренда ВСПОМНИ: диффузоры, саше и декор — наполните пространство воспоминаниями и уютом.'
+
+const HOME_KEYWORDS = [
+  'ароматы для дома',
+  'аромат для дома',
+  'интерьерные ароматы',
+  'ароматизация дома',
+  'ароматы для интерьера',
+  'домашние ароматизаторы',
+  'магазин ароматов для дома',
+  'аромадекор',
+  'парфюмерия для интерьера',
+  'парфюмерия для дома',
+  'парфюмерия для пространства',
+  'премиум ароматы для дома',
+]
+
+export const metadata: Metadata = {
+  title: HOME_TITLE,
+  description: HOME_DESCRIPTION,
+  keywords: HOME_KEYWORDS,
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    title: HOME_TITLE,
+    description: HOME_DESCRIPTION,
+    url: '/',
+    siteName: 'ВСПОМНИ',
+    locale: 'ru_RU',
+    type: 'website',
+  },
+}
 
 export default async function Home() {
   const [candlesSoon, choiceProducts] = await Promise.all([

@@ -18,7 +18,7 @@ const footerNavLinkClass =
 export default function Footer() {
   return (
     <footer className="flex flex-col container px-5 max-sm:px-2">
-      <div className="flex flex-col gap-8 md:flex-row md:justify-between md:items-start md:gap-10 pt-6 md:pt-10 pb-8 md:pb-13.25">
+      <div className="flex flex-col gap-8 md:flex-row md:items-start md:justify-start md:gap-10 lg:gap-14 pt-6 md:pt-10 pb-8 md:pb-13.25">
         <div className="text-left min-w-0 shrink-0">
           <h1 className="text-2xl md:text-[32px] font-bold mb-4 md:mb-6">
             ВСПОМНИ.
@@ -97,7 +97,7 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="text-left md:text-right flex flex-col gap-3 md:gap-4 items-start md:items-end">
+        <div className="text-left flex flex-col gap-3 md:gap-4 items-start min-w-0 shrink-0">
           <Link
             href="https://t.me/vspomni_zabota"
             target="_blank"

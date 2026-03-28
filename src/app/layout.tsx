@@ -1,5 +1,5 @@
+import type { Metadata } from 'next'
 import { Onest } from 'next/font/google'
-import Script from 'next/script'
 import './globals.css'
 import ClientChrome from '@/components/layout/ClientChrome'
 
@@ -9,7 +9,12 @@ const onest = Onest({
   display: 'swap',
 })
 
-export const metadata = {
+const metadataBase = new URL(
+  process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'https://vspomni.store',
+)
+
+export const metadata: Metadata = {
+  metadataBase,
   title: 'ВСПОМНИ.',
   description: 'Ароматы и подарки',
   icons: {
