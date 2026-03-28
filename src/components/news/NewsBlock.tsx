@@ -35,7 +35,7 @@ export default function NewsBlock() {
       <section className="mb-4 sm:mb-6 md:mb-8 lg:mb-10 container  px-4 max-sm:px-2">
         <div className="flex items-center justify-between mb-4 sm:mb-5 md:mb-6">
           <h3 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none">
-            Новости Вспомни.
+            Полезные материалы
           </h3>
         </div>
         <div className="grid md:grid-cols-2 grid-cols-1 gap-5">
@@ -54,7 +54,7 @@ export default function NewsBlock() {
     <section className="mb-4 sm:mb-6 md:mb-8 lg:mb-10  p-2">
       <div className="flex items-center justify-between mb-4 sm:mb-5 md:mb-6">
         <h3 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none">
-          Новости Вспомни.
+          Полезные материалы
         </h3>
         <Link href="/news" className="text-base text-black font-medium flex">
           <span className="text-md font-medium">Все</span>
@@ -72,7 +72,7 @@ export default function NewsBlock() {
         {articles.map((article) => {
           const date = formatArticleDate(article.publishedAt || article.created);
           const shortText = extractArticleText(article.content);
-          const imageUrl = article.imageUrl || '/images/blog1.png';
+          const imageUrl = article.imageUrl ?? '';
 
           return (
             <NewsCard

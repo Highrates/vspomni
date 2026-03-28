@@ -12,6 +12,8 @@ export interface ArticleAssignedAttribute {
     url: string;
   };
   textValue?: string;
+  /** Saleor: AssignedPlainTextAttribute */
+  textValuePlain?: string;
 }
 
 export interface ArticleNode {
@@ -29,6 +31,11 @@ export interface ArticleNode {
   }[];
   // Helper property for image URL
   imageUrl?: string | null;
+  /** Атрибут osnovnoj-tekst */
+  osnovnojTekst?: string | null;
+  /** Атрибуты dop-izobrazhenie-1 / dop-izobrazhenie-2 */
+  dopIzobrazhenie1Url?: string | null;
+  dopIzobrazhenie2Url?: string | null;
 }
 
 export interface ArticlesConnection {
@@ -42,6 +49,43 @@ export interface ArticlesConnection {
 
 export interface SingleArticleConnection {
   page: ArticleNode | null;
+}
+
+/** URL главного изображения страницы (Saleor): приоритет атрибуту glavnoe-izobrazhenie */
+export function extractArticleMainImageUrl(node: {
+  assignedAttributes: ArticleAssignedAttribute[];
+}): string | undefined {
+  const attrs = node.assignedAttributes;
+  const main = attrs.find((a) => a.attribute.slug === 'glavnoe-izobrazhenie');
+  if (main?.fileValue?.url) return main.fileValue.url;
+
+  const fallback = attrs.find(
+    (attr) =>
+      attr.attribute.slug === 'image' ||
+      attr.attribute.slug === 'cover' ||
+      attr.attribute.name?.toLowerCase().includes('изображение') ||
+      attr.attribute.name?.toLowerCase().includes('image'),
+  );
+  return fallback?.fileValue?.url || undefined;
+}
+
+export function extractArticleTextAttribute(
+  node: { assignedAttributes: ArticleAssignedAttribute[] },
+  slug: string,
+): string | undefined {
+  const attr = node.assignedAttributes.find((a) => a.attribute.slug === slug);
+  if (!attr) return undefined;
+  const v = attr.textValue ?? attr.textValuePlain;
+  if (typeof v !== 'string' || !v.trim()) return undefined;
+  return v;
+}
+
+export function extractArticleFileAttributeUrl(
+  node: { assignedAttributes: ArticleAssignedAttribute[] },
+  slug: string,
+): string | undefined {
+  const attr = node.assignedAttributes.find((a) => a.attribute.slug === slug);
+  return attr?.fileValue?.url || undefined;
 }
 
 // ============================================
@@ -156,20 +200,12 @@ export async function getAllArticles(
   // Фильтруем только опубликованные страницы на клиенте
   const articles = data.pages.edges
     .filter(e => e.node.isPublished === true) // Фильтруем опубликованные
-    .map(e => {
+    .map((e) => {
       const node = e.node;
-      // Извлекаем изображение из атрибутов
-      const imageAttribute = node.assignedAttributes.find(
-        attr => attr.attribute.slug === 'image' || 
-                attr.attribute.slug === 'cover' ||
-                attr.attribute.name?.toLowerCase().includes('изображение') ||
-                attr.attribute.name?.toLowerCase().includes('image')
-      );
-      
-    return {
-      ...node,
-      imageUrl: imageAttribute?.fileValue?.url || undefined,
-    };
+      return {
+        ...node,
+        imageUrl: extractArticleMainImageUrl(node),
+      };
     });
     
   return articles;
@@ -201,6 +237,9 @@ export async function getSingleArticle(slug: string): Promise<ArticleNode | null
           ... on AssignedTextAttribute {
             textValue: value
           }
+          ... on AssignedPlainTextAttribute {
+            textValuePlain: value
+          }
         }
         metadata {
           key
@@ -215,16 +254,14 @@ export async function getSingleArticle(slug: string): Promise<ArticleNode | null
   const data = await graphqlRequest<SingleArticleConnection>(query, variables);
   if (!data.page) return null;
   
-  // Извлекаем изображение из атрибутов
-  const imageAttribute = data.page.assignedAttributes.find(
-    attr => attr.attribute.slug === 'image' || 
-            attr.attribute.slug === 'cover' ||
-            attr.attribute.name?.toLowerCase().includes('изображение') ||
-            attr.attribute.name?.toLowerCase().includes('image')
-  );
-  
   return {
     ...data.page,
-    imageUrl: imageAttribute?.fileValue?.url || undefined,
+    imageUrl: extractArticleMainImageUrl(data.page),
+    osnovnojTekst:
+      extractArticleTextAttribute(data.page, 'osnovnoj-tekst') ?? null,
+    dopIzobrazhenie1Url:
+      extractArticleFileAttributeUrl(data.page, 'dop-izobrazhenie-1') ?? null,
+    dopIzobrazhenie2Url:
+      extractArticleFileAttributeUrl(data.page, 'dop-izobrazhenie-2') ?? null,
   };
 }

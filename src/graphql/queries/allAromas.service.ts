@@ -19,6 +19,7 @@ interface AllAromasPagesConnection {
         id: string
         slug: string
         title: string
+        content?: string | null
         publishedAt: string
         isPublished: boolean
         assignedAttributes: Array<{
@@ -31,6 +32,7 @@ interface AllAromasPagesConnection {
             url: string
           }
           textValue?: string
+          textValuePlain?: string
         }>
       }
     }[]
@@ -43,6 +45,19 @@ export interface AllAromasItem {
   title: string
   text: string
   image: string
+  /** Поле content страницы Saleor (Editor.js и т.п.) */
+  content?: string | null
+}
+
+/** Заголовок как на /catalog/aroma/[slug]: title → text → slug */
+export function getAromaDisplayTitle(
+  item: Pick<AllAromasItem, 'title' | 'text' | 'slug'>,
+): string {
+  return (
+    item.title?.trim() ||
+    item.text?.trim() ||
+    item.slug.replace(/-/g, ' ')
+  )
 }
 
 export async function getAllAromas(): Promise<AllAromasItem[]> {
@@ -80,6 +95,7 @@ export async function getAllAromas(): Promise<AllAromasItem[]> {
             id
             slug
             title
+            content
             publishedAt
             isPublished
             assignedAttributes {
@@ -95,6 +111,9 @@ export async function getAllAromas(): Promise<AllAromasItem[]> {
               }
               ... on AssignedTextAttribute {
                 textValue: value
+              }
+              ... on AssignedPlainTextAttribute {
+                textValuePlain: value
               }
             }
           }
@@ -119,8 +138,9 @@ export async function getAllAromas(): Promise<AllAromasItem[]> {
 
       // Извлекаем атрибуты
       node.assignedAttributes.forEach((attr) => {
-        if (attr.attribute.slug === 'vse-aromaty-tekst' && attr.textValue) {
-          text = attr.textValue
+        if (attr.attribute.slug === 'vse-aromaty-tekst') {
+          const v = attr.textValue ?? attr.textValuePlain
+          if (v) text = v
         }
         if (
           (attr.attribute.slug === 'vsy-aromaty-kartinka' ||
@@ -131,15 +151,14 @@ export async function getAllAromas(): Promise<AllAromasItem[]> {
         }
       })
 
-      if (text || image) {
-        allAromas.push({
-          id: node.id,
-          slug: node.slug,
-          title: node.title || '',
-          text,
-          image,
-        })
-      }
+      allAromas.push({
+        id: node.id,
+        slug: node.slug,
+        title: node.title || '',
+        text,
+        image,
+        content: node.content ?? null,
+      })
     })
 
   return allAromas
@@ -152,6 +171,5 @@ export async function getAromaBreadcrumbTitleBySlug(
   const list = await getAllAromas()
   const item = list.find((a) => a.slug === slug)
   if (!item) return null
-  const label = (item.text || item.title || '').trim()
-  return label || null
+  return getAromaDisplayTitle(item) || null
 }
