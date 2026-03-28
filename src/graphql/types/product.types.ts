@@ -170,6 +170,7 @@ export interface AttributeValue {
   richText: any;
   slug: string;
   value?: string;
+  file?: { url: string } | null;
 }
 
 export interface Attribute {

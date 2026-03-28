@@ -9,6 +9,7 @@ import { AddressInfo } from '@/graphql/types/auth.types'
 import { createAddress, updateAddress } from '@/graphql/queries/adress.service'
 import PhoneInput from '../ui/PhoneInput'
 import { useUserStore } from '@/stores/useUser'
+import CdekPvzList, { type CdekPvzInfo } from '../ui/CdekPvzList'
 import YandexPvzList from '../ui/YandexPvzList'
 import type { YandexPickupPoint } from '@/types/yandexDelivery'
 
@@ -50,7 +51,6 @@ export default function AddressModal({
   const { user } = useUserStore()
   const [show, setShow] = useState(visible)
   const [loading, setLoading] = useState(false)
-  const [showYandexPvz, setShowYandexPvz] = useState(false)
 
   // Determine if we are in Edit Mode
   const isEditMode = !!addressToEdit
@@ -72,6 +72,7 @@ export default function AddressModal({
 
   const [formData, setFormData] = useState<FormData>(initialFormState)
   const [errors, setErrors] = useState<FormErrors>({})
+  const [deliveryService, setDeliveryService] = useState<'cdek' | 'yandex'>('cdek')
 
   useEffect(() => {
     if (visible) {
@@ -151,25 +152,17 @@ export default function AddressModal({
     return /^\d{3,10}$/.test(cleanCode)
   }
 
-  const validateForm = (): boolean => {
+  const validateForm = (): true | FormErrors => {
     const newErrors: FormErrors = {}
 
-    if (!formData.firstName.trim()) newErrors.firstName = 'Обязательное поле'
-    if (!formData.lastName.trim()) newErrors.lastName = 'Обязательное поле'
-    if (!formData.phone.trim()) newErrors.phone = 'Обязательное поле'
-    // country всегда 'RU' по умолчанию, валидация не нужна
-    // Регион (countryArea) в текущей конфигурации Saleor обязателен
-    if (!formData.countryArea.trim()) newErrors.countryArea = 'Обязательное поле'
-
-    // Crucial check: City is required
-    if (!formData.city.trim()) newErrors.city = 'Обязательное поле'
-    
-    if (!formData.cityArea.trim()) newErrors.cityArea = 'Обязательное поле'
+    if (!formData.firstName.trim()) newErrors.firstName = 'Заполните имя'
+    if (!formData.lastName.trim()) newErrors.lastName = 'Заполните фамилию'
+    if (!formData.phone.trim()) newErrors.phone = 'Укажите номер телефона'
+    if (!formData.city.trim()) newErrors.city = 'Заполните город'
     if (!formData.streetAddress1.trim())
-      newErrors.streetAddress1 = 'Обязательное поле'
-    
+      newErrors.streetAddress1 = 'Заполните улицу и номер дома'
     if (!formData.postalCode.trim()) {
-      newErrors.postalCode = 'Обязательное поле'
+      newErrors.postalCode = 'Заполните почтовый индекс'
     } else if (!validatePostalCode(formData.postalCode, formData.country)) {
       const formats: { [key: string]: string } = {
         UZ: '6 цифр (например: 100000)',
@@ -182,16 +175,19 @@ export default function AddressModal({
         formats[formData.country] || 'корректный почтовый индекс'
       newErrors.postalCode = `Неверный формат. Ожидается: ${expectedFormat}`
     }
-    
+
     // companyName не обязательное поле
 
     setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
+    return Object.keys(newErrors).length === 0 ? true : newErrors
   }
 
   const handleSubmit = async () => {
-    if (!validateForm()) {
-      toast.error('Пожалуйста, заполните все обязательные поля')
+    console.log('--- Address Form Submit Data ---', formData)
+    const validation = validateForm()
+    if (validation !== true) {
+      const message = Object.values(validation).join('. ')
+      toast.error(message)
       return
     }
 
@@ -221,15 +217,15 @@ export default function AddressModal({
           addressToEdit.id,
           addressInput
         )
-        
+
         // Find the updated address in the returned list
         const updatedAddress = updatedAddresses.find((a: AddressInfo) => a.id === addressToEdit.id)
-        
+
         if (onAddressUpdated && updatedAddress) {
           onAddressUpdated(updatedAddress)
         } else if (onAddressUpdated) {
-            // Fallback if the backend returns array but ID changed or logic differs
-             onAddressUpdated(updatedAddresses.find((a: AddressInfo) => a.streetAddress1 === addressInput.streetAddress1) || updatedAddresses[0])
+          // Fallback if the backend returns array but ID changed or logic differs
+          onAddressUpdated(updatedAddresses.find((a: AddressInfo) => a.streetAddress1 === addressInput.streetAddress1) || updatedAddresses[0])
         }
 
         toast.success('Адрес успешно обновлен!')
@@ -246,17 +242,10 @@ export default function AddressModal({
       }
 
       onClose()
-      
+
     } catch (error: any) {
-      toast.error(isEditMode ? 'Ошибка при обновлении' : 'Ошибка при добавлении адреса')
+      toast.error(`ОШИБКА: ${error.message || 'неизвестно'}`)
       console.error('Address operation error:', error)
-      
-      // If server returns validation errors, try to map them to fields
-      if (error.graphQLErrors) {
-          error.graphQLErrors.forEach((err: any) => {
-              console.log(err.message)
-          })
-      }
     } finally {
       setLoading(false)
     }
@@ -272,22 +261,15 @@ export default function AddressModal({
     }
   }
 
-  const handleYandexPvzChoose = (pvz: YandexPickupPoint) => {
-    const addr = pvz.address || {}
-    const subRegion = addr.subRegion ?? (addr as { sub_region?: string }).sub_region
-    const region = addr.region ?? ''
-    const locality = addr.locality ?? ''
+  const handleCdekPvzChoose = (pvz: CdekPvzInfo) => {
     setFormData((prev) => ({
       ...prev,
       country: 'RU',
-      countryArea: region || prev.countryArea,
-      city: locality || prev.city,
-      cityArea: subRegion || region || prev.cityArea,
-      streetAddress1:
-        addr.full_address ||
-        [addr.street, addr.house].filter(Boolean).join(', ') ||
-        prev.streetAddress1,
-      postalCode: addr.postal_code ?? prev.postalCode,
+      countryArea: pvz.region || prev.countryArea,
+      city: pvz.cityName || prev.city,
+      cityArea: pvz.cityArea || prev.cityArea,
+      streetAddress1: pvz.address || prev.streetAddress1,
+      postalCode: pvz.postalCode ?? prev.postalCode,
     }))
     setErrors((prev) => ({
       ...prev,
@@ -296,7 +278,34 @@ export default function AddressModal({
       streetAddress1: '',
       postalCode: '',
     }))
-    setShowYandexPvz(false)
+  }
+
+  const handleYandexPvzChoose = (pvz: YandexPickupPoint) => {
+    // Город может быть в locality или в region (если это город-регион)
+    const city = pvz.address?.locality || pvz.address?.region || ''
+    const region = pvz.address?.region || ''
+
+    const isMoscow = city.toLowerCase().includes('москва') || city.toLowerCase().includes('зеленоград')
+    const finalRegion = isMoscow ? 'Москва' : (region || '')
+
+    setFormData((prev) => ({
+      ...prev,
+      country: 'RU',
+      countryArea: finalRegion,
+      city: city || prev.city,
+      cityArea: pvz.address?.sub_region || pvz.address?.subRegion || prev.cityArea || '',
+      streetAddress1: pvz.address?.full_address || prev.streetAddress1,
+      postalCode: pvz.address?.postal_code || prev.postalCode,
+      companyName: pvz.name || prev.companyName,
+    }))
+    setErrors((prev) => ({
+      ...prev,
+      countryArea: '',
+      city: '',
+      cityArea: '',
+      streetAddress1: '',
+      postalCode: '',
+    }))
   }
 
   if (!show) return null
@@ -305,9 +314,8 @@ export default function AddressModal({
     <div className="fixed inset-0 z-50 flex justify-end">
       <div
         onClick={onClose}
-        className={`absolute inset-0 bg-black/40 backdrop-blur-sm cursor-pointer transition-opacity duration-300 ${
-          visible ? 'opacity-100' : 'opacity-0'
-        }`}
+        className={`absolute inset-0 bg-black/40 backdrop-blur-sm cursor-pointer transition-opacity duration-300 ${visible ? 'opacity-100' : 'opacity-0'
+          }`}
       />
 
       <motion.div
@@ -336,11 +344,10 @@ export default function AddressModal({
                 type="text"
                 value={formData.firstName}
                 onChange={(e) => handleInputChange('firstName', e.target.value)}
-                className={`h-12 px-4 rounded-xl border text-base outline-none transition ${
-                  errors.firstName
-                    ? 'border-red-500'
-                    : 'border-black/10 focus:border-black/30'
-                }`}
+                className={`h-12 px-4 rounded-xl border text-base outline-none transition ${errors.firstName
+                  ? 'border-red-500'
+                  : 'border-black/10 focus:border-black/30'
+                  }`}
               />
               {errors.firstName && (
                 <span className="text-red-500 text-sm mt-1">
@@ -355,11 +362,10 @@ export default function AddressModal({
                 type="text"
                 value={formData.lastName}
                 onChange={(e) => handleInputChange('lastName', e.target.value)}
-                className={`h-12 px-4 rounded-xl border text-base outline-none transition ${
-                  errors.lastName
-                    ? 'border-red-500'
-                    : 'border-black/10 focus:border-black/30'
-                }`}
+                className={`h-12 px-4 rounded-xl border text-base outline-none transition ${errors.lastName
+                  ? 'border-red-500'
+                  : 'border-black/10 focus:border-black/30'
+                  }`}
               />
               {errors.lastName && (
                 <span className="text-red-500 text-sm mt-1">
@@ -375,42 +381,57 @@ export default function AddressModal({
             error={errors.phone}
           />
 
-          {/* Доставка Яндекса / выбор ПВЗ */}
+          {/* Доставка: выбор ПВЗ */}
           <div className="flex flex-col gap-3 p-4 border border-black/10 rounded-xl bg-gray-50/50">
-            <div>
-              <h3 className="text-base font-semibold">Доставка Яндекса</h3>
-              <p className="text-sm text-black/60">
-                Можно указать адрес вручную или выбрать пункт выдачи Яндекса — поля заполнятся автоматически.
-              </p>
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <h3 className="text-base font-semibold">Пункты выдачи</h3>
+                <p className="text-sm text-black/60">
+                  Выберите пункт выдачи на карте или укажите адрес вручную
+                </p>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+
+            {/* Tabs Trigger */}
+            <div className="flex gap-2 p-1 bg-black/5 rounded-xl">
               <button
                 type="button"
-                onClick={() => setShowYandexPvz(true)}
-                className="inline-flex items-center justify-center px-4 h-10 rounded-full bg-black text-white text-sm font-medium hover:bg-[#3A7FE2] transition"
+                onClick={() => setDeliveryService('cdek')}
+                className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${deliveryService === 'cdek' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
+                  }`}
               >
-                Выбрать ПВЗ Яндекса
+                СДЭК
               </button>
+              {/* === ЯНДЕКС ПВЗ (временно отключен, ждём ответ поддержки по NDD) ===
+              <button
+                type="button"
+                onClick={() => setDeliveryService('yandex')}
+                className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${deliveryService === 'yandex' ? 'bg-[#FFCC00] shadow-sm text-black' : 'text-black/40 hover:text-black/60'
+                  }`}
+              >
+                Яндекс
+              </button>
+              */}
             </div>
-            {showYandexPvz && (
-              <div className="mt-2 border border-black/10 rounded-xl p-3 bg-white">
-                <YandexPvzList onChoose={handleYandexPvzChoose} />
-              </div>
-            )}
+
+            <div className="mt-2 border border-black/10 rounded-xl p-3 bg-white max-h-[400px] overflow-y-auto">
+              {/* Пока только СДЭК, Яндекс закомментирован */}
+              <CdekPvzList onChoose={handleCdekPvzChoose} />
+              {/* deliveryService === 'yandex' && <YandexPvzList onChoose={handleYandexPvzChoose} /> */}
+            </div>
           </div>
 
           <div className="flex flex-col">
-            <label className="text-sm font-medium mb-2">Регион *</label>
+            <label className="text-sm font-medium mb-2">Регион</label>
             <input
               type="text"
               value={formData.countryArea}
               onChange={(e) => handleInputChange('countryArea', e.target.value)}
               placeholder="Область, край"
-              className={`h-12 px-4 rounded-xl border text-base outline-none transition ${
-                errors.countryArea
-                  ? 'border-red-500'
-                  : 'border-black/10 focus:border-black/30'
-              }`}
+              className={`h-12 px-4 rounded-xl border text-base outline-none transition ${errors.countryArea
+                ? 'border-red-500'
+                : 'border-black/10 focus:border-black/30'
+                }`}
             />
             {errors.countryArea && (
               <span className="text-red-500 text-sm mt-1">
@@ -426,11 +447,10 @@ export default function AddressModal({
                 type="text"
                 value={formData.city}
                 onChange={(e) => handleInputChange('city', e.target.value)}
-                className={`h-12 px-4 rounded-xl border text-base outline-none transition ${
-                  errors.city
-                    ? 'border-red-500'
-                    : 'border-black/10 focus:border-black/30'
-                }`}
+                className={`h-12 px-4 rounded-xl border text-base outline-none transition ${errors.city
+                  ? 'border-red-500'
+                  : 'border-black/10 focus:border-black/30'
+                  }`}
               />
               {errors.city && (
                 <span className="text-red-500 text-sm mt-1">{errors.city}</span>
@@ -438,16 +458,15 @@ export default function AddressModal({
             </div>
 
             <div className="flex flex-col">
-              <label className="text-sm font-medium mb-2">Район *</label>
+              <label className="text-sm font-medium mb-2">Район</label>
               <input
                 type="text"
                 value={formData.cityArea}
                 onChange={(e) => handleInputChange('cityArea', e.target.value)}
-                className={`h-12 px-4 rounded-xl border text-base outline-none transition ${
-                  errors.cityArea
-                    ? 'border-red-500'
-                    : 'border-black/10 focus:border-black/30'
-                }`}
+                className={`h-12 px-4 rounded-xl border text-base outline-none transition ${errors.cityArea
+                  ? 'border-red-500'
+                  : 'border-black/10 focus:border-black/30'
+                  }`}
               />
               {errors.cityArea && (
                 <span className="text-red-500 text-sm mt-1">
@@ -465,11 +484,10 @@ export default function AddressModal({
               onChange={(e) =>
                 handleInputChange('streetAddress1', e.target.value)
               }
-              className={`h-12 px-4 rounded-xl border text-base outline-none transition ${
-                errors.streetAddress1
-                  ? 'border-red-500'
-                  : 'border-black/10 focus:border-black/30'
-              }`}
+              className={`h-12 px-4 rounded-xl border text-base outline-none transition ${errors.streetAddress1
+                ? 'border-red-500'
+                : 'border-black/10 focus:border-black/30'
+                }`}
             />
             {errors.streetAddress1 && (
               <span className="text-red-500 text-sm mt-1">
@@ -510,11 +528,10 @@ export default function AddressModal({
                       ? '12345'
                       : 'Почтовый индекс'
               }
-              className={`h-12 px-4 rounded-xl border text-base outline-none transition ${
-                errors.postalCode
-                  ? 'border-red-500'
-                  : 'border-black/10 focus:border-black/30'
-              }`}
+              className={`h-12 px-4 rounded-xl border text-base outline-none transition ${errors.postalCode
+                ? 'border-red-500'
+                : 'border-black/10 focus:border-black/30'
+                }`}
             />
             {errors.postalCode && (
               <span className="text-red-500 text-sm mt-1">
@@ -523,22 +540,24 @@ export default function AddressModal({
             )}
           </div>
 
-          {!isEditMode && (
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.isDefaultShippingAddress}
-                onChange={(e) =>
-                  handleInputChange('isDefaultShippingAddress', e.target.checked)
-                }
-                className="w-5 h-5 rounded border-black/20 text-blue-600 focus:ring-2 focus:ring-blue-500"
-              />
-              <span className="text-sm font-medium">
-                Установить как адрес доставки по умолчанию
-              </span>
-            </label>
-          )}
-        </div>
+          {
+            !isEditMode && (
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.isDefaultShippingAddress}
+                  onChange={(e) =>
+                    handleInputChange('isDefaultShippingAddress', e.target.checked)
+                  }
+                  className="w-5 h-5 rounded border-black/20 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium">
+                  Установить как адрес доставки по умолчанию
+                </span>
+              </label>
+            )
+          }
+        </div >
 
         <div className="max-sm:p-4 p-8 border-t border-black/10 shrink-0">
           <Button
@@ -554,7 +573,7 @@ export default function AddressModal({
             </h2>
           </Button>
         </div>
-      </motion.div>
-    </div>
+      </motion.div >
+    </div >
   )
 }

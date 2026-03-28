@@ -308,16 +308,25 @@
   overflow: hidden !important;
 }
 
+/* Сторисы: по центру — ширина по контенту, не 100%; курсор grab при скролле */
 .popular-swiper {
-  width: 100%;
-  max-width: 1062px;
-  margin: 0 auto;
+  width: max-content !important;
+  max-width: 100%;
+  margin-left: auto !important;
+  margin-right: auto !important;
   overflow: hidden;
+  cursor: grab;
+}
+.popular-swiper:active,
+.popular-swiper.swiper-grab {
+  cursor: grabbing;
 }
 
 .popular-swiper .swiper-wrapper {
   display: flex;
   align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
 }
 
 .popular-swiper .swiper-slide {
@@ -328,16 +337,12 @@
 @media (max-width: 1024px) {
   .popular-swiper {
     max-width: 100%;
-    padding-left: 16px;
-    padding-right: 16px;
     overflow: hidden;
   }
 
   .popular-swiper .swiper-wrapper {
-    justify-content: flex-start !important;
+    justify-content: center !important;
   }
-
-  /* стрелки на мобилке скрываем */
 }
 
 @media (max-width: 768px) {

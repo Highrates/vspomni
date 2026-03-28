@@ -61,7 +61,7 @@ async function yookassaRequest(
   }
 
   console.log(`YooKassa API ${method} ${url}`)
-  
+
   return fetch(url, fetchOptions)
 }
 
@@ -79,11 +79,13 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const {
-      amount,
+      amount, // Итоговая сумма к оплате
       currency = 'RUB',
       description,
       orderId,
       returnUrl,
+      userEmail,
+      items = [], // Список товаров из корзины
       metadata = {},
     } = body
 
@@ -96,13 +98,63 @@ export async function POST(request: NextRequest) {
     }
 
     // Формируем URL для возврата после оплаты
-    const defaultReturnUrl = returnUrl || 
-      (typeof window !== 'undefined' 
+    const defaultReturnUrl = returnUrl ||
+      (typeof window !== 'undefined'
         ? `${window.location.origin}/checkout/success`
         : `${request.headers.get('origin') || 'http://localhost:3000'}/checkout/success`)
 
+    // Подготовка чека для 54-ФЗ
+    let receipt = null
+    if (userEmail && items.length > 0) {
+      // Сумма чека должна строго совпадать с amount. 
+      // Если есть промокод, totalPrice может быть больше amount.
+      // Распределяем скидку пропорционально.
+      const sumItems = items.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0)
+      const ratio = amount / sumItems
+
+      let runningTotal = 0
+      const formattedItems = items.map((item: any, index: number) => {
+        const isLast = index === items.length - 1
+
+        // Вычисляем новую цену товара с учётом скидки
+        let discountedPrice = Math.round(item.price * ratio * 100) / 100
+
+        // Корректировка последнего товара для точного совпадения суммы
+        if (isLast) {
+          // Оставшаяся сумма делится на количество последнего товара
+          discountedPrice = Math.round(((amount - runningTotal) / item.quantity) * 100) / 100
+        }
+
+        // Защита от нулевой цены (минимум 0.01)
+        if (discountedPrice <= 0) discountedPrice = 0.01
+
+        if (!isLast) {
+          runningTotal += Number((discountedPrice * item.quantity).toFixed(2))
+        }
+
+        return {
+          description: item.name.substring(0, 128),
+          quantity: item.quantity,
+          amount: {
+            value: discountedPrice.toFixed(2),
+            currency: currency,
+          },
+          vat_code: 4, // Без НДС
+          payment_mode: 'full_payment',
+          payment_subject: 'commodity',
+        }
+      })
+
+      receipt = {
+        customer: {
+          email: userEmail,
+        },
+        items: formattedItems,
+      }
+    }
+
     // Данные для создания платежа
-    const paymentData = {
+    const paymentData: any = {
       amount: {
         value: amount.toFixed(2), // Сумма в формате "100.00"
         currency: currency,
@@ -119,6 +171,14 @@ export async function POST(request: NextRequest) {
       },
     }
 
+    // Добавляем чек, если он сформирован
+    if (receipt) {
+      paymentData.receipt = receipt
+    }
+
+    // ЛОГИРУЕМ ПОЛНЫЙ ЗАПРОС (для отладки на сервере)
+    console.log('YooKassa full payment payload:', JSON.stringify(paymentData, null, 2))
+
     console.log('YooKassa creating payment:', paymentData)
 
     // Создаём платеж
@@ -131,11 +191,13 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       console.error('YooKassa API error:', result)
+      const desc = (result.description || result.code || '') as string
+      const isAuthError = /shopId|secret key|secret_key|Invalid credentials|authorization/i.test(desc)
+      const userError = isAuthError
+        ? 'Ошибка настройки оплаты (shopId или секретный ключ). Проверьте YOOKASSA_SHOP_ID и YOOKASSA_SECRET_KEY в настройках сервера и перевыпустите ключ в личном кабинете ЮKassa.'
+        : (result.description || 'Не удалось создать платёж')
       return createResponse(
-        { 
-          error: result.description || 'Failed to create payment',
-          details: result,
-        },
+        { error: userError, details: result },
         response.status
       )
     }
@@ -167,7 +229,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('YooKassa POST error:', error)
     return createResponse(
-      { 
+      {
         error: 'Internal server error',
         message: error.message,
       },

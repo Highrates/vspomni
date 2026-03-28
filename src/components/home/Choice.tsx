@@ -3,24 +3,30 @@
 import 'swiper/css'
 import 'swiper/css/navigation'
 import 'swiper/css/pagination'
-import { Autoplay, Navigation, Pagination } from 'swiper/modules'
+import { Navigation, Pagination } from 'swiper/modules'
 import { Swiper, SwiperSlide } from 'swiper/react'
 
 import { motion } from 'framer-motion'
-import ChoiceCard, { ChoiceCardProps } from './ChoiceCard'
+import ChoiceCard from './ChoiceCard'
 import { useStarChoiceStore } from '@/stores/useStarChoice'
 import { useEffect } from 'react'
+import type { StarChoiceItem } from '@/types/product'
 
-export default function Choice() {
+interface ChoiceProps {
+  /** Товары с сервера — в Safari на мобилке клиентский fetch может не сработать, карточки показываем из этого списка */
+  initialProducts?: StarChoiceItem[]
+}
 
-  const { products, fetchProducts } = useStarChoiceStore();
+export default function Choice({ initialProducts = [] }: ChoiceProps) {
+  const { products, fetchProducts } = useStarChoiceStore()
+  const list = products.length > 0 ? products : initialProducts
 
   useEffect(() => {
-    fetchProducts();
-  }, [])
+    fetchProducts()
+  }, [fetchProducts])
 
   return (
-    <section className="mt-4 sm:mt-6 md:mt-8 lg:mt-10 py-2 px-2">
+    <section className="mt-4 sm:mt-6 md:mt-8 lg:mt-10 py-2 px-4 sm:px-6 md:px-8">
       <h2 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold text-black mb-6 sm:mb-8 flex items-center gap-2">
         Выбор{' '}
         <span className="text-[20px] sm:text-[24px] leading-none">
@@ -29,7 +35,7 @@ export default function Choice() {
       </h2>
 
       <Swiper
-        modules={[Autoplay, Pagination, Navigation]}
+        modules={[Pagination, Navigation]}
         slidesPerView="auto"
         spaceBetween={12}
         grabCursor
@@ -39,7 +45,6 @@ export default function Choice() {
         touchRatio={1}
         preventClicks={true}
         preventClicksPropagation={true}
-        autoplay={{ delay: 5500, disableOnInteraction: false }}
         navigation={{
           enabled: true,
         }}
@@ -50,7 +55,7 @@ export default function Choice() {
           1024: { spaceBetween: 24 },
         }}
       >
-        {products.map((product) => (
+        {list.map((product) => (
           <SwiperSlide key={product.id} className="!w-auto">
             <motion.div
               initial={{ opacity: 0, scale: 0.98 }}

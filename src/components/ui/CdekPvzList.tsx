@@ -10,6 +10,8 @@ export interface CdekPvzInfo {
   cityCode: string
   address: string
   name: string
+  region?: string
+  cityArea?: string
   workTime?: string
   phone?: string
   postalCode?: string
@@ -30,6 +32,7 @@ interface City {
   longitude?: number
   region?: string
   region_code?: number
+  sub_region?: string
 }
 
 interface Pvz {
@@ -45,6 +48,9 @@ interface Pvz {
     latitude: number
     longitude: number
     address?: string
+    region?: string
+    city?: string
+    postal_code?: string
   }
 }
 
@@ -70,11 +76,11 @@ export default function CdekPvzList({
   const [cities, setCities] = useState<City[]>([])
   const [citiesLoading, setCitiesLoading] = useState(true)
   const [citiesError, setCitiesError] = useState<string | null>(null)
-  
+
   const [selectedCity, setSelectedCity] = useState<City | null>(null)
   const [citySearchQuery, setCitySearchQuery] = useState('')
   const [showCityDropdown, setShowCityDropdown] = useState(false)
-  
+
   const [pvzList, setPvzList] = useState<Pvz[]>([])
   const [pvzLoading, setPvzLoading] = useState(false)
   const [pvzSearchQuery, setPvzSearchQuery] = useState('')
@@ -90,40 +96,39 @@ export default function CdekPvzList({
     const fetchCities = async () => {
       setCitiesLoading(true)
       setCitiesError(null)
-      
+
       try {
-        const baseUrl = typeof window !== 'undefined' 
-          ? window.location.origin
-          : process.env.NEXT_PUBLIC_API_URL || ''
-          
-        const response = await fetch(
-          `${baseUrl}/api/cdek/service?method=location/cities&size=10000&country_codes=RU`,
-        )
-        
+        const baseUrl = window.location.origin
+        const url = `${baseUrl}/api/cdek/service?method=location/cities&size=10000&country_codes=RU`
+
+        const response = await fetch(url)
+
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`)
+          const errorText = await response.text()
+          setCitiesError(`Ошибка загрузки городов: ${response.status}`)
+          throw new Error(`HTTP ${response.status}: ${errorText}`)
         }
-        
+
         const data = await response.json()
         const citiesList: City[] = Array.isArray(data) ? data : (data.items || [])
-        
+
         if (citiesList.length === 0) {
           setCitiesError('Не удалось загрузить список городов')
           return
         }
-        
+
         // Сортируем по алфавиту
-        const sortedCities = citiesList.sort((a, b) => 
+        const sortedCities = citiesList.sort((a, b) =>
           a.city.localeCompare(b.city, 'ru')
         )
-        
+
         setCities(sortedCities)
-        
+
         // Находим город по умолчанию
         const defaultCityData = sortedCities.find(
           (c) => c.city.toLowerCase() === defaultCity.toLowerCase(),
         )
-        
+
         if (defaultCityData) {
           setSelectedCity(defaultCityData)
         } else if (sortedCities.length > 0) {
@@ -132,8 +137,7 @@ export default function CdekPvzList({
           setSelectedCity(moscow || sortedCities[0])
         }
       } catch (error: any) {
-        console.error('Error fetching cities:', error)
-        setCitiesError('Ошибка загрузки городов')
+        setCitiesError(error?.message || 'Ошибка загрузки городов')
       } finally {
         setCitiesLoading(false)
       }
@@ -149,56 +153,40 @@ export default function CdekPvzList({
     const fetchPvzList = async () => {
       setPvzLoading(true)
       setPvzList([])
-      
-      let pvz: Pvz[] = []
-      
+
       try {
-        // 1. Сначала пробуем официальное API через наш сервер
-        const baseUrl = typeof window !== 'undefined'
-          ? window.location.origin
-          : process.env.NEXT_PUBLIC_API_URL || ''
-        
-        let url = `${baseUrl}/api/cdek/service?action=offices&city_code=${selectedCity.code}&size=100`
-        
-        if (selectedCity.city_uuid) {
-          url += `&city_uuid=${selectedCity.city_uuid}`
+        const baseUrl = window.location.origin
+        const params = new URLSearchParams()
+
+        if (selectedCity.code) params.set('city_code', String(selectedCity.code))
+        if (selectedCity.city_uuid) params.set('city_uuid', selectedCity.city_uuid)
+
+        // ВАЖНО: Не передаем координаты здесь, чтобы не ограничивать поиск центром города.
+        // Наш API сам решит, как искать (по коду или UUID параллельно).
+
+        params.set('action', 'offices')
+        params.set('size', '150')
+
+        const response = await fetch(`${baseUrl}/api/cdek/service?${params.toString()}`, {
+          cache: 'no-store'
+        })
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          throw new Error(`HTTP ${response.status}: ${errorText}`)
         }
-        
-        if (selectedCity.latitude && selectedCity.longitude) {
-          url += `&latitude=${selectedCity.latitude}&longitude=${selectedCity.longitude}`
+
+        const data = await response.json()
+
+        if (data?.error) {
+          throw new Error(data.error)
         }
-        
-        const response = await fetch(url)
-        
-        if (response.ok) {
-          const data = await response.json()
-          if (!data.error && Array.isArray(data)) {
-            pvz = data
-          }
+
+        if (Array.isArray(data)) {
+          setPvzList(data)
         }
-        
-        console.log(`CDEK official API: Found ${pvz.length} points for ${selectedCity.city}`)
-        
-        // 2. Если официальное API не вернуло результатов - пробуем публичное API напрямую из браузера
-        if (pvz.length === 0 && selectedCity.latitude && selectedCity.longitude) {
-          console.log(`Trying CDEK public API for ${selectedCity.city}...`)
-          
-          const publicPvz = await fetchFromPublicApi(
-            selectedCity.latitude, 
-            selectedCity.longitude,
-            selectedCity.city
-          )
-          
-          if (publicPvz.length > 0) {
-            pvz = publicPvz
-            console.log(`CDEK public API: Found ${pvz.length} points for ${selectedCity.city}`)
-          }
-        }
-        
-        setPvzList(pvz)
-        
       } catch (error: any) {
-        console.error('Error fetching PVZ:', error)
+        console.error('Fetch PVZ error:', error)
         setPvzList([])
       } finally {
         setPvzLoading(false)
@@ -208,61 +196,19 @@ export default function CdekPvzList({
     fetchPvzList()
   }, [selectedCity])
 
-  // Функция для загрузки ПВЗ через публичный API CDEK-виджета
-  // Использует официальный endpoint виджета который работает с CORS
-  const fetchFromPublicApi = async (lat: number, lng: number, cityName: string): Promise<Pvz[]> => {
-    try {
-      // Пробуем endpoint виджета СДЭК который поддерживает CORS
-      const widgetApiUrl = `https://api.cdek.ru/v2/deliverypoints?latitude=${lat}&longitude=${lng}&radius=50`
-      
-      // Делаем запрос через наш сервер как прокси
-      const baseUrl = typeof window !== 'undefined'
-        ? window.location.origin
-        : process.env.NEXT_PUBLIC_API_URL || ''
-        
-      const proxyUrl = `${baseUrl}/api/cdek/service?action=offices&latitude=${lat}&longitude=${lng}&radius=50`
-      
-      console.log('CDEK: Trying to fetch by coordinates via proxy:', { lat, lng })
-      
-      const response = await fetch(proxyUrl)
-      
-      if (!response.ok) {
-        console.warn('CDEK proxy API failed:', response.status)
-        return []
-      }
-      
-      const data = await response.json()
-      
-      if (data.error) {
-        console.warn('CDEK API returned error:', data.error)
-        return []
-      }
-      
-      let offices: Pvz[] = Array.isArray(data) ? data : []
-      
-      console.log(`CDEK coordinates search: Found ${offices.length} points near ${cityName}`)
-      
-      return offices
-      
-    } catch (error) {
-      console.error('CDEK public API error:', error)
-      return []
-    }
-  }
-
   // Фильтрация городов по поиску
   const filteredCities = useMemo(() => {
     if (!citySearchQuery.trim()) {
       // Показываем популярные города первыми
-      const popular = cities.filter(c => 
+      const popular = cities.filter(c =>
         POPULAR_CITIES.some(p => c.city.toLowerCase() === p.toLowerCase())
       )
-      const others = cities.filter(c => 
+      const others = cities.filter(c =>
         !POPULAR_CITIES.some(p => c.city.toLowerCase() === p.toLowerCase())
       )
       return [...popular, ...others].slice(0, 50)
     }
-    
+
     const query = citySearchQuery.toLowerCase().trim()
     return cities
       .filter(c => c.city.toLowerCase().includes(query))
@@ -272,7 +218,7 @@ export default function CdekPvzList({
   // Фильтрация пунктов выдачи
   const filteredPvz = useMemo(() => {
     if (!pvzSearchQuery.trim()) return pvzList
-    
+
     const query = pvzSearchQuery.toLowerCase()
     return pvzList.filter(pvz => {
       const name = (pvz.name || '').toLowerCase()
@@ -298,9 +244,11 @@ export default function CdekPvzList({
       cityCode: String(pvz.city_code || selectedCity?.code || ''),
       address: pvz.address || pvz.location?.address || '',
       name: pvz.name || 'ПВЗ СДЭК',
+      region: pvz.location?.region || selectedCity?.region || '',
+      cityArea: selectedCity?.sub_region || pvz.city || selectedCity?.city || '',
       workTime: pvz.work_time,
       phone: pvz.phone,
-      postalCode: pvz.postal_code,
+      postalCode: pvz.location?.postal_code || pvz.postal_code,
       type: 'office',
     }
     onChoose(pvzInfo)
@@ -316,12 +264,14 @@ export default function CdekPvzList({
       cityCode: String(pvz.city_code || selectedCity?.code || ''),
       address: pvz.address || pvz.location?.address || '',
       name: pvz.name || 'ПВЗ СДЭК',
+      region: pvz.location?.region || selectedCity?.region || '',
+      cityArea: selectedCity?.sub_region || pvz.city || selectedCity?.city || '',
       workTime: pvz.work_time,
       phone: pvz.phone,
-      postalCode: pvz.postal_code,
+      postalCode: pvz.location?.postal_code || pvz.postal_code,
       type: 'office',
     }
-    
+
     onChoose(pvzInfo)
   }, [selectedCity, onChoose])
 
@@ -333,7 +283,7 @@ export default function CdekPvzList({
         setShowCityDropdown(false)
       }
     }
-    
+
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
@@ -346,7 +296,7 @@ export default function CdekPvzList({
           <MapPin className="w-4 h-4" />
           Город
         </label>
-        
+
         {citiesLoading ? (
           <div className="h-12 px-4 rounded-xl border border-black/10 flex items-center gap-2 text-black/50">
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -368,7 +318,7 @@ export default function CdekPvzList({
               </span>
               <ChevronDown className={`w-5 h-5 text-black/40 transition-transform ${showCityDropdown ? 'rotate-180' : ''}`} />
             </button>
-            
+
             {showCityDropdown && (
               <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-black/10 rounded-xl shadow-lg max-h-80 overflow-hidden">
                 {/* Поиск города */}
@@ -385,7 +335,7 @@ export default function CdekPvzList({
                     />
                   </div>
                 </div>
-                
+
                 {/* Список городов */}
                 <div className="overflow-y-auto max-h-60">
                   {filteredCities.length === 0 ? (
@@ -398,9 +348,8 @@ export default function CdekPvzList({
                         key={city.code}
                         type="button"
                         onClick={() => handleCitySelect(city)}
-                        className={`w-full px-4 py-3 text-left hover:bg-black/5 transition flex items-center justify-between ${
-                          selectedCity?.code === city.code ? 'bg-black/5 font-medium' : ''
-                        }`}
+                        className={`w-full px-4 py-3 text-left hover:bg-black/5 transition flex items-center justify-between ${selectedCity?.code === city.code ? 'bg-black/5 font-medium' : ''
+                          }`}
                       >
                         <span>{city.city}</span>
                         {city.region && (
@@ -409,7 +358,7 @@ export default function CdekPvzList({
                       </button>
                     ))
                   )}
-                  
+
                   {filteredCities.length >= 50 && !citySearchQuery && (
                     <div className="px-4 py-2 text-xs text-black/40 text-center border-t border-black/5">
                       Введите название для поиска других городов
@@ -430,11 +379,10 @@ export default function CdekPvzList({
             <button
               type="button"
               onClick={() => setShowWidget(false)}
-              className={`flex-1 h-10 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 ${
-                !showWidget 
-                  ? 'bg-black text-white' 
-                  : 'bg-gray-100 text-black/60 hover:bg-gray-200'
-              }`}
+              className={`flex-1 h-10 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 ${!showWidget
+                ? 'bg-black text-white'
+                : 'bg-gray-100 text-black/60 hover:bg-gray-200'
+                }`}
             >
               <Search className="w-4 h-4" />
               Список
@@ -442,11 +390,10 @@ export default function CdekPvzList({
             <button
               type="button"
               onClick={() => setShowWidget(true)}
-              className={`flex-1 h-10 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 ${
-                showWidget 
-                  ? 'bg-black text-white' 
-                  : 'bg-gray-100 text-black/60 hover:bg-gray-200'
-              }`}
+              className={`flex-1 h-10 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 ${showWidget
+                ? 'bg-black text-white'
+                : 'bg-gray-100 text-black/60 hover:bg-gray-200'
+                }`}
             >
               <Map className="w-4 h-4" />
               Карта
@@ -490,8 +437,8 @@ export default function CdekPvzList({
                     <MapPin className="w-8 h-8 mx-auto text-black/20" />
                     <div className="font-medium">Пункты выдачи не найдены</div>
                     <div className="text-xs text-black/40">
-                      {pvzSearchQuery 
-                        ? 'Попробуйте изменить поисковый запрос' 
+                      {pvzSearchQuery
+                        ? 'Попробуйте изменить поисковый запрос'
                         : `Попробуйте открыть карту для поиска ПВЗ в ${selectedCity.city}`}
                     </div>
                     <button
@@ -518,12 +465,12 @@ export default function CdekPvzList({
                         <div className="font-semibold mb-1 group-hover:text-black/80">
                           {pvz.name || 'ПВЗ СДЭК'}
                         </div>
-                        
+
                         <div className="text-sm text-black/60 mb-2 flex items-start gap-1.5">
                           <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                           {pvz.address || pvz.location?.address || 'Адрес не указан'}
                         </div>
-                        
+
                         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-black/50">
                           {pvz.work_time && (
                             <div className="flex items-center gap-1">

@@ -10,6 +10,8 @@ interface CartState {
   discount: number              // Скидка в процентах (для процентных ваучеров)
   discountAmount?: number       // Фиксированная сумма скидки (для FIXED ваучеров)
   discountType?: 'PERCENTAGE' | 'FIXED'
+  shippingPrice: number
+  shippingLoading: boolean
   appliedPromoCode: string | null
 
   addItem: (product: ProductCardItem, quantity: number, size: string, variantId?: string) => void
@@ -17,6 +19,8 @@ interface CartState {
   increaseQuantity: (id: string) => void
   decreaseQuantity: (id: string) => void
   clearCart: () => void
+  setShippingPrice: (price: number) => void
+  setShippingLoading: (loading: boolean) => void
   applyPromoCode: (
     code: string,
     discountPercent: number,
@@ -26,7 +30,7 @@ interface CartState {
   removePromoCode: () => void
 }
 
-const calcTotals = (items: CartItem[], discount: number = 0, discountAmount?: number) => {
+const calcTotals = (items: CartItem[], discount: number = 0, discountAmount?: number, shippingPrice: number = 0) => {
   // защитимся от старых/битых записей в localStorage,
   // где product мог быть undefined или без price
   const validItems = items.filter((i) => i.product && typeof i.product.price === 'number')
@@ -35,16 +39,16 @@ const calcTotals = (items: CartItem[], discount: number = 0, discountAmount?: nu
     (sum, i) => sum + i.product.price * i.quantity,
     0,
   )
-  
+
   // Если передан discountAmount (фиксированная скидка), используем его
   // Иначе вычисляем процентную скидку
-  const finalDiscountAmount = discountAmount !== undefined 
-    ? discountAmount 
+  const finalDiscountAmount = discountAmount !== undefined
+    ? discountAmount
     : (discount > 0 ? (subtotal * discount) / 100 : 0)
-    
+
   return {
     totalItems: validItems.reduce((sum, i) => sum + i.quantity, 0),
-    totalPrice: subtotal - finalDiscountAmount,
+    totalPrice: subtotal - finalDiscountAmount + shippingPrice,
   }
 }
 
@@ -57,6 +61,8 @@ export const useCartStore = create<CartState>()(
       discount: 0,
       discountAmount: undefined,
       discountType: undefined,
+      shippingPrice: 0,
+      shippingLoading: false,
       appliedPromoCode: null,
 
       addItem: (product, quantity, size, variantId) => {
@@ -71,15 +77,15 @@ export const useCartStore = create<CartState>()(
           items.push({ id, product, quantity, size, variantId })
         }
 
-        const { discount, discountAmount } = get()
-        const totals = calcTotals(items, discount, discountAmount)
+        const { discount, discountAmount, shippingPrice } = get()
+        const totals = calcTotals(items, discount, discountAmount, shippingPrice)
         set({ items, ...totals })
       },
 
       removeItem: (id) => {
         const items = get().items.filter((item) => item.id !== id)
-        const { discount, discountAmount } = get()
-        const totals = calcTotals(items, discount, discountAmount)
+        const { discount, discountAmount, shippingPrice } = get()
+        const totals = calcTotals(items, discount, discountAmount, shippingPrice)
         set({ items, ...totals })
       },
 
@@ -87,8 +93,8 @@ export const useCartStore = create<CartState>()(
         const items = get().items.map((item) =>
           item.id === id ? { ...item, quantity: item.quantity + 1 } : item,
         )
-        const { discount, discountAmount } = get()
-        const totals = calcTotals(items, discount, discountAmount)
+        const { discount, discountAmount, shippingPrice } = get()
+        const totals = calcTotals(items, discount, discountAmount, shippingPrice)
         set({ items, ...totals })
       },
 
@@ -97,42 +103,51 @@ export const useCartStore = create<CartState>()(
           item.id === id ? { ...item, quantity: item.quantity - 1 } : item,
         )
         items = items.filter((i) => i.quantity > 0)
-        const { discount, discountAmount } = get()
-        const totals = calcTotals(items, discount, discountAmount)
+        const { discount, discountAmount, shippingPrice } = get()
+        const totals = calcTotals(items, discount, discountAmount, shippingPrice)
         set({ items, ...totals })
       },
 
+      setShippingPrice: (price) => {
+        const { items, discount, discountAmount } = get()
+        const totals = calcTotals(items, discount, discountAmount, price)
+        set({ shippingPrice: price, shippingLoading: false, ...totals })
+      },
+
+      setShippingLoading: (loading) => set({ shippingLoading: loading }),
+
       applyPromoCode: (code, discountPercent, discountAmount, discountType) => {
-        const { items } = get()
-        const totals = calcTotals(items, discountPercent, discountAmount)
-        set({ 
-          appliedPromoCode: code, 
+        const { items, shippingPrice } = get()
+        const totals = calcTotals(items, discountPercent, discountAmount, shippingPrice)
+        set({
+          appliedPromoCode: code,
           discount: discountPercent,
           discountAmount: discountAmount,
           discountType,
-          ...totals 
+          ...totals
         })
       },
 
       removePromoCode: () => {
-        const { items } = get()
-        const totals = calcTotals(items, 0)
-        set({ 
-          appliedPromoCode: null, 
+        const { items, shippingPrice } = get()
+        const totals = calcTotals(items, 0, undefined, shippingPrice)
+        set({
+          appliedPromoCode: null,
           discount: 0,
           discountAmount: undefined,
           discountType: undefined,
-          ...totals 
+          ...totals
         })
       },
 
-      clearCart: () => set({ 
-        items: [], 
-        totalItems: 0, 
+      clearCart: () => set({
+        items: [],
+        totalItems: 0,
         totalPrice: 0,
         discount: 0,
         discountAmount: undefined,
         discountType: undefined,
+        shippingPrice: 0,
         appliedPromoCode: null,
       }),
     }),

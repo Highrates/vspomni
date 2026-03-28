@@ -28,10 +28,17 @@ export async function graphqlRequest<T>(
   const endpoint = String(process.env.GRAPHQL_PUBLIC_API_URL || 'https://vspomni.store/graphql/')
   if (!endpoint) throw new Error('GRAPHQL_URL is not defined')
 
-  const rawToken =
-    options?.token !== undefined
-      ? (options.token ?? null)
-      : (typeof window !== 'undefined' ? localStorage.getItem('token') : null)
+  let rawToken: string | null = null
+  if (options?.token !== undefined) {
+    rawToken = options.token ?? null
+  } else if (typeof window !== 'undefined') {
+    try {
+      rawToken = localStorage.getItem('token')
+    } catch {
+      // Safari (в т.ч. приватный режим) может блокировать доступ к localStorage
+      rawToken = null
+    }
+  }
   const token =
     rawToken && rawToken !== 'null' && rawToken !== 'undefined'
       ? rawToken
@@ -39,6 +46,7 @@ export async function graphqlRequest<T>(
 
   const res = await fetch(endpoint, {
     method: 'POST',
+    cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -55,8 +63,10 @@ export async function graphqlRequest<T>(
       msg.includes('Signature has expired') ||
       msg.includes('token expired')
     ) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('refreshToken')
+      try {
+        localStorage.removeItem('token')
+        localStorage.removeItem('refreshToken')
+      } catch { }
       useAuthStore.getState().logout()
       throw new Error('TokenExpired')
     }

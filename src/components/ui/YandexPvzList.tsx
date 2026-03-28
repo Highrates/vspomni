@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Search, MapPin, Loader2, ChevronDown } from 'lucide-react'
-import { getPickupPoints } from '@/lib/api/yandexDelivery'
 import type { YandexPickupPoint } from '@/types/yandexDelivery'
+import YandexPvzMap from './YandexPvzMap'
+import { useYandexPvzStore } from '@/stores/useYandexPvz'
 
 const POPULAR_CITIES = ['Москва', 'Санкт-Петербург', 'Новосибирск', 'Екатеринбург', 'Казань']
 
@@ -13,12 +14,17 @@ export interface YandexPvzListProps {
 }
 
 export default function YandexPvzList({ onChoose, defaultCity = 'Москва' }: YandexPvzListProps) {
-  const [points, setPoints] = useState<YandexPickupPoint[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { points, loading, error, fetchPickupPoints } = useYandexPvzStore()
   const [citySearchQuery, setCitySearchQuery] = useState('')
   const [showCityDropdown, setShowCityDropdown] = useState(false)
   const [pvzSearchQuery, setPvzSearchQuery] = useState('')
+
+  // Если данных ещё нет и запрос не идёт — запустить загрузку (например, модалка открыта с профиля)
+  useEffect(() => {
+    if (points.length === 0 && !loading && !error) {
+      fetchPickupPoints()
+    }
+  }, [points.length, loading, error, fetchPickupPoints])
 
   const cities = useMemo(() => {
     const byCity = new Map<string, YandexPickupPoint[]>()
@@ -63,23 +69,6 @@ export default function YandexPvzList({ onChoose, defaultCity = 'Москва' }
         (p.instruction || '').toLowerCase().includes(q)
     )
   }, [pvzInCity, pvzSearchQuery])
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-    getPickupPoints()
-      .then(res => {
-        if (!cancelled && res.points?.length) setPoints(res.points)
-      })
-      .catch(e => {
-        if (!cancelled) setError(e?.message || 'Не удалось загрузить ПВЗ')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [])
 
   const handleCitySelect = useCallback((city: string) => {
     setPickedCity(city)
@@ -187,6 +176,10 @@ export default function YandexPvzList({ onChoose, defaultCity = 'Москва' }
 
       {pickedCity && (
         <>
+          <YandexPvzMap
+            points={pvzInCity}
+            onSelect={onChoose}
+          />
           <div className="flex flex-col">
             <label className="text-sm font-medium mb-2 flex items-center gap-2">
               <Search className="w-4 h-4" />

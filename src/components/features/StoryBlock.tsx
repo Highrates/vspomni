@@ -1,16 +1,14 @@
 'use client'
 
-import { useRef, useState, useEffect } from 'react'
-import { Swiper, SwiperSlide } from 'swiper/react'
-import { Navigation } from 'swiper/modules'
-import 'swiper/css'
-import 'swiper/css/navigation'
-import StoryViewer from './StoryViewer'
+import { useState, useEffect } from 'react'
+import StoryViewer, { type StoryGroup } from './StoryViewer'
 import { getAllStories, StoryNode } from '@/graphql/queries/stories.service'
 
+const MAX_VISIBLE = 5
+
 export default function StoryBlock() {
-  const swiperRef = useRef<any>(null)
-  const [activeStoryGroup, setActiveStoryGroup] = useState<string | null>(null)
+  const [activeGroupIndex, setActiveGroupIndex] = useState<number | null>(null)
+  const [initialStoryIndex, setInitialStoryIndex] = useState(0)
   const [stories, setStories] = useState<StoryNode[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -29,18 +27,32 @@ export default function StoryBlock() {
   }, [])
 
   if (loading) {
-    return null
+    return (
+      <section className="mt-4 sm:mt-5 md:mt-6 lg:mt-8 mb-4 sm:mb-5 md:mb-6 px-4 sm:px-6 md:px-8">
+        <div className="w-full flex justify-center">
+          <div className="flex gap-3 sm:gap-[14px] md:gap-4 lg:gap-[18px]">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="flex flex-col items-center gap-2">
+                <div className="w-[70px] h-[70px] sm:w-[80px] sm:h-[80px] md:w-[88px] md:h-[88px] lg:w-[96px] lg:h-[96px] rounded-full bg-neutral-200 animate-pulse" />
+                <div className="w-[60px] h-3 rounded-full bg-neutral-200 animate-pulse" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    )
   }
 
   if (stories.length === 0) {
     return null
   }
 
-  const storyGroups = stories
+  const storyGroups: StoryGroup[] = stories
     .filter(
       (story) => story.isPublished && story.items && story.items.length > 0,
     )
     .sort((a, b) => a.order - b.order)
+    .slice(0, MAX_VISIBLE)
     .map((story) => ({
       id: story.id,
       title: story.title,
@@ -49,112 +61,70 @@ export default function StoryBlock() {
         .map((item) => item.image),
     }))
 
-  const activeGroup = storyGroups.find((g) => g.id === activeStoryGroup)
+  const handleOpenGroup = (index: number) => {
+    setActiveGroupIndex(index)
+    setInitialStoryIndex(0)
+  }
+
+  const handleGoToGroup = (nextIndex: number) => {
+    if (nextIndex < 0 || nextIndex >= storyGroups.length) {
+      setActiveGroupIndex(null)
+      return
+    }
+    setActiveGroupIndex(nextIndex)
+    setInitialStoryIndex(
+      nextIndex > (activeGroupIndex ?? 0)
+        ? 0
+        : storyGroups[nextIndex].stories.length - 1,
+    )
+  }
 
   return (
     <>
-      <section className="mt-4 sm:mt-5 md:mt-6 lg:mt-8 mb-4 sm:mb-5 md:mb-6 ">
-        <div className="relative flex justify-center lg:overflow-hidden ">
-          <div className="relative w-full max-w-[1062px]  pl-4 sm:pl-6 md:pl-8 lg:pl-16 pr-4 sm:pr-6 md:pr-8 lg:pr-10 ">
-            {/* Left Navigation Button */}
-            <button
-              onClick={() => swiperRef.current?.slidePrev()}
-              className="absolute top-1/2 -translate-y-1/2 z-20 flex items-center justify-center w-[40px] h-[40px] sm:w-[45px] sm:h-[45px] md:w-[49px] md:h-[49px] rounded-full bg-white shadow hover:shadow-lg transition-shadow left-10 sm:left-0 max-md:hidden  border border-gray-300"
-              aria-label="Previous"
-            >
-              <svg
-                width="7"
-                height="14"
-                viewBox="0 0 7 14"
-                fill="none"
-                className="w-[6px] h-[12px] sm:w-[7px] sm:h-[14px]"
+      <section className="mt-4 sm:mt-5 md:mt-6 lg:mt-8 mb-4 sm:mb-5 md:mb-6 px-4 sm:px-6 md:px-8">
+        <div className="w-full flex justify-center">
+          <div
+            className="flex flex-none flex-row items-start justify-center gap-3 sm:gap-[14px] md:gap-4 lg:gap-[18px]"
+            style={{ maxWidth: '100%' }}
+          >
+            {storyGroups.map((group, index) => (
+              <div
+                key={group.id}
+                className="flex flex-col items-center text-center shrink-0"
               >
-                <path
-                  d="M6 13L1 7L6 1"
-                  stroke="rgba(0,0,0,0.4)"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </button>
-
-            {/* Swiper Container */}
-            <Swiper
-              modules={[Navigation]}
-              onSwiper={(swiper) => (swiperRef.current = swiper)}
-              slidesPerView="auto"
-              draggable
-              spaceBetween={12}
-              breakpoints={{
-                640: {
-                  spaceBetween: 14,
-                },
-                768: {
-                  spaceBetween: 16,
-                },
-                1024: {
-                  spaceBetween: 18,
-                },
-              }}
-              className="popular-swiper overflow-hidden lg:overflow-visible pl-24 sm:pl-28 md:pl-32"
-            >
-              {storyGroups.map((group) => (
-                <SwiperSlide
-                  key={group.id}
-                  className="!w-auto flex flex-col items-center text-center "
+                <button
+                  type="button"
+                  onClick={() => handleOpenGroup(index)}
+                  className="relative flex items-center justify-center w-[70px] h-[70px] sm:w-[80px] sm:h-[80px] md:w-[88px] md:h-[88px] lg:w-[96px] lg:h-[96px] rounded-full border border-black transition-all duration-300 hover:border-black/60"
                 >
-                  <button
-                    onClick={() => setActiveStoryGroup(group.id)}
-                    className="relative flex items-center justify-center w-[70px] h-[70px] sm:w-[80px] sm:h-[80px] md:w-[88px] md:h-[88px] lg:w-[96px] lg:h-[96px] rounded-full border border-black transition-all duration-300 hover:border-black/60"
-                  >
-                    <div className="w-[62px] h-[62px] sm:w-[72px] sm:h-[72px] md:w-[79px] md:h-[79px] lg:w-[87px] lg:h-[87px] rounded-full overflow-hidden bg-white">
-                      <img
-                        src={
-                          group.stories[0] ||
-                          stories.find((s) => s.id === group.id)?.image ||
-                          '/images/image_faq_3.png'
-                        }
-                        alt={group.title}
-                        className="w-full h-full object-cover rounded-full"
-                      />
-                    </div>
-                  </button>
-                  <span className="text-[11px] sm:text-[12px] md:text-[13px] leading-[14px] sm:leading-[15px] md:leading-[16px] font-medium mt-1.5 sm:mt-2 text-neutral-700 text-center max-w-[70px] sm:max-w-[80px] md:max-w-[88px] lg:max-w-[96px] truncate">
-                    {group.title}
-                  </span>
-                </SwiperSlide>
-              ))}
-            </Swiper>
-
-            {/* Right Navigation Button */}
-            <button
-              onClick={() => swiperRef.current?.slideNext()}
-              className="absolute top-1/2 -translate-y-1/2 z-20 flex items-center justify-center w-[40px] h-[40px] sm:w-[45px] sm:h-[45px] md:w-[49px] md:h-[49px] rounded-full bg-white shadow hover:shadow-lg transition-shadow -right-1 sm:right-0 max-md:hidden border border-gray-300"
-              aria-label="Next"
-            >
-              <svg
-                width="7"
-                height="14"
-                viewBox="0 0 7 14"
-                fill="none"
-                className="w-[6px] h-[12px] sm:w-[7px] sm:h-[14px]"
-              >
-                <path
-                  d="M1 13L6 7L1 1"
-                  stroke="rgba(0,0,0,0.4)"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </button>
+                  <div className="w-[62px] h-[62px] sm:w-[72px] sm:h-[72px] md:w-[79px] md:h-[79px] lg:w-[87px] lg:h-[87px] rounded-full overflow-hidden bg-white">
+                    <img
+                      src={
+                        group.stories[0] ||
+                        stories.find((s) => s.id === group.id)?.image ||
+                        '/images/image_faq_3.png'
+                      }
+                      alt={group.title}
+                      className="w-full h-full object-cover rounded-full"
+                    />
+                  </div>
+                </button>
+                <span className="text-[11px] sm:text-[12px] md:text-[13px] leading-[14px] sm:leading-[15px] md:leading-[16px] font-medium mt-1.5 sm:mt-2 text-neutral-700 text-center max-w-[70px] sm:max-w-[80px] md:max-w-[88px] lg:max-w-[96px] truncate">
+                  {group.title}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {activeStoryGroup && activeGroup && (
+      {activeGroupIndex !== null && (
         <StoryViewer
-          group={activeGroup}
-          onClose={() => setActiveStoryGroup(null)}
+          groups={storyGroups}
+          currentGroupIndex={activeGroupIndex}
+          initialStoryIndex={initialStoryIndex}
+          onClose={() => setActiveGroupIndex(null)}
+          onGoToGroup={handleGoToGroup}
         />
       )}
     </>

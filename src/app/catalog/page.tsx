@@ -16,6 +16,21 @@ export default function CatalogPage() {
     fetchCategories()
   }, [])
 
+  // Саше выше пакетов: категории с «саше» в имени/slug идут перед «пакет»
+  const sortedCategories = [...categories].sort((a, b) => {
+    const aName = (a.name || '').toLowerCase()
+    const aSlug = (a.slug || '').toLowerCase()
+    const bName = (b.name || '').toLowerCase()
+    const bSlug = (b.slug || '').toLowerCase()
+    const aIsSashe = aName.includes('саше') || aSlug.includes('sashe') || aSlug.includes('саше')
+    const bIsSashe = bName.includes('саше') || bSlug.includes('sashe') || bSlug.includes('саше')
+    const aIsPaket = aName.includes('пакет') || aSlug.includes('paket') || aSlug.includes('пакет')
+    const bIsPaket = bName.includes('пакет') || bSlug.includes('paket') || bSlug.includes('пакет')
+    if (aIsSashe && bIsPaket) return -1
+    if (aIsPaket && bIsSashe) return 1
+    return 0
+  })
+
   return (
     <PageTransition className="px-0 -mt-63 sm:-mt-74 md:-mt-90">
       {/* Hero Section */}
@@ -28,7 +43,7 @@ export default function CatalogPage() {
       </section>
       {/* Product Sections */}
       <div className="flex w-full flex-col gap-5 sm:gap-6 md:gap-8 lg:gap-10 mb-10 sm:mb-12 md:mb-16 lg:mb-20">
-        {categories.map((category: Category, i: number) => (
+        {sortedCategories.map((category: Category, i: number) => (
           <Link
             key={category.id}
             href={'/category/' + encodeURIComponent(category.slug)}

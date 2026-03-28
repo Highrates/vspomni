@@ -1,46 +1,71 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
-interface StoryGroup {
+export interface StoryGroup {
   id: string
   title: string
   stories: string[]
 }
 
 export default function StoryViewer({
-  group,
+  groups,
+  currentGroupIndex,
+  initialStoryIndex = 0,
   onClose,
+  onGoToGroup,
 }: {
-  group: StoryGroup
+  groups: StoryGroup[]
+  currentGroupIndex: number
+  initialStoryIndex?: number
   onClose: () => void
+  onGoToGroup: (groupIndex: number) => void
 }) {
-  const [index, setIndex] = useState(0)
+  const group = groups[currentGroupIndex]
+  const [index, setIndex] = useState(initialStoryIndex)
   const [progress, setProgress] = useState(0)
   const [direction, setDirection] = useState<'next' | 'prev' | null>(null)
+  const touchStartX = useRef<number | null>(null)
 
-  // Сброс индекса при изменении группы
+  // Синхронизация индекса сторис при смене группы (или initialStoryIndex от родителя)
   useEffect(() => {
-    setIndex(0)
+    setIndex(initialStoryIndex)
     setProgress(0)
     setDirection(null)
-  }, [group.id])
+  }, [group?.id, currentGroupIndex, initialStoryIndex])
+
+  const goToNextGroup = useCallback(() => {
+    const nextIndex = currentGroupIndex + 1
+    if (nextIndex >= groups.length) {
+      onClose()
+    } else {
+      onGoToGroup(nextIndex)
+    }
+  }, [currentGroupIndex, groups.length, onClose, onGoToGroup])
+
+  const goToPrevGroup = useCallback(() => {
+    const prevIndex = currentGroupIndex - 1
+    if (prevIndex < 0) {
+      onClose()
+    } else {
+      onGoToGroup(prevIndex)
+    }
+  }, [currentGroupIndex, onClose, onGoToGroup])
 
   const handleNext = useCallback(() => {
-    setIndex((prev) => {
-      if (prev < group.stories.length - 1) {
-        setDirection('next')
-        return prev + 1
-      } else {
-        onClose()
-        return prev
-      }
-    })
-  }, [group.stories.length, onClose])
+    if (!group) return
+    if (index < group.stories.length - 1) {
+      setDirection('next')
+      setIndex((prev) => prev + 1)
+    } else {
+      goToNextGroup()
+    }
+  }, [group, index, goToNextGroup])
 
   // авто-переключение
   useEffect(() => {
+    if (!group) return
     setProgress(0)
     const start = Date.now()
     const timer = setInterval(() => {
@@ -51,26 +76,53 @@ export default function StoryViewer({
       }
     }, 50)
     return () => clearInterval(timer)
-  }, [index, handleNext])
+  }, [group?.id, index, handleNext])
 
-
-  const handlePrev = () => {
+  const handlePrev = useCallback(() => {
+    if (!group) return
     if (index > 0) {
       setDirection('prev')
       setIndex((prev) => prev - 1)
     } else {
-      onClose()
+      goToPrevGroup()
     }
+  }, [group, index, goToPrevGroup])
+
+  const minSwipe = 60
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX
   }
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current == null) return
+    const dx = e.changedTouches[0].clientX - touchStartX.current
+    touchStartX.current = null
+    // Как в Instagram: свайп влево = следующий кружок, свайп вправо = пред. слайд или пред. кружок
+    if (dx < -minSwipe) goToNextGroup()
+    else if (dx > minSwipe) handlePrev()
+  }
+
+  const handleDragEnd = useCallback(
+    (_: unknown, info: { offset: { x: number }; velocity: { x: number } }) => {
+      const threshold = 40
+      const { offset, velocity } = info
+      if (offset.x < -threshold || velocity.x < -150) goToNextGroup()
+      else if (offset.x > threshold || velocity.x > 150) handlePrev()
+    },
+    [goToNextGroup, handlePrev]
+  )
+
+  if (!group || group.stories.length === 0) return null
 
   return (
     <AnimatePresence>
       <motion.div
-        className="fixed inset-0 z-[999] flex items-center justify-center bg-black/90 touch-none"
-        style={{ height: '100dvh', minHeight: '-webkit-fill-available' }}
+        className="fixed inset-0 z-[999] flex items-center justify-center bg-black/90"
+        style={{ height: '100dvh', minHeight: '-webkit-fill-available', touchAction: 'none' }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
       >
         {/* Прогресс-бары */}
         <div className="absolute top-6 left-1/2 -translate-x-1/2 w-[60%] flex gap-2">
@@ -91,12 +143,12 @@ export default function StoryViewer({
           ))}
         </div>
 
-        {/* Картинка сториса */}
+        {/* Картинка сториса — свайп влево = след. кружок, вправо = пред. слайд/кружок; тап по зонам = слайды */}
         <motion.img
           key={index}
           src={group.stories[index]}
           alt={`story-${index}`}
-          className="max-h-[90vh] max-w-[90vw] rounded-2xl object-contain select-none"
+          className="max-h-[90vh] max-w-[90vw] rounded-2xl object-contain select-none touch-none"
           initial={{
             opacity: 0,
             x: direction === 'next' ? 80 : direction === 'prev' ? -80 : 0,
@@ -108,12 +160,9 @@ export default function StoryViewer({
           }}
           transition={{ duration: 0.3 }}
           drag="x"
-          dragConstraints={{ left: 0, right: 0 }}
+          dragConstraints={{ left: -120, right: 120 }}
           dragElastic={0.2}
-          onDragEnd={(e, { offset }) => {
-            if (offset.x < -80) handleNext()
-            if (offset.x > 80) handlePrev()
-          }}
+          onDragEnd={handleDragEnd}
         />
 
         {/* кликабельные зоны */}

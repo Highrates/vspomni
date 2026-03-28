@@ -74,7 +74,7 @@ const CheckoutSuccessContent = () => {
   }, [user.email, clearCart])
 
   return (
-    <div className="min-h-[calc(100vh-86px)] flex items-center justify-center px-4 py-12 text-center">
+    <div className="min-h-[calc(100vh-80px)] flex items-center justify-center px-4 py-12 text-center">
       <div className="w-full" style={{ maxWidth: '640px', margin: '0 auto' }}>
         {isCompleting ? (
           <>
@@ -132,7 +132,7 @@ const CheckoutSuccessContent = () => {
 const CheckoutSuccessPage = () => {
   return (
     <Suspense fallback={
-      <div className="min-h-[calc(100vh-86px)] flex items-center justify-center px-4 py-12 text-center">
+      <div className="min-h-[calc(100vh-80px)] flex items-center justify-center px-4 py-12 text-center">
         <div className="w-full" style={{ maxWidth: '640px', margin: '0 auto' }}>
           <h1 className="text-3xl sm:text-[36px] leading-tight font-semibold">
             Загрузка...

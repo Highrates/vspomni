@@ -6,7 +6,7 @@ export default function Navigation() {
       <Link href="/catalog" className="hover:text-black transition-colors">
         Каталог
       </Link>
-      <Link href="/catalog" className="hover:text-black transition-colors">
+      <Link href="/#vse-aromaty" className="hover:text-black transition-colors">
         Ароматы
       </Link>
       {/* Временно скрыты пункты "Партнеры" и "Блог" */}

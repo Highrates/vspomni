@@ -21,20 +21,20 @@ export default function FaqBlock() {
   return (
     <section id="faq" className="mb-4 sm:mb-6  md:mb-8 lg:mb-10 py-2 px-2 scroll-mt-[100px]">
       <div className="flex items-center justify-between mb-4 sm:mb-5 md:mb-6">
-        <h3 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none">FAQ</h3>
+        <h3 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none">Вопросики</h3>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 lg:gap-12">
         {/* ====== IMAGE GRID (Correct fixed layout) ====== */}
 
         <div className="lg:grid lg:grid-cols-2 flex flex-col gap-3 sm:gap-4 lg:gap-5 h-auto lg:h-[752px] relative transition">
-          <div className="relative w-full h-[180px] sm:h-[220px] md:h-[260px] lg:h-auto rounded-xl sm:rounded-2xl lg:rounded-[22px] overflow-hidden 
+          <div className="faq-block-first-image relative w-full h-[180px] sm:h-[220px] md:h-[260px] lg:h-auto rounded-xl sm:rounded-2xl lg:rounded-[22px] overflow-hidden 
                         transition-all duration-500 hover:-translate-y-0.5">
             <Image
               src="/images/image_faq_1.png"
               alt="faq image"
               fill
-              className="object-cover transition-transform duration-500 hover:scale-105"
+              className="object-cover object-top md:object-center transition-transform duration-500 hover:scale-105"
             />
           </div>
           <div className="relative w-full lg:block hidden lg:row-span-2 rounded-2xl lg:rounded-[22px] 
@@ -57,7 +57,8 @@ export default function FaqBlock() {
             />
           </div>
 
-          <div className="relative w-full h-[180px] sm:h-[220px] md:h-[260px] lg:h-auto rounded-xl sm:rounded-2xl lg:rounded-[22px] 
+          {/* На мобильной версии показываем только верхнюю картинку, нижнюю скрываем */}
+          <div className="hidden md:block relative w-full h-[180px] sm:h-[220px] md:h-[260px] lg:h-auto rounded-xl sm:rounded-2xl lg:rounded-[22px] 
                         overflow-hidden transition-all duration-500 hover:-translate-y-0.5">
             <Image
               src="/images/image_faq_4.png"

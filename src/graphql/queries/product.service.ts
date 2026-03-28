@@ -62,6 +62,9 @@ export async function getSingleProduct(
             richText
             slug
             value
+            file {
+              url
+            }
           }
         }
 
@@ -267,6 +270,15 @@ function mapNodeToProductCard(
     { id: 3, group: 'wood', title: 'Древесный 🪵' },
   ]
 
+  // Извлекаем габариты из metadata варианта
+  const metadata = variant.metadata || []
+  const getMeta = (key: string) => metadata.find((m: any) => m.key === key)?.value
+
+  const length = Number(getMeta('dimensions.length_mm')) || undefined
+  const width = Number(getMeta('dimensions.width_mm')) || undefined
+  const height = Number(getMeta('dimensions.height_mm')) || undefined
+  const weight = variant.weight?.value || undefined
+
   return {
     id: variant.id,
     name: node.name,
@@ -280,8 +292,13 @@ function mapNodeToProductCard(
     size: variant.name,
     group: group.length > 0 ? group : defaultGroup,
     aromas: aromas.length > 0 ? aromas : defaultAromas,
+    weight,
+    length,
+    width,
+    height,
   }
 }
+
 
 // --- catalog_discounts endpoint client ---
 
@@ -412,6 +429,13 @@ export async function getGreedProducts(): Promise<any> {
               id
               name
               sku
+              weight {
+                value
+              }
+              metadata {
+                key
+                value
+              }
               pricing {
                 price {
                   gross {
@@ -479,7 +503,7 @@ export async function getPopularProducts(): Promise<any> {
   products(
     first: 5, 
     channel: $channel, 
-    where: { collection: {eq :"Q29sbGVjdGlvbjoy" } }
+    where: { collection: {eq :"Q29sbGVjdGlvbjoz" } }
     ) {
     edges {
       node {
@@ -508,6 +532,13 @@ export async function getPopularProducts(): Promise<any> {
               id
               name
               sku
+              weight {
+                value
+              }
+              metadata {
+                key
+                value
+              }
               pricing {
                 price {
                   gross {
@@ -572,7 +603,7 @@ export async function getChoiceProducts(): Promise<any> {
   const query = `
     query getGreedProducts($channel: String!) {
   products(
-    first: 20, 
+    first: 100, 
     channel: $channel, 
     where: { collection: {eq :"Q29sbGVjdGlvbjox" } }
     ) {
@@ -603,6 +634,13 @@ export async function getChoiceProducts(): Promise<any> {
               id
               name
               sku
+              weight {
+                value
+              }
+              metadata {
+                key
+                value
+              }
               pricing {
                 price {
                   gross {
@@ -633,28 +671,10 @@ export async function getChoiceProducts(): Promise<any> {
           }
           values{
             name
-          }  
-        }
-        assignedAttributes{
-          attribute{
-            id
-            slug
-            name
-          }
-          
-         ... on AssignedTextAttribute{
-         value
-        }
-
-           ... on AssignedPlainTextAttribute{
-        textValue: value
-      }   
-
-        ... on AssignedFileAttribute {
-            fileValue: value {
+            file {
               url
             }
-          }
+          }  
         }
       }
     }
@@ -668,43 +688,48 @@ export async function getChoiceProducts(): Promise<any> {
 
   const data = await graphqlRequest<BestSellersResponse>(query, variables)
   const result = data.products.edges.map((node: any) => {
-    const photoAttr = node.node.assignedAttributes.find(
+    const n = node.node
+    const photoAttr = n.attributes?.find(
       (i: any) =>
-        i.attribute.slug === 'vybor-foto' ||
-        i.attribute.slug === 'vybor-photo' ||
-        i.attribute.name?.toLowerCase().includes('фото') ||
-        i.attribute.name?.toLowerCase().includes('photo'),
+        i.attribute?.slug === 'vybor-foto' ||
+        i.attribute?.slug === 'vybor-photo' ||
+        i.attribute?.name?.toLowerCase().includes('фото') ||
+        i.attribute?.name?.toLowerCase().includes('photo'),
     )
-    const imageUrl = photoAttr?.fileValue?.url || '/images/choice-1.jpg'
+    const choicePhotoUrl = photoAttr?.values?.[0]?.file?.url
+    const mediaUrl = n.media?.[0]?.url || n.media?.edges?.[0]?.node?.url
+    const imageUrl = choicePhotoUrl || mediaUrl || n.thumbnail?.url || '/images/choice-1.jpg'
 
-    const nameAttr = node.node.assignedAttributes.find(
+    const nameAttr = n.attributes?.find(
       (i: any) =>
-        i.attribute.slug === 'vybor-imya' ||
-        i.attribute.slug === 'vybor-name' ||
-        i.attribute.name?.toLowerCase().includes('имя') ||
-        i.attribute.name?.toLowerCase().includes('name'),
+        i.attribute?.slug === 'vybor-imya' ||
+        i.attribute?.slug === 'vybor-name' ||
+        i.attribute?.name?.toLowerCase().includes('имя') ||
+        i.attribute?.name?.toLowerCase().includes('name'),
     )
-    const star = nameAttr?.textValue || nameAttr?.value || ''
+    const star = nameAttr?.values?.[0]?.name || ''
 
-    const dateAttr = node.node.attributes.find(
+    const dateAttr = n.attributes?.find(
       (i: any) =>
-        i.attribute.slug === 'vybor-data' ||
-        i.attribute.slug === 'vybor-date' ||
-        i.attribute.name?.toLowerCase().includes('дата') ||
-        i.attribute.name?.toLowerCase().includes('date'),
+        i.attribute?.slug === 'vybor-data' ||
+        i.attribute?.slug === 'vybor-date' ||
+        i.attribute?.name?.toLowerCase().includes('дата') ||
+        i.attribute?.name?.toLowerCase().includes('date'),
     )
-    const date = dateAttr?.values[0].name || dateAttr?.textValue || ''
+    const date = dateAttr?.values?.[0]?.name || ''
+    const variant = node.node.productVariants?.edges?.[0]?.node
+    const thumbUrl = node.node.thumbnail?.url
     return {
-      id: node.node.productVariants.edges[0].node.id,
+      id: variant?.id ?? node.node.id,
       name: node.node.name,
       slug: node.node.slug,
-      thumbnail: node.node.thumbnail.url,
+      thumbnail: thumbUrl ?? '',
       image: imageUrl,
       price: parseFloat(
-        node.node.productVariants.edges[0].node.pricing.price.gross.amount,
+        variant?.pricing?.price?.gross?.amount ?? '0',
       ),
       oldPrice: 0,
-      size: node.node.productVariants.edges[0].node.name,
+      size: variant?.name ?? '',
       star: star,
       date: formatDate(date),
     }
@@ -893,7 +918,7 @@ export async function getProductsByCategorySlug(categorySlug: string): Promise<a
   const query = `
     query getGreedProducts($channel: String! , $categorySlug: String) {
          category(slug: $categorySlug){
-  products(first: 12, channel: $channel) {
+  products(first: 50, channel: $channel) {
     edges {
       node {
         id
@@ -921,6 +946,13 @@ export async function getProductsByCategorySlug(categorySlug: string): Promise<a
               id
               name
               sku
+              weight {
+                value
+              }
+              metadata {
+                key
+                value
+              }
               pricing {
                 price {
                   gross {

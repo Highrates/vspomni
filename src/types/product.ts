@@ -8,7 +8,7 @@ export interface Product {
   groups: ItemGroups[]
   img: ItemImages
   size?: string
-  capacity?: string[] 
+  capacity?: string[]
   about?: string
 }
 
@@ -55,7 +55,7 @@ export interface ProductsGridResp {
 
 
 
-export interface ProductCardItem{
+export interface ProductCardItem {
   id: string;
   name: string;
   slug: string;
@@ -69,9 +69,13 @@ export interface ProductCardItem{
   discountPercent?: number;
   group: ItemGroups[];
   variantId?: string; // ID варианта товара для Saleor checkout
+  weight?: number; // вес в кг
+  length?: number; // длина в мм
+  width?: number; // ширина в мм
+  height?: number; // высота в мм
 }
 
-export interface StarChoiceItem{
+export interface StarChoiceItem {
   id: string;
   name: string;
   size: string;

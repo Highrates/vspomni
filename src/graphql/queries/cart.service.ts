@@ -41,7 +41,7 @@ const CART_FIELDS = `
 `;
 
 export async function getCart(cartId: string): Promise<Cart | null> {
-    const query = `
+  const query = `
     query CheckoutDetails($cartId: ID!) {
       checkout(id: $cartId) {
         ${CART_FIELDS}
@@ -49,16 +49,16 @@ export async function getCart(cartId: string): Promise<Cart | null> {
     }
   `;
 
-    const variables = { cartId };
+  const variables = { cartId };
   const data = await graphqlRequest<GetCartData>(query, variables);
   return data.checkout;
 }
 
 export async function createCart(
-    lines: CheckoutLineInput[] = [],
-    channel?: string
+  lines: CheckoutLineInput[] = [],
+  channel?: string
 ): Promise<CreateCartResponse> {
-    const mutation = `
+  const mutation = `
     mutation CheckoutCreate($lines: [CheckoutLineInput!]!, $channel: String) {
       checkoutCreate(input: { lines: $lines, channel: $channel }) {
         checkout {
@@ -73,16 +73,16 @@ export async function createCart(
     }
   `;
 
-    const variables = { lines, channel: channel || CHANNEL };
+  const variables = { lines, channel: channel || CHANNEL };
   return graphqlRequest<CreateCartResponse>(mutation, variables);
 }
 
 export async function addCartLine(
-    cartId: string,
-    variantId: string,
-    quantity: number
+  cartId: string,
+  variantId: string,
+  quantity: number
 ): Promise<AddLineResponse> {
-    const mutation = `
+  const mutation = `
     mutation CheckoutLinesAdd($cartId: ID!, $lines: [CheckoutLineInput!]!) {
       checkoutLinesAdd(
         checkoutId: $cartId
@@ -99,19 +99,19 @@ export async function addCartLine(
     }
   `;
 
-    const variables = {
-        cartId,
-        lines: [{ variantId, quantity }],
-    };
+  const variables = {
+    cartId,
+    lines: [{ variantId, quantity }],
+  };
   return graphqlRequest<AddLineResponse>(mutation, variables);
 }
 
 export async function updateCartLine(
-    cartId: string,
-    lineId: string,
-    quantity: number
+  cartId: string,
+  lineId: string,
+  quantity: number
 ): Promise<UpdateLineResponse> {
-    const mutation = `
+  const mutation = `
     mutation CheckoutLinesUpdate($cartId: ID!, $lineId: ID!, $quantity: Int!) {
       checkoutLinesUpdate(
         checkoutId: $cartId
@@ -128,15 +128,15 @@ export async function updateCartLine(
     }
   `;
 
-    const variables = { cartId, lineId, quantity };
+  const variables = { cartId, lineId, quantity };
   return graphqlRequest<UpdateLineResponse>(mutation, variables);
 }
 
 export async function removeCartLine(
-    cartId: string,
-    lineIds: string[]
+  cartId: string,
+  lineIds: string[]
 ): Promise<RemoveLineResponse> {
-    const mutation = `
+  const mutation = `
     mutation CheckoutLinesDelete($cartId: ID!, $lineIds: [ID!]!) {
       checkoutLinesDelete(
         checkoutId: $cartId
@@ -153,7 +153,7 @@ export async function removeCartLine(
     }
   `;
 
-    const variables = { cartId, lineIds };
+  const variables = { cartId, lineIds };
   return graphqlRequest<RemoveLineResponse>(mutation, variables);
 }
 
@@ -166,7 +166,7 @@ function tokenToGraphQLId(token: string): string {
   if (token.startsWith('Q2hlY2tvdXQ6')) {
     return token;
   }
-  
+
   // Преобразуем token в GraphQL ID
   // Формат: base64("Checkout:{token}")
   const idString = `Checkout:${token}`;
@@ -182,7 +182,7 @@ function tokenToGraphQLId(token: string): string {
  */
 async function createCheckoutPayment(checkoutId: string, amount: number, paymentId?: string): Promise<void> {
   const graphqlCheckoutId = tokenToGraphQLId(checkoutId);
-  
+
   // Создаем payment для checkout через checkoutPaymentCreate
   const mutation = `
     mutation CheckoutPaymentCreate($id: ID!, $input: PaymentInput!) {
@@ -206,7 +206,7 @@ async function createCheckoutPayment(checkoutId: string, amount: number, payment
 
   // Преобразуем amount в Decimal формат для Saleor (не копейки, а рубли)
   const amountDecimal = amount.toFixed(2);
-  
+
   const paymentInput = {
     gateway: 'mirumee.payments.dummy', // Используем dummy gateway, так как реальный платеж уже прошел через YooKassa
     amount: amountDecimal,
@@ -218,19 +218,19 @@ async function createCheckoutPayment(checkoutId: string, amount: number, payment
   };
 
   try {
-    console.log('Creating payment for checkout with:', { 
-      checkoutId: graphqlCheckoutId, 
-      amount: amountDecimal, 
-      paymentId 
+    console.log('Creating payment for checkout with:', {
+      checkoutId: graphqlCheckoutId,
+      amount: amountDecimal,
+      paymentId
     });
-    
+
     const result = await graphqlRequest<{
       checkoutPaymentCreate: {
         payment: any | null;
         errors: Array<{ message: string; field: string; code: string }>;
       };
-    }>(mutation, { 
-      id: graphqlCheckoutId, 
+    }>(mutation, {
+      id: graphqlCheckoutId,
       input: paymentInput,
     });
 
@@ -251,7 +251,7 @@ async function createCheckoutPayment(checkoutId: string, amount: number, payment
  */
 async function getCheckoutTotal(checkoutId: string): Promise<number | null> {
   const graphqlCheckoutId = tokenToGraphQLId(checkoutId);
-  
+
   const query = `
     query GetCheckout($id: ID!) {
       checkout(id: $id) {
@@ -298,7 +298,7 @@ async function createCheckoutTransactionWithAmount(
   paymentId?: string,
 ): Promise<void> {
   const graphqlCheckoutId = tokenToGraphQLId(checkoutId);
-  
+
   // Создаем transaction для checkout
   const mutation = `
     mutation TransactionCreate($id: ID!, $transaction: TransactionCreateInput!, $transactionEvent: TransactionEventInput) {
@@ -341,26 +341,30 @@ async function createCheckoutTransactionWithAmount(
 
   try {
     console.log('Creating transaction with amount (RUB):', amountInRubles);
-    
+
     const result = await graphqlRequest<{
       transactionCreate: {
         transaction: any | null;
         errors: Array<{ message: string; field: string; code: string }>;
       };
-    }>(mutation, { 
-      id: graphqlCheckoutId, 
+    }>(mutation, {
+      id: graphqlCheckoutId,
       transaction: transactionInput,
       transactionEvent: transactionEvent,
     });
 
+    console.log('transactionCreate result:', JSON.stringify(result, null, 2));
+
     if (result.transactionCreate.errors?.length > 0) {
       console.warn('Error creating transaction:', result.transactionCreate.errors);
       // Не выбрасываем ошибку, так как transaction может уже существовать
+    } else if (!result.transactionCreate.transaction) {
+      console.warn('Transaction was NOT created (result.transaction is null), but no errors returned.');
     } else {
-      console.log('Transaction created successfully:', result.transactionCreate.transaction);
+      console.log('Transaction created successfully:', result.transactionCreate.transaction.id);
     }
   } catch (error) {
-    console.warn('Failed to create transaction:', error);
+    console.error('CRITICAL: Failed to create transaction:', error);
     // Не выбрасываем ошибку, продолжаем выполнение
   }
 }
@@ -375,19 +379,19 @@ async function createCheckoutTransaction(
   paymentId?: string,
 ): Promise<void> {
   const graphqlCheckoutId = tokenToGraphQLId(checkoutId);
-  
+
   // Получаем реальную сумму checkout, чтобы убедиться, что transaction покрывает её
   const checkoutTotal = await getCheckoutTotal(checkoutId);
-  
+
   console.log('=== Transaction Creation Debug ===');
   console.log('Checkout total from Saleor (in RUB):', checkoutTotal);
   console.log('Payment amount from frontend (in RUB):', amount);
-  
+
   // Определяем правильную сумму в рублях.
   // Если checkoutTotal доступен, используем его (он всегда правильный).
   // Иначе используем amount, но проверяем, что он разумный.
   let finalAmountInRubles: number;
-  
+
   if (checkoutTotal !== null) {
     // Всегда используем checkoutTotal если он доступен - это источник истины
     finalAmountInRubles = checkoutTotal;
@@ -397,7 +401,7 @@ async function createCheckoutTransaction(
     finalAmountInRubles = amount;
     console.log('Using payment amount (checkoutTotal unavailable):', finalAmountInRubles);
   }
-  
+
   if (checkoutTotal !== null && Math.abs(checkoutTotal - amount) > 0.01) {
     console.warn('⚠️ WARNING: Checkout total and payment amount differ!', {
       checkoutTotal,
@@ -405,7 +409,7 @@ async function createCheckoutTransaction(
       difference: Math.abs(checkoutTotal - amount)
     });
   }
-  
+
   // Вызываем внутреннюю функцию с уже вычисленной суммой в рублях
   await createCheckoutTransactionWithAmount(checkoutId, finalAmountInRubles, paymentId);
 }
@@ -415,7 +419,7 @@ async function createCheckoutTransaction(
  */
 async function setCheckoutBillingAddress(checkoutId: string, address: any): Promise<void> {
   const graphqlCheckoutId = tokenToGraphQLId(checkoutId);
-  
+
   const mutation = `
     mutation CheckoutBillingAddressUpdate($id: ID!, $billingAddress: AddressInput!) {
       checkoutBillingAddressUpdate(id: $id, billingAddress: $billingAddress) {
@@ -436,7 +440,7 @@ async function setCheckoutBillingAddress(checkoutId: string, address: any): Prom
   const countryCode = typeof address.country === 'object' && address.country !== null
     ? address.country.code
     : address.country || 'RU';
-  
+
   const addressInput: any = {
     firstName: (address.firstName || '').trim() || 'Пользователь',
     lastName: (address.lastName || '').trim() || '',
@@ -445,7 +449,7 @@ async function setCheckoutBillingAddress(checkoutId: string, address: any): Prom
     postalCode: (address.postalCode || '').trim() || '000000',
     country: countryCode,
   };
-  
+
   // Добавляем опциональные поля только если они есть
   if (address.streetAddress2) {
     addressInput.streetAddress2 = address.streetAddress2.trim();
@@ -459,7 +463,7 @@ async function setCheckoutBillingAddress(checkoutId: string, address: any): Prom
   if (address.companyName) {
     addressInput.companyName = address.companyName.trim();
   }
-  
+
   console.log('Address input for checkout:', addressInput);
 
   try {
@@ -474,7 +478,7 @@ async function setCheckoutBillingAddress(checkoutId: string, address: any): Prom
       console.warn('Error setting checkout billing address:', result.checkoutBillingAddressUpdate.errors);
       throw new Error(result.checkoutBillingAddressUpdate.errors.map(e => e.message).join(', '));
     }
-    
+
     console.log('Checkout billing address set successfully');
   } catch (error) {
     console.error('Failed to set checkout billing address:', error);
@@ -488,7 +492,7 @@ async function setCheckoutBillingAddress(checkoutId: string, address: any): Prom
 export async function attachCheckoutToCustomer(checkoutId: string, userEmail: string): Promise<void> {
   // Преобразуем token в GraphQL ID (если нужно)
   const graphqlCheckoutId = tokenToGraphQLId(checkoutId);
-  
+
   // Сначала обновляем email
   const emailMutation = `
     mutation CheckoutEmailUpdate($id: ID!, $email: String!) {
@@ -528,11 +532,11 @@ export async function attachCheckoutToCustomer(checkoutId: string, userEmail: st
 
 export async function completeCheckout(checkoutId: string, userEmail?: string, paymentAmount?: number, paymentId?: string): Promise<{ order: any; errors: any[] }> {
   console.log('completeCheckout called with:', { checkoutId, userEmail, paymentAmount, paymentId });
-  
+
   // Преобразуем token в GraphQL ID
   const graphqlCheckoutId = tokenToGraphQLId(checkoutId);
   console.log('Converted checkoutId to GraphQL ID:', { original: checkoutId, graphql: graphqlCheckoutId });
-  
+
   // Создаем transaction в Saleor для checkout ПЕРЕД всеми остальными операциями
   // Это критично, чтобы Saleor знал о платеже перед завершением checkout
   // Transaction должен быть создан с amountCharged, чтобы Saleor считал checkout оплаченным
@@ -546,7 +550,7 @@ export async function completeCheckout(checkoutId: string, userEmail?: string, p
       // Продолжаем выполнение, возможно transaction уже существует
     }
   }
-  
+
   // Связываем checkout с пользователем перед завершением
   if (userEmail) {
     try {
@@ -554,18 +558,18 @@ export async function completeCheckout(checkoutId: string, userEmail?: string, p
       // Передаем оригинальный checkoutId (token), функция сама преобразует его
       await attachCheckoutToCustomer(checkoutId, userEmail);
       console.log('Checkout attached to customer successfully');
-      
+
       // Получаем адрес пользователя и устанавливаем billing address
       try {
         const { getMeInfo } = await import('@/graphql/queries/auth.service');
         const meInfo = await getMeInfo();
-        
+
         if (meInfo && meInfo.addresses && meInfo.addresses.length > 0) {
           // Используем адрес по умолчанию или первый доступный
           const address = meInfo.addresses.find(
             (addr) => addr.isDefaultBillingAddress || addr.isDefaultShippingAddress
           ) || meInfo.addresses[0];
-          
+
           console.log('Setting billing address from user address:', address);
           await setCheckoutBillingAddress(checkoutId, address);
           console.log('Billing address set successfully');
@@ -614,9 +618,10 @@ export async function completeCheckout(checkoutId: string, userEmail?: string, p
 
   // Если опция "Automatically complete checkout upon full payment" включена,
   // Saleor автоматически завершит checkout когда transaction покрывает сумму
-  // Ждём немного, чтобы Saleor успел автоматически завершить checkout
-  console.log('Waiting for automatic checkout completion (if enabled)...');
-  await new Promise(resolve => setTimeout(resolve, 2000)); // Ждём 2 секунды
+  // Ждём немного, чтобы Saleor успел автоматически завершить checkout.
+  // В Saleor 3.23 это происходит ПОЧТИ МГНОВЕННО после transactionCreate.
+  console.log('Waiting for potential automatic checkout completion...');
+  await new Promise(resolve => setTimeout(resolve, 1500)); // Ждём 1.5 секунды
 
   // Используем кастомный REST endpoint для завершения checkout без проверки наличия
   // Это обходит проблему "Insufficient stock" при завершении checkout
@@ -626,12 +631,12 @@ export async function completeCheckout(checkoutId: string, userEmail?: string, p
   // Убираем /graphql/ из конца URL чтобы получить базовый URL
   const baseUrl = graphqlUrl.replace(/\/graphql\/?$/, '').replace(/\/$/, '') || 'https://vspomni.store';
   const completeUrl = `${baseUrl}/checkout/complete-without-stock-check/`;
-  
+
   console.log('Calling complete checkout REST endpoint:', completeUrl);
   console.log('GraphQL URL:', graphqlUrl);
   console.log('Base URL (after cleanup):', baseUrl);
   console.log('Checkout token:', checkoutId);
-  
+
   try {
     const response = await fetch(completeUrl, {
       method: 'POST',
@@ -640,6 +645,8 @@ export async function completeCheckout(checkoutId: string, userEmail?: string, p
       },
       body: JSON.stringify({
         checkoutId: checkoutId,
+        paymentId: paymentId,
+        paymentAmount: paymentAmount,
       }),
     });
 
@@ -678,10 +685,10 @@ export async function completeCheckout(checkoutId: string, userEmail?: string, p
     };
   } catch (error: any) {
     console.error('Error in completeCheckout via REST:', error);
-    
+
     // Если REST endpoint не работает, пробуем GraphQL как fallback
     console.log('Falling back to GraphQL checkoutComplete...');
-    
+
     const mutation = `
       mutation CheckoutComplete($checkoutId: ID!) {
         checkoutComplete(id: $checkoutId) {
@@ -708,7 +715,7 @@ export async function completeCheckout(checkoutId: string, userEmail?: string, p
     `;
 
     const variables = { checkoutId: graphqlCheckoutId };
-    
+
     try {
       const graphqlResult = await graphqlRequest<{
         checkoutComplete: {

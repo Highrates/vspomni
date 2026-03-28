@@ -4,8 +4,6 @@ import Image from 'next/image'
 import PopularScentsAlt from '@/components/features/PopularScentsAlt'
 import Choice from '@/components/home/Choice'
 import BackButton from '@/components/ui/BackButton'
-import AromaNote from '@/components/features/AromaNote'
-import { mockAromaNotes } from '@/lib/mock/products'
 import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
@@ -24,6 +22,19 @@ import 'swiper/css/pagination'
 
 const getAttributeBySlug = (attributes: any[], slug: string) => {
   return attributes?.find((attr) => attr.attribute.slug === slug)
+}
+
+/** Слаги атрибутов нот в Saleor */
+const NOTE_ATTRIBUTE_SLUGS = {
+  basic: 'bazovye-noty',
+  middle: 'srednie-noty',
+  head: 'verhnie-akkordy',
+} as const
+
+const NOTE_LABELS: Record<keyof typeof NOTE_ATTRIBUTE_SLUGS, string> = {
+  basic: 'Базовые ноты',
+  middle: 'Средние ноты',
+  head: 'Верхние аккорды',
 }
 
 export default function ProductPage() {
@@ -185,12 +196,11 @@ export default function ProductPage() {
   )
   const aromas = aromaAttribute?.values || []
 
-  const hasNotes = (
-    prod: any,
-  ): prod is ProductDetailNode & {
-    notes: Array<{ basic: string[]; middle: string[]; head: string[] }>
-  } => {
-    return prod && Array.isArray(prod.notes) && prod.notes.length > 0
+  /** Значения нот из атрибутов Saleor (bazovye-noty, srednie-noty, verhnie-akkordy) */
+  const noteAttributes = {
+    basic: getAttributeBySlug(product.attributes || [], NOTE_ATTRIBUTE_SLUGS.basic)?.values || [],
+    middle: getAttributeBySlug(product.attributes || [], NOTE_ATTRIBUTE_SLUGS.middle)?.values || [],
+    head: getAttributeBySlug(product.attributes || [], NOTE_ATTRIBUTE_SLUGS.head)?.values || [],
   }
 
   const characteristicsAttr = getAttributeBySlug(
@@ -213,7 +223,7 @@ export default function ProductPage() {
   return (
     <PageTransition>
       <BackButton />
-      <div className="flex flex-col gap-8 sm:gap-10 md:gap-16 lg:gap-20 px-2 sm:px-4">
+      <div className="flex flex-col gap-2 sm:gap-3 md:gap-4 lg:gap-5 px-2 sm:px-4">
         <section className="flex flex-col lg:grid lg:grid-cols-2 gap-5 sm:gap-6 md:gap-8">
           <div className="w-full">
             {/* Main Image Slider Container */}
@@ -401,48 +411,7 @@ export default function ProductPage() {
                 </div>
               )}
 
-              {hasNotes(product) && (
-                <div className="flex flex-col gap-2 sm:gap-3">
-                  <div className="flex flex-row justify-between w-full gap-1.5 sm:gap-2.5 select-none">
-                    <p className="font-normal text-xs sm:text-sm md:text-md text-textgrey whitespace-nowrap shrink-0">
-                      Базовые ноты
-                    </p>
-                    <div className="flex grow border-b-[2px] sm:border-b-[3px] border-dotted border-textgrey mx-1 sm:mx-2"></div>
-                    <p className="font-normal text-xs sm:text-sm md:text-md select-none text-right shrink-0">
-                      {product.notes
-                        .map((note) => note.basic)
-                        .flat()
-                        .join(', ')}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-row justify-between w-full gap-1.5 sm:gap-2.5">
-                    <p className="font-normal text-xs sm:text-sm md:text-md text-textgrey select-none whitespace-nowrap shrink-0">
-                      Средние ноты
-                    </p>
-                    <div className="flex grow border-b-[2px] sm:border-b-[3px] border-dotted border-textgrey mx-1 sm:mx-2"></div>
-                    <p className="font-normal text-xs sm:text-sm md:text-md select-none text-right shrink-0">
-                      {product.notes
-                        .map((note) => note.middle)
-                        .flat()
-                        .join(', ')}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-row justify-between w-full gap-1.5 sm:gap-2.5">
-                    <p className="font-normal text-xs sm:text-sm md:text-md text-textgrey select-none whitespace-nowrap shrink-0">
-                      Верхние ноты
-                    </p>
-                    <div className="flex grow border-b-[2px] sm:border-b-[3px] border-dotted border-textgrey mx-1 sm:mx-2"></div>
-                    <p className="font-normal text-xs sm:text-sm md:text-md select-none text-right shrink-0">
-                      {product.notes
-                        .map((note) => note.head)
-                        .flat()
-                        .join(', ')}
-                    </p>
-                  </div>
-                </div>
-              )}
+              {/* Ноты убраны из карточки — показываются только внизу страницы */}
 
               <div className="flex flex-col gap-3 sm:gap-4 md:gap-6">
                 <div className="flex flex-row flex-wrap justify-start w-full gap-1.5 sm:gap-2">
@@ -492,42 +461,155 @@ export default function ProductPage() {
         </section>
 
         {/* Остальной контент */}
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 md:gap-10 lg:gap-5">
-          <div className="flex flex-col gap-6 sm:gap-8">
-            <div className="flex flex-col gap-4 sm:gap-6 md:gap-8">
-              <div className="flex flex-col md:flex-row gap-4 sm:gap-6 md:gap-8">
-                <div className="flex flex-col gap-3 sm:gap-4 md:gap-6">
-                  <h5 className="font-semibold text-base sm:text-lg md:text-xl select-none">
-                    Базовые ноты
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 md:gap-5 lg:gap-4">
+          <div className="flex flex-col gap-3 sm:gap-4">
+            {/* Ноты по скрин 2: Базовые и Средние — в две колонки, Верхние аккорды — ниже на всю ширину */}
+            <div className="flex flex-col gap-4">
+              {/* Базовые + Средние ноты в две колонки (как на скрин 2) */}
+              <div className="flex flex-col lg:flex-row gap-4">
+                {/* Базовые ноты */}
+                <div className="flex-1 flex flex-col gap-1.5 sm:gap-2">
+                  <h5 className="font-semibold text-base sm:text-lg text-black select-none">
+                    {NOTE_LABELS.basic}
                   </h5>
-                  <div className="flex flex-row gap-2 sm:gap-3 md:gap-4 overflow-x-auto scrollbar-hide pb-2">
-                    {mockAromaNotes.map((note) => (
-                      <AromaNote key={note.id} id={note.id} />
-                    ))}
-                  </div>
+                  {noteAttributes.basic.length > 0 ? (
+                    <div className="flex flex-row flex-wrap gap-3 sm:gap-4">
+                      {noteAttributes.basic.map((val: any) => (
+                        <div
+                          key={val.slug || val.name}
+                          className="flex flex-col items-center gap-2 w-[84px] shrink-0"
+                        >
+                          <div className="w-[84px] h-[84px] rounded-[12px] overflow-hidden bg-gray-100 flex-shrink-0 relative">
+                            {val.file?.url ? (
+                              (typeof val.file.url === 'string' &&
+                                (val.file.url.startsWith('/') || val.file.url.includes('vspomni.store'))) ? (
+                                <Image
+                                  src={val.file.url}
+                                  alt={val.name || ''}
+                                  fill
+                                  sizes="84px"
+                                  className="object-cover"
+                                />
+                              ) : (
+                                <img
+                                  src={val.file.url}
+                                  alt={val.name || ''}
+                                  className="w-full h-full object-cover"
+                                />
+                              )
+                            ) : null}
+                            {!val.file?.url && (
+                              <span className="absolute inset-0 flex items-center justify-center text-xs text-gray-400">
+                                {val.name || '—'}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs font-normal text-center text-black w-full">
+                            {val.name || '—'}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">—</p>
+                  )}
                 </div>
 
-                <div className="flex flex-col gap-3 sm:gap-4 md:gap-6">
-                  <h5 className="font-semibold text-base sm:text-lg md:text-xl select-none">
-                    Средние ноты
+                {/* Средние ноты */}
+                <div className="flex-1 flex flex-col gap-1.5 sm:gap-2">
+                  <h5 className="font-semibold text-base sm:text-lg text-black select-none">
+                    {NOTE_LABELS.middle}
                   </h5>
-                  <div className="flex flex-row gap-2 sm:gap-3 md:gap-4 overflow-x-auto scrollbar-hide pb-2">
-                    {mockAromaNotes.slice(0, 3).map((note) => (
-                      <AromaNote key={note.id} id={note.id} />
-                    ))}
-                  </div>
+                  {noteAttributes.middle.length > 0 ? (
+                    <div className="flex flex-row flex-wrap gap-3 sm:gap-4">
+                      {noteAttributes.middle.map((val: any) => (
+                        <div
+                          key={val.slug || val.name}
+                          className="flex flex-col items-center gap-2 w-[84px] shrink-0"
+                        >
+                          <div className="w-[84px] h-[84px] rounded-[12px] overflow-hidden bg-gray-100 flex-shrink-0 relative">
+                            {val.file?.url ? (
+                              (typeof val.file.url === 'string' &&
+                                (val.file.url.startsWith('/') || val.file.url.includes('vspomni.store'))) ? (
+                                <Image
+                                  src={val.file.url}
+                                  alt={val.name || ''}
+                                  fill
+                                  sizes="84px"
+                                  className="object-cover"
+                                />
+                              ) : (
+                                <img
+                                  src={val.file.url}
+                                  alt={val.name || ''}
+                                  className="w-full h-full object-cover"
+                                />
+                              )
+                            ) : null}
+                            {!val.file?.url && (
+                              <span className="absolute inset-0 flex items-center justify-center text-xs text-gray-400">
+                                {val.name || '—'}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs font-normal text-center text-black w-full">
+                            {val.name || '—'}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">—</p>
+                  )}
                 </div>
               </div>
 
-              <div className="flex flex-col gap-3 sm:gap-4 md:gap-6">
-                <h5 className="font-semibold text-base sm:text-lg md:text-xl select-none">
-                  Верхние ноты
+              {/* Верхние аккорды — ниже на всю ширину */}
+              <div className="flex flex-col gap-1.5 sm:gap-2">
+                <h5 className="font-semibold text-base sm:text-lg text-black select-none">
+                  {NOTE_LABELS.head}
                 </h5>
-                <div className="flex flex-row gap-2 sm:gap-3 md:gap-4 overflow-x-auto scrollbar-hide pb-2">
-                  {mockAromaNotes.slice(0, 3).map((note) => (
-                    <AromaNote key={note.id} id={note.id} />
-                  ))}
-                </div>
+                {noteAttributes.head.length > 0 ? (
+                  <div className="flex flex-row flex-wrap gap-3 sm:gap-4">
+                    {noteAttributes.head.map((val: any) => (
+                      <div
+                        key={val.slug || val.name}
+                        className="flex flex-col items-center gap-2 w-[84px] shrink-0"
+                      >
+                        <div className="w-[84px] h-[84px] rounded-[12px] overflow-hidden bg-gray-100 flex-shrink-0 relative">
+                          {val.file?.url ? (
+                            (typeof val.file.url === 'string' &&
+                              (val.file.url.startsWith('/') || val.file.url.includes('vspomni.store'))) ? (
+                              <Image
+                                src={val.file.url}
+                                alt={val.name || ''}
+                                fill
+                                sizes="84px"
+                                className="object-cover"
+                              />
+                            ) : (
+                              <img
+                                src={val.file.url}
+                                alt={val.name || ''}
+                                className="w-full h-full object-cover"
+                              />
+                            )
+                          ) : null}
+                          {!val.file?.url && (
+                            <span className="absolute inset-0 flex items-center justify-center text-xs text-gray-400">
+                              {val.name || '—'}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs font-normal text-center text-black w-full">
+                          {val.name || '—'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">—</p>
+                )}
               </div>
             </div>
 

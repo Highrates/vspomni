@@ -222,6 +222,7 @@ export async function getMeInfo() {
           isActive
           isConfirmed
           addresses {
+            city
             cityArea
             companyName
             countryArea

@@ -48,39 +48,51 @@ export default function YandexCdekMap({
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<any>(null)
   const clustererRef = useRef<any>(null)
+  const [scriptShouldLoad, setScriptShouldLoad] = useState(false)
   const [mapLoading, setMapLoading] = useState(true)
-  const [mapReady, setMapReady] = useState(false) // Карта полностью инициализирована
+  const [mapReady, setMapReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedPvz, setSelectedPvz] = useState<Pvz | null>(null)
 
-  // Загрузка API Яндекс Карт
+  // Подгружаем скрипт Яндекса только когда блок с картой попадает в зону видимости — не тормозим первую отрисовку
   useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) setScriptShouldLoad(true)
+      },
+      { rootMargin: '100px', threshold: 0 }
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+
+  // Загрузка API Яндекс Карт (только после scriptShouldLoad)
+  useEffect(() => {
+    if (!scriptShouldLoad) return
+
     const loadYandexMaps = async () => {
       if (!YANDEX_MAP_API_KEY) {
         setError('Не указан API ключ Яндекс Карт')
         setMapLoading(false)
         return
       }
-
-      // Если API уже загружен
       if (window.ymaps) {
         setMapLoading(false)
         return
       }
-
       try {
         const existingScript = document.getElementById('yandex-maps-api-script')
         const script =
           existingScript instanceof HTMLScriptElement
             ? existingScript
             : document.createElement('script')
-
         if (!existingScript) {
           script.id = 'yandex-maps-api-script'
           script.src = `https://api-maps.yandex.ru/2.1/?apikey=${YANDEX_MAP_API_KEY}&lang=ru_RU`
           script.async = true
         }
-
         await new Promise<void>((resolve, reject) => {
           if (window.ymaps) {
             resolve()
@@ -89,16 +101,11 @@ export default function YandexCdekMap({
           script.onload = () => resolve()
           script.onerror = () =>
             reject(new Error('Не удалось загрузить Яндекс Карты'))
-          if (!existingScript) {
-            document.head.appendChild(script)
-          }
+          if (!existingScript) document.head.appendChild(script)
         })
-
-        // Ждём готовности API
         await new Promise<void>((resolve) => {
           window.ymaps.ready(() => resolve())
         })
-
         setMapLoading(false)
       } catch (err: any) {
         console.error('Yandex Maps error:', err)
@@ -106,9 +113,8 @@ export default function YandexCdekMap({
         setMapLoading(false)
       }
     }
-
     loadYandexMaps()
-  }, [])
+  }, [scriptShouldLoad])
 
   // Инициализация карты
   useEffect(() => {
@@ -285,12 +291,16 @@ export default function YandexCdekMap({
 
   return (
     <div className="space-y-4">
-      {/* Контейнер карты */}
       <div 
         ref={containerRef}
         className="border border-black/10 rounded-xl overflow-hidden bg-gray-100 h-[400px] relative"
       >
-        {(mapLoading || loading) && (
+        {!scriptShouldLoad && (
+          <div className="absolute inset-0 flex items-center justify-center text-black/40 text-sm">
+            Карта загрузится при просмотре
+          </div>
+        )}
+        {scriptShouldLoad && (mapLoading || loading) && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-10">
             <div className="flex flex-col items-center gap-3">
               <Loader2 className="w-8 h-8 animate-spin text-green-600" />
@@ -301,7 +311,7 @@ export default function YandexCdekMap({
           </div>
         )}
 
-        {!mapLoading && !loading && pvzList.filter(p => p.location?.latitude).length === 0 && (
+        {scriptShouldLoad && !mapLoading && !loading && pvzList.filter(p => p.location?.latitude).length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center space-y-2 p-4">
               <MapPin className="w-8 h-8 mx-auto text-black/30" />

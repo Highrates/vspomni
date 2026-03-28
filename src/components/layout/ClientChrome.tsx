@@ -26,7 +26,7 @@ export default function ClientChrome({
     <>
       {!hideChrome && <Header variant={headerVariant} />}
       <main
-        className={`${!hideChrome ? 'pt-[86px]' : ''} w-full min-h-screen`}
+        className={`${!hideChrome ? 'pt-[80px]' : ''} w-full min-h-screen`}
       >
         <div className="container">{children}</div>
       </main>

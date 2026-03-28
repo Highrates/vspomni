@@ -8,6 +8,27 @@
     --shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
+/* FAQ: на мобилке и в Safari — верх фото (голова) не обрезать, выравнивание по верху */
+.faq-block-first-image img {
+    object-position: center top;
+    -webkit-object-position: center top;
+}
+@media (min-width: 768px) {
+    .faq-block-first-image img {
+        object-position: center;
+        -webkit-object-position: center;
+    }
+}
+
+/* Скрытие полосы прокрутки для горизонтальных каруселей */
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+
 /* theme.css — кастомные классы и стили для Hero/Swiper */
 
 .hero-left-overlay {

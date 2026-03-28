@@ -134,49 +134,77 @@ async function geocodeAddress(fullname: string): Promise<[number, number] | null
   return null
 }
 
-function getWarehousePoint(): { coordinates: [number, number]; fullname: string } {
+function getWarehousePoint(): { coordinates?: [number, number]; fullname: string; point_id?: string } {
   const lat = process.env.YANDEX_DELIVERY_WAREHOUSE_LAT
   const lng = process.env.YANDEX_DELIVERY_WAREHOUSE_LNG
   const fullname =
-    process.env.YANDEX_DELIVERY_WAREHOUSE_FULLNAME || 'Россия, Москва'
+    process.env.YANDEX_DELIVERY_WAREHOUSE_FULLNAME || 'Россия, Санкт-Петербург, улица Ватутина 8/7Д'
+  const point_id = process.env.YANDEX_DELIVERY_WAREHOUSE_ID
+
   if (lat && lng) {
     const lon = parseFloat(lng)
     const latN = parseFloat(lat)
     if (Number.isFinite(lon) && Number.isFinite(latN)) {
-      return { coordinates: [lon, latN], fullname }
+      return { coordinates: [lon, latN], fullname, point_id }
     }
   }
-  // Дефолт: Москва
-  return { coordinates: [37.6173, 55.7558], fullname }
+  // Дефолт: ПВЗ Яндекса в Санкт-Петербурге, ул. Ватутина 8/7Д
+  // Поддержка сообщила об обновлении ПВЗ, используем проверенный point_id и координаты
+  return {
+    coordinates: [30.379738, 59.962021],
+    fullname: 'Санкт-Петербург улица Ватутина 8/7Д',
+    point_id: '019c55f8c0d972ea9b59302a85430825',
+  }
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
+    console.log('--- Yandex Delivery API Request ---', JSON.stringify(body, null, 2))
     const action = body.action as string
 
     if (action === 'calculate') {
-      const { to } = body as {
+      const { to, mode } = body as {
         to: {
           city: string
           street?: string
           building?: string
           fullname?: string
+          coordinates?: [number, number]
         }
-      }
-      if (!to?.city) {
-        return json({ error: 'to.city is required' }, 400)
+        mode?: 'door' | 'pvz'
       }
       const fullname =
         to.fullname ||
         [to.city, to.street, to.building].filter(Boolean).join(', ')
-      const cityNorm = (to.city || '').trim().replace(/^МОСКВА$/i, 'Москва').replace(/^САНКТ-ПЕТЕРБУРГ$/i, 'Санкт-Петербург')
+
+      const cityInput = to.city || ''
+      const cityNorm = cityInput
+        .trim()
+        .replace(/^(МОСКВА|Москва).*$/i, 'Москва')
+        .replace(/^(САНКТ-ПЕТЕРБУРГ|Санкт-Петербург).*$/i, 'Санкт-Петербург')
+
       let fullnameForGeocode =
         fullname
           .replace(/\s*,\s*/g, ', ')
           .replace(/^МОСКВА\b/i, 'Москва')
           .replace(/^САНКТ-ПЕТЕРБУРГ\b/i, 'Санкт-Петербург')
-      let coordinates = await geocodeAddress(fullnameForGeocode || fullname)
+
+      console.log('--- Geocoding target ---', { fullnameForGeocode, cityNorm })
+
+      // Если координаты уже переданы с фронта (например, для ПВЗ), используем их напрямую
+      let coordinates: [number, number] | null = null
+      if (Array.isArray(to.coordinates) && to.coordinates.length === 2) {
+        const lon = Number(to.coordinates[0])
+        const lat = Number(to.coordinates[1])
+        if (Number.isFinite(lon) && Number.isFinite(lat)) {
+          coordinates = [lon, lat]
+        }
+      }
+
+      if (!coordinates) {
+        coordinates = await geocodeAddress(fullnameForGeocode || fullname)
+      }
       if (!coordinates && fullnameForGeocode && cityNorm) {
         const streetPart = (to.street || to.building || fullnameForGeocode)
           .replace(new RegExp(`^${cityNorm}\\s+`, 'i'), '')
@@ -200,12 +228,24 @@ export async function POST(req: NextRequest) {
       const dropoffFullname =
         cityNorm && (to.street || to.building)
           ? `${cityNorm}, ${(to.street || '')
-              .replace(new RegExp(`^${cityNorm}\\s+`, 'i'), '')
-              .trim() || to.building}`
+            .replace(new RegExp(`^${cityNorm}\\s+`, 'i'), '')
+            .trim() || to.building}`
           : fullname
+      const isPvzMode = mode === 'pvz'
+
       const route_points = [
-        { id: 1, coordinates: warehouse.coordinates, fullname: warehouse.fullname },
-        { id: 2, coordinates, fullname: dropoffFullname },
+        {
+          id: 1,
+          fullname: warehouse.fullname,
+          coordinates: warehouse.coordinates,
+          ...(warehouse.point_id ? { point_id: warehouse.point_id } : {})
+        },
+        {
+          id: 2,
+          coordinates,
+          fullname: dropoffFullname,
+          ...(isPvzMode ? { type: 'pvz' } : {})
+        },
       ]
       const items = [
         {
@@ -217,35 +257,61 @@ export async function POST(req: NextRequest) {
         },
       ]
       const requirements: Record<string, unknown> = {
-        taxi_classes: ['express', 'courier'],
-        skip_door_to_door: false,
+        taxi_classes: ['express', 'courier', 'ndd', 'cargo'],
+        // Для доставки до ПВЗ можно отключать услугу «до двери»
+        skip_door_to_door: isPvzMode ? true : false,
+        ndd: true, // Явно указываем для поддержки Яндекса
       }
-      let result = await yandexRequest<{ offers: unknown[] }>(
+      let result = await yandexRequest<{ offers: any[]; error_messages?: any[] }>(
         `${CARGO_PATH}/offers/calculate`,
         { body: { items, route_points, requirements } }
       )
+
+      console.log('--- Yandex Delivery Offers Result ---', JSON.stringify({
+        offers_count: result.offers?.length || 0,
+        errors: result.error_messages
+      }, null, 2))
+
+      // Если нет офферов, пробуем более агрессивно запросить именно NDD,
+      // как советовала поддержка (явная передача параметров).
       if (!result.offers?.length) {
-        requirements.taxi_classes = ['courier']
-        result = await yandexRequest<{ offers: unknown[] }>(
+        console.log('No offers found, retrying with explicit NDD requirements...')
+        requirements.taxi_classes = ['ndd']
+        requirements.ndd = true
+        requirements.delivery_type = 'ndd'
+
+        result = await yandexRequest<{ offers: any[]; error_messages?: any[] }>(
           `${CARGO_PATH}/offers/calculate`,
           { body: { items, route_points, requirements } }
         )
+        console.log('--- Yandex Delivery Explicit NDD Result ---', JSON.stringify(result, null, 2))
       }
+
       if (!result.offers?.length) {
-        requirements.taxi_classes = ['cargo']
-        ;(requirements as Record<string, unknown>).cargo_type = 'van'
-        ;(requirements as Record<string, unknown>).cargo_loaders = 0
-        result = await yandexRequest<{ offers: unknown[] }>(
+        // Fallback на курьера, если NDD не сработал (вдруг расстояние наоборот маленькое)
+        requirements.taxi_classes = ['courier', 'express']
+        delete requirements.ndd
+        delete requirements.delivery_type
+
+        result = await yandexRequest<{ offers: any[]; error_messages?: any[] }>(
           `${CARGO_PATH}/offers/calculate`,
           { body: { items, route_points, requirements } }
         )
+        console.log('--- Yandex Delivery Courier Fallback Result ---', JSON.stringify(result, null, 2))
       }
+
       if (!result.offers?.length) {
-        console.warn('Yandex offers/calculate returned empty offers', {
+        console.warn('Yandex offers/calculate returned empty offers after all retries', {
           dropoffFullname,
           coordinates,
           warehouse: warehouse.coordinates,
+          lastError: result.error_messages
         })
+        return json({
+          ...result,
+          error: 'По этому адресу нет доступных тарифов доставки Яндекса. Попробуйте другой адрес или выберите ПВЗ.',
+          offers: result.offers || [],
+        }, 200)
       }
       return json(result)
     }

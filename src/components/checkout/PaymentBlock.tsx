@@ -19,15 +19,15 @@ export default function PaymentBlock() {
   const handleCreateDraftOrder = async () => {
     try {
       setIsCreatingPayment(true)
-      
+
       const checkoutLines = await Promise.all(
         items.map(async (item: any) => {
           let variantId = item.variantId
-          
+
           if (!variantId && item.product.slug) {
             try {
               const productData = await getSingleProduct(item.product.slug)
-              
+
               // Если товар по каналу недоступен для покупки — блокируем оформление
               if (productData && productData.isAvailableForPurchase === false) {
                 throw new Error(
@@ -41,10 +41,10 @@ export default function PaymentBlock() {
                 const matchingVariant = productData.productVariants.edges.find(
                   (edge) => edge.node.name === targetSize || edge.node.name === item.product.size
                 )
-                
+
                 if (matchingVariant) {
                   variantId = matchingVariant.node.id
-                  const updatedItems = items.map((i: any) => 
+                  const updatedItems = items.map((i: any) =>
                     i.id === item.id ? { ...i, variantId } : i
                   )
                   useCartStore.setState({ items: updatedItems })
@@ -52,7 +52,7 @@ export default function PaymentBlock() {
                   const availableVariants = productData.productVariants.edges
                     .map(edge => edge.node.name)
                     .join(', ')
-                  
+
                   throw new Error(
                     `Вариант "${targetSize}" для товара "${item.product.name}" не найден. ` +
                     (availableVariants ? `Доступные варианты: ${availableVariants}` : 'Товар временно недоступен.')
@@ -64,11 +64,11 @@ export default function PaymentBlock() {
               throw error
             }
           }
-          
+
           if (variantId && item.product.slug && !item.variantId) {
             try {
               const productData = await getSingleProduct(item.product.slug)
-              
+
               // Повторный запрос: также проверяем общую доступность товара
               if (productData && productData.isAvailableForPurchase === false) {
                 throw new Error(
@@ -91,14 +91,14 @@ export default function PaymentBlock() {
               }
             }
           }
-          
+
           if (!variantId) {
             throw new Error(
               `Для товара "${item.product.name}" не указан вариант. ` +
               `Пожалуйста, удалите товар из корзины и добавьте его заново, выбрав размер.`
             )
           }
-          
+
           return {
             variantId: variantId,
             quantity: item.quantity,
@@ -107,7 +107,7 @@ export default function PaymentBlock() {
       )
 
       try {
-      const checkoutResponse = await fetch('/api/saleor/create-order', {
+        const checkoutResponse = await fetch('/api/saleor/create-order', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -158,16 +158,16 @@ export default function PaymentBlock() {
               'Если проблема повторяется, возможно, требуется увеличить таймаут на сервере.'
             )
           }
-          
+
           throw new Error(
-            checkoutResult.message || checkoutResult.error || 
+            checkoutResult.message || checkoutResult.error ||
             'Ошибка создания заказа. Пожалуйста, попробуйте позже.'
           )
         }
       } catch (customError: any) {
         // Если это ошибка сети или таймаута, не переходим к fallback
         if (customError.message && (
-          customError.message.includes('timeout') || 
+          customError.message.includes('timeout') ||
           customError.message.includes('Gateway Time-out') ||
           customError.message.includes('504')
         )) {
@@ -175,7 +175,7 @@ export default function PaymentBlock() {
             'Сервер не отвечает. Пожалуйста, попробуйте позже или обратитесь в поддержку.'
           )
         }
-        
+
         // Для других ошибок тоже пробрасываем, не переходим к fallback
         // чтобы не использовать стандартный API с проверкой наличия
         console.error('Custom checkout creation error:', customError)
@@ -187,7 +187,7 @@ export default function PaymentBlock() {
         lines: checkoutLines,
         itemsCount: items.length
       })
-      
+
       const checkoutResponse = await createCart(checkoutLines)
       const createdCheckout = checkoutResponse.checkoutCreate.checkout!
       if (
@@ -202,12 +202,12 @@ export default function PaymentBlock() {
           fullError: error,
           allErrors: checkoutResponse.checkoutCreate.errors
         })
-        
+
         let errorMessage = error.message || 'Failed to create checkout'
-        
-        if (errorMessage.includes('Only 0 remaining in stock') || 
-            errorMessage.includes('remaining in stock') ||
-            error.code === 'INSUFFICIENT_STOCK') {
+
+        if (errorMessage.includes('Only 0 remaining in stock') ||
+          errorMessage.includes('remaining in stock') ||
+          error.code === 'INSUFFICIENT_STOCK') {
           errorMessage = `Проблема с наличием товара в Saleor. ` +
             `В админ-панели Saleor проверьте:\n` +
             `1. Склад "Default Warehouse" привязан к каналу "vspomni-site"\n` +
@@ -215,7 +215,7 @@ export default function PaymentBlock() {
             `3. Товар доступен для продажи в канале "vspomni-site"\n\n` +
             `Ошибка от Saleor: ${error.message}`
         }
-        
+
         throw new Error(errorMessage)
       }
 
@@ -276,9 +276,9 @@ export default function PaymentBlock() {
       // Вычисляем общую сумму заказа: приоритетно берём сумму из checkout (amountOverride),
       // чтобы она совпадала с тем, что знает Saleor
       const totalAmount = amountOverride ?? totalPrice
-      
+
       // Описание заказа
-      const shortId = orderOrCheckoutId.length > 8 
+      const shortId = orderOrCheckoutId.length > 8
         ? orderOrCheckoutId.substring(orderOrCheckoutId.length - 8)
         : orderOrCheckoutId
       const description = `Заказ #${shortId} - ${items.length} товар(ов)`
@@ -294,6 +294,13 @@ export default function PaymentBlock() {
           currency: 'RUB',
           description: description,
           orderId: orderOrCheckoutId,
+          userEmail: user.email,
+          items: items.map((item: any) => ({
+            name: item.product.name,
+            quantity: item.quantity,
+            price: item.price,
+            sku: item.variantId || item.id,
+          })),
           returnUrl: `${window.location.origin}/checkout/success`,
           metadata: {
             userId: user.email,
@@ -320,7 +327,7 @@ export default function PaymentBlock() {
         console.log('Saved checkoutId to localStorage:', orderOrCheckoutId)
         console.log('Saved paymentId to localStorage:', result.paymentId)
         console.log('Current checkoutId state:', checkoutId)
-        
+
         setConfirmationToken(result.confirmationToken)
         setShowYooKassaWidget(true)
       } else {
@@ -346,7 +353,7 @@ export default function PaymentBlock() {
     console.log('Payment successful (callback):', result)
     console.log('Current checkoutId:', checkoutId)
     console.log('Current user email:', user.email)
-    
+
     // Если checkoutId есть в localStorage, значит мы уже обрабатываем на странице success
     // Не дублируем вызов completeCheckout здесь
     const pendingCheckoutId = localStorage.getItem('pendingCheckoutId')
@@ -356,19 +363,19 @@ export default function PaymentBlock() {
       window.location.href = '/checkout/success'
       return
     }
-    
+
     // Завершаем checkout после успешной оплаты (fallback, если не сработал редирект)
     if (checkoutId) {
       try {
         console.log('Starting checkout completion in callback...')
         const { completeCheckout } = await import('@/graphql/queries/cart.service')
         const { clearCart } = useCartStore.getState()
-        
+
         // Передаем email пользователя для связывания checkout с пользователем
         console.log('Calling completeCheckout with:', { checkoutId, email: user.email })
         const orderResult = await completeCheckout(checkoutId, user.email)
         console.log('Checkout completed in callback, order created:', orderResult.order)
-        
+
         if (orderResult.order) {
           console.log('Order details:', {
             id: orderResult.order.id,
@@ -379,13 +386,13 @@ export default function PaymentBlock() {
         } else {
           console.warn('No order returned from completeCheckout')
         }
-        
+
         // Очищаем checkoutId из localStorage
         localStorage.removeItem('pendingCheckoutId')
-        
+
         // Очищаем корзину после успешного заказа
         clearCart()
-        
+
         // Редирект на страницу успеха
         window.location.href = '/checkout/success'
       } catch (error: any) {
@@ -410,7 +417,7 @@ export default function PaymentBlock() {
   const handleYooKassaError = (error: any) => {
     console.error('Payment error:', error)
     // Обработка ошибки оплаты
-  } 
+  }
 
   return (
     <section className="select-none">
@@ -432,14 +439,14 @@ export default function PaymentBlock() {
       <button
         type="button"
         className="w-full h-12 sm:h-13 md:h-14 rounded-full bg-black text-white text-base sm:text-[17px] md:text-[18px] font-semibold hover:bg-[#3A7FE2] transition disabled:bg-gray-400"
-         disabled={
+        disabled={
           isCreatingPayment ||
           !Boolean(
             user.name.length > 2 &&
-              user.familyName.length > 0 &&
-              user.email.length > 5 &&
-              user.email.includes('@') &&
-              user.phone.length > 0,
+            user.familyName.length > 0 &&
+            user.email.length > 5 &&
+            user.email.includes('@') &&
+            user.phone.length > 0,
           )
         }
         onClick={handleCreateDraftOrder}

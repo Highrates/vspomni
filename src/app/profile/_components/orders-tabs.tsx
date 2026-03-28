@@ -39,7 +39,7 @@ export default function OrdersTabs({ orders }: Props) {
     <>
       <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-14 mb-6 sm:mb-8">
         <button
-          className={`cursor-pointer relative font-semibold text-xl sm:text-2xl whitespace-nowrap ${
+          className={`cursor-pointer relative font-semibold text-lg sm:text-2xl whitespace-nowrap ${
             activeTab === 'all' ? 'text-black' : 'text-textgrey'
           }`}
           onClick={() => setActiveTab('all')}
@@ -52,7 +52,7 @@ export default function OrdersTabs({ orders }: Props) {
           </span>
         </button>
         <button
-          className={`cursor-pointer relative font-semibold text-xl sm:text-2xl whitespace-nowrap text-right ${
+          className={`cursor-pointer relative font-semibold text-lg sm:text-2xl whitespace-nowrap text-right ${
             activeTab === 'active' ? 'text-black' : 'text-textgrey'
           }`}
           onClick={() => setActiveTab('active')}
@@ -79,10 +79,10 @@ export default function OrdersTabs({ orders }: Props) {
           <div key={order.id} className="space-y-8">
             <div className="flex items-center justify-between">
               <div className="space-y-2">
-                <p className="font-semibold text-black text-xl">{order.date}</p>
-                <p className="text-textgrey text-sm">{order.id}</p>
+                <p className="font-semibold text-black text-lg sm:text-xl">{order.date}</p>
+                <p className="text-textgrey text-sm">Заказ №{order.id}</p>
               </div>
-              <span className="font-semibold text-xl text-black">
+              <span className="font-semibold text-lg sm:text-xl text-black">
                 {order.status}
               </span>
             </div>
@@ -94,7 +94,7 @@ export default function OrdersTabs({ orders }: Props) {
                   className="flex items-end justify-between border border-black rounded-2xl p-3 "
                 >
                   <div className="flex gap-4">
-                    <div className="relative w-26 h-26 shrink-0 rounded-xl overflow-hidden">
+                    <div className="relative w-24 h-24 sm:w-26 sm:h-26 shrink-0 rounded-xl overflow-hidden">
                       <Image
                         src={item.img}
                         alt={item.title}
@@ -104,16 +104,16 @@ export default function OrdersTabs({ orders }: Props) {
                     </div>
                     <div className="flex flex-col justify-between py-2">
                       <hgroup className="flex flex-col">
-                        <p className="font-semibold text-xl text-black">
+                        <p className="font-semibold text-base sm:text-xl text-black">
                           {item.title}
                         </p>
                         <p className="text-sm">{item.volume}</p>
                       </hgroup>
-                      <p className="text-xl font-semibold">{item.qty} шт.</p>
+                      <p className="text-base sm:text-xl font-semibold">{item.qty} шт.</p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 text-xl font-semibold">
+                  <div className="flex items-center gap-2 text-base sm:text-xl font-semibold">
                     {item.oldPrice > 0 && item.oldPrice > item.price && (
                       <p className="text-textgrey line-through">
                         {item.oldPrice.toLocaleString()} ₽

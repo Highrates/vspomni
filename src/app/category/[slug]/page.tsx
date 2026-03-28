@@ -1,7 +1,7 @@
 'use client'
 
 import { useParams } from 'next/navigation'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useCategoriesStore } from '@/stores/useCategories'
 import { ProductCardItem } from '@/types/product'
 import BackButton from '@/components/ui/BackButton'
@@ -13,15 +13,36 @@ export default function CategoryPage() {
   const { categories, items, fetchProductsByCategorySlug } =
     useCategoriesStore()
 
-  const categoryName = categories.find(
+  const currentCategory = categories.find(
     (category) => category.slug === slug,
-  )?.name
+  )
+  const categoryName = currentCategory?.name
+
+  // Категория «Подарочные пакеты» — для неё не показываем ароматы под карточкой
+  const isGiftPackages =
+    currentCategory?.name?.toLowerCase() === 'подарочные пакеты' ||
+    (typeof slug === 'string' && slug === 'podarochnye-pakety')
+  const hideAromas = isGiftPackages
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    if (slug && typeof slug === 'string') {
-      fetchProductsByCategorySlug(slug)
+    if (!slug || typeof slug !== 'string') return
+    fetchProductsByCategorySlug(slug).then(() => {
+      retryTimerRef.current = setTimeout(() => {
+        const { items: current } = useCategoriesStore.getState()
+        if (current.length === 0) {
+          fetchProductsByCategorySlug(slug)
+        }
+        retryTimerRef.current = null
+      }, 800)
+    })
+    return () => {
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current)
+        retryTimerRef.current = null
+      }
     }
-  }, [slug])
+  }, [slug, fetchProductsByCategorySlug])
 
   const title = categoryName || (typeof slug === 'string' ? String(slug).replace(/-/g, ' ') : 'Категория')
 
@@ -51,6 +72,7 @@ export default function CategoryPage() {
               product={product}
               key={product.id}
               isNew={index < 2}
+              hideAromas={hideAromas}
             />
           ))}
         </div>

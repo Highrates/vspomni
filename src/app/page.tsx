@@ -11,12 +11,16 @@ import FaqBlock from '@/components/home/FaqBlock'
 import HistoryLine from '@/components/home/HistoryLine'
 import CandlesSoonBanner from '@/components/home/CandlesSoonBanner'
 import { getCandlesSoonBanner } from '@/graphql/queries/candlesSoon.service'
+import { getChoiceProducts } from '@/graphql/queries/product.service'
 
 // Обновляем главную страницу по данным моделей раз в минуту
 export const revalidate = 60
 
 export default async function Home() {
-  const candlesSoon = await getCandlesSoonBanner().catch(() => null)
+  const [candlesSoon, choiceProducts] = await Promise.all([
+    getCandlesSoonBanner().catch(() => null),
+    getChoiceProducts().catch(() => []),
+  ])
 
   return (
     <>
@@ -24,7 +28,7 @@ export default async function Home() {
       <StoryBlock />
       <PopularScentsAlt />
       <ComingSoon />
-      <Choice />
+      <Choice initialProducts={choiceProducts} />
       <HistoryLine />
       <ProductGrid />
       <GiftPackagesBanner />

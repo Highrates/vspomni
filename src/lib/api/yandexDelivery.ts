@@ -21,20 +21,28 @@ async function post<T>(body: unknown): Promise<T> {
   return data as T
 }
 
-/** Рассчитать стоимость доставки Яндекса до указанного адреса */
+/** Рассчитать стоимость доставки Яндекса
+ *  Используется как для доставки «до двери», так и для доставки до ПВЗ.
+ *  Если передать coordinates, то сервер возьмёт их напрямую и не будет геокодировать адрес.
+ *  Параметр mode позволяет подсказать бэкенду тип доставки (door | pvz).
+ */
 export async function calculateDelivery(params: {
   city: string
   street?: string
   building?: string
   fullname?: string
+  coordinates?: [number, number] // [долгота, широта]
+  mode?: 'door' | 'pvz'
 }): Promise<YandexCalculateResponse> {
   return post<YandexCalculateResponse>({
     action: 'calculate',
+    mode: params.mode,
     to: {
       city: params.city,
       street: params.street,
       building: params.building,
       fullname: params.fullname,
+      coordinates: params.coordinates,
     },
   })
 }

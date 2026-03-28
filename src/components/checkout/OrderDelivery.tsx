@@ -4,7 +4,7 @@ import { getMeInfo } from '@/graphql/queries/auth.service'
 import { AddressInfo } from '@/graphql/types/auth.types'
 import { useEffect, useState } from 'react'
 import AddressModal from '../modals/AddressModal'
-import { Trash, Truck } from 'lucide-react'
+import { Trash } from 'lucide-react'
 
 import {
   AlertDialog,
@@ -23,7 +23,10 @@ import {
 } from '../ui/dropdown-menu'
 import { deleteAddress } from '@/graphql/queries/adress.service'
 import { toast } from 'react-toastify'
-import { calculateDelivery, getCheapestOffer } from '@/lib/api/yandexDelivery'
+import { calculateDelivery as calculateYandex } from '@/lib/api/yandexDelivery'
+import { useCdek } from '@/stores/useCdek'
+import { useCartStore } from '@/stores/useCart'
+// Яндекс-доставка/ПВЗ теперь используется для расчета стоимости
 
 export default function OrderDelivery() {
   const [selected, setSelected] = useState('')
@@ -31,18 +34,108 @@ export default function OrderDelivery() {
   const [loading, setLoading] = useState(true)
   const [modalVisible, setModalVisible] = useState(false)
   const [editingAddress, setEditingAddress] = useState<AddressInfo | null>(null)
-  const [deliveryPrice, setDeliveryPrice] = useState<number | null>(null)
-  const [deliveryLoading, setDeliveryLoading] = useState(false)
-  const [deliveryError, setDeliveryError] = useState<string | null>(null)
+  const { calculateDelivery: calculateCdek } = useCdek()
+  const { items, setShippingPrice, setShippingLoading } = useCartStore()
+
+  const updateShippingPrice = async (address: AddressInfo) => {
+    try {
+      setShippingLoading(true)
+
+      // Если нет города, не пытаемся считать
+      if (!address.city) {
+        console.warn('Skipping shipping calculation: City is missing')
+        setShippingPrice(0)
+        return
+      }
+
+      // === СДЭК — основной расчёт доставки ===
+      console.log('Calculating CDEK shipping for city:', address.city)
+      const { getCities } = await import('@/lib/api/cdek')
+      const cities = await getCities({ city: address.city, country_codes: 'RU', size: 5 })
+
+      if (cities?.length > 0) {
+        const toCityCode = cities[0].code
+        const FROM_SPB_CODE = 137 // Код Санкт-Петербурга в СДЭК (склад)
+
+        // Подсчёт суммарного веса и габаритов из корзины
+        // Fallback значения если габариты не указаны в товаре
+        const DEFAULT_WEIGHT_G = 300 // 300 г
+        const DEFAULT_L = 200 // 200 мм (20 см)
+        const DEFAULT_W = 200 // 200 мм (20 см)
+        const DEFAULT_H = 100 // 100 мм (10 см)
+
+        let totalWeight = 0;
+        let maxLength = DEFAULT_L;
+        let maxWidth = DEFAULT_W;
+        let totalHeight = 0;
+
+        if (items && items.length > 0) {
+          items.forEach(item => {
+            const qty = item.quantity || 1;
+            const product = item.product || {} as any;
+
+            // Расчет веса (из Saleor приходит в кг, переводим в граммы)
+            const w = typeof product.weight === 'number' ? product.weight * 1000 : DEFAULT_WEIGHT_G;
+            // Габариты в мм, переводим в см для СДЭК ниже
+            const l = typeof product.length === 'number' ? product.length : DEFAULT_L;
+            const wth = typeof product.width === 'number' ? product.width : DEFAULT_W;
+            const h = typeof product.height === 'number' ? product.height : DEFAULT_H;
+
+            totalWeight += w * qty;
+            maxLength = Math.max(maxLength, l);
+            maxWidth = Math.max(maxWidth, wth);
+            totalHeight += h * qty; // Для простоты складываем высоту каждой единицы товара (как коробки друг на друге)
+          });
+        } else {
+          totalWeight = DEFAULT_WEIGHT_G;
+          totalHeight = DEFAULT_H;
+        }
+
+        const cdekTariffs = await calculateCdek({
+          fromCityCode: FROM_SPB_CODE,
+          toCityCode,
+          weight: Math.ceil(totalWeight), // Вес в граммах (округляем вверх)
+          length: Math.ceil(maxLength / 10), // СДЭК принимает в см
+          width: Math.ceil(maxWidth / 10), // СДЭК принимает в см
+          height: Math.ceil(totalHeight / 10), // СДЭК принимает в см
+        })
+
+        if (cdekTariffs?.length > 0) {
+          const cheapest = cdekTariffs.reduce((min: any, t: any) =>
+            t.delivery_sum < min.delivery_sum ? t : min, cdekTariffs[0])
+          console.log('CDEK shipping price:', cheapest.delivery_sum, '₽, tariff:', cheapest.tariff_name || cheapest.tariff_code, 'weight:', totalWeight)
+          setShippingPrice(cheapest.delivery_sum)
+          return
+        }
+      }
+
+      console.warn('CDEK: no city or tariffs found for', address.city)
+      setShippingPrice(0)
+    } catch (e) {
+      console.error('Failed to calculate shipping:', e)
+      setShippingPrice(0)
+    } finally {
+      setShippingLoading(false)
+    }
+  }
+
   useEffect(() => {
     getMeInfo()
       .then((data) => {
         if (data && data.addresses) {
           setAddresses(data.addresses)
-          
+
           if (data.addresses.length > 0) {
-            const def = data.addresses.find((a) => a.isDefaultShippingAddress)
-            setSelected(def?.id || data.addresses[0].id)
+            const def = data.addresses.find((a: AddressInfo) => a.isDefaultShippingAddress)
+            const id = def?.id || data.addresses[0].id
+            setSelected(id)
+
+            // Также рассчитаем доставку для адреса по умолчанию при загрузке
+            const currentAddr = data.addresses.find((a: AddressInfo) => a.id === id) || data.addresses[0]
+            if (currentAddr) {
+              console.log('Calculating shipping for initial address:', currentAddr.city)
+              updateShippingPrice(currentAddr)
+            }
           }
         }
       })
@@ -52,7 +145,27 @@ export default function OrderDelivery() {
       .finally(() => {
         setLoading(false)
       })
-  }, [])
+  }, []) // Загрузка адресов только при старте
+
+  // Перерасчет доставки при изменении товаров в корзине
+  useEffect(() => {
+    if (selected && addresses.length > 0) {
+      const currentAddr = addresses.find((a: AddressInfo) => a.id === selected)
+      if (currentAddr) {
+        // Дебаунс можно было бы добавить, но пока вызываем сразу
+        updateShippingPrice(currentAddr)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items])
+
+  const handleAddressSelect = (id: string) => {
+    setSelected(id)
+    const addr = addresses.find(a => a.id === id)
+    if (addr) {
+      updateShippingPrice(addr)
+    }
+  }
 
   const handleAddressAdded = (newAddress: AddressInfo, updatedList?: AddressInfo[]) => {
     if (updatedList?.length) {
@@ -61,12 +174,16 @@ export default function OrderDelivery() {
       setAddresses((prev) => [...prev, newAddress])
     }
     setSelected(newAddress.id)
+    updateShippingPrice(newAddress)
   }
 
   const handleAddressUpdated = (updatedAddress: AddressInfo) => {
     setAddresses(prev =>
       prev.map(addr => (addr.id === updatedAddress.id ? updatedAddress : addr)),
     )
+    if (selected === updatedAddress.id) {
+      updateShippingPrice(updatedAddress)
+    }
   }
 
   const handleOpenEdit = (address: AddressInfo) => {
@@ -89,48 +206,6 @@ export default function OrderDelivery() {
         return remaining
       })
     })
-  }
-
-  const selectedAddress = addresses.find(a => a.id === selected)
-
-  useEffect(() => {
-    setDeliveryPrice(null)
-    setDeliveryError(null)
-  }, [selected])
-
-  const handleCalculateDelivery = async () => {
-    const city =
-      selectedAddress?.city?.trim() || selectedAddress?.countryArea?.trim() || ''
-    if (!city) {
-      toast.error('Выберите адрес с указанным городом')
-      return
-    }
-    setDeliveryLoading(true)
-    setDeliveryError(null)
-    setDeliveryPrice(null)
-    try {
-      const res = await calculateDelivery({
-        city,
-        street: selectedAddress!.streetAddress1,
-        fullname: [city, selectedAddress!.streetAddress1]
-          .filter(Boolean)
-          .join(', '),
-      })
-      const offer = getCheapestOffer(res.offers || [])
-      if (offer?.price?.total_price) {
-        const price = parseFloat(offer.price.total_price)
-        setDeliveryPrice(price)
-        toast.success(`Доставка: ${Math.round(price)} ₽`)
-      } else {
-        setDeliveryError('Не удалось рассчитать стоимость для этого адреса')
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Ошибка расчёта доставки'
-      setDeliveryError(msg)
-      toast.error(msg)
-    } finally {
-      setDeliveryLoading(false)
-    }
   }
 
   if (loading) {
@@ -164,7 +239,7 @@ export default function OrderDelivery() {
                 <li key={address.id} className="relative">
                   <button
                     type="button"
-                    onClick={() => setSelected(address.id)}
+                    onClick={() => handleAddressSelect(address.id)}
                     className="w-full text-left"
                   >
                     <div className="flex items-start sm:items-center gap-2 sm:gap-3">
@@ -183,10 +258,11 @@ export default function OrderDelivery() {
 
                       <div className="flex-1 min-w-0">
                         <div className="text-sm sm:text-[15px] md:text-[16px] leading-5 sm:leading-6 font-medium">
-                          {address.firstName } {address.lastName}
+                          {address.firstName} {address.lastName}
                         </div>
                         <div className="text-xs sm:text-[13px] md:text-[14px] leading-5 sm:leading-6 text-black/40 break-words">
-                          {address.countryArea}, {address.streetAddress1}, {address.companyName}
+                          {address.countryArea}{address.city ? `, ${address.city}` : ''}{address.cityArea ? `, ${address.cityArea}` : ''}, {address.streetAddress1}
+                          {address.companyName ? `, ${address.companyName}` : ''}
                         </div>
                         {address.streetAddress2 && (
                           <div className="text-xs sm:text-[13px] md:text-[14px] leading-5 sm:leading-6 text-black/40">
@@ -216,36 +292,6 @@ export default function OrderDelivery() {
           >
             + Новый адрес
           </button>
-
-          {selectedAddress && (
-            <div className="mt-6 p-4 rounded-xl border border-black/10 bg-gray-50/50">
-              <div className="flex items-center gap-2 mb-2">
-                <Truck className="h-5 w-5 text-black/60" />
-                <span className="text-sm font-semibold">Доставка курьером Яндекса</span>
-              </div>
-              <p className="text-xs sm:text-sm text-black/60 mb-3">
-                Доставка по выбранному адресу:{' '}
-                {selectedAddress.city?.trim() || selectedAddress.countryArea || '—'},{' '}
-                {selectedAddress.streetAddress1}
-              </p>
-              <button
-                type="button"
-                onClick={handleCalculateDelivery}
-                disabled={deliveryLoading}
-                className="h-10 px-4 rounded-full border border-black text-sm font-medium hover:bg-black/[0.05] disabled:opacity-50 transition"
-              >
-                {deliveryLoading ? 'Расчёт…' : 'Узнать стоимость доставки'}
-              </button>
-              {deliveryError && (
-                <p className="mt-2 text-sm text-red-600">{deliveryError}</p>
-              )}
-              {deliveryPrice !== null && !deliveryError && (
-                <p className="mt-2 text-sm font-medium text-black">
-                  Стоимость доставки: <span className="font-semibold">{Math.round(deliveryPrice)} ₽</span>
-                </p>
-              )}
-            </div>
-          )}
         </div>
       </section>
 

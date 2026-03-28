@@ -111,15 +111,15 @@ export default function Header({ variant = 'default' }: HeaderProps) {
   return (
     <>
       {isOverlay && (
-        <div className="m-3 bg-[url('/images/catalogTop.png')] p-10 bg-cover bg-center top-0 left-0 right-0 h-[511px] z-0 pointer-events-none rounded-none sm:rounded-3xl max-w-[1679px] mx-auto"></div>
+        <div className="m-3 bg-[url('/images/catalog.jpg')] p-10 bg-cover bg-center top-0 left-0 right-0 h-[511px] z-0 pointer-events-none rounded-none sm:rounded-3xl max-w-[1679px] mx-auto"></div>
       )}
 
       <motion.header
         initial={{ y: -60, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.5 }}
-        className={`fixed top-0 left-0 w-full pt-3 z-50 transition-all duration-300 ${getHeaderStyles()}`}
-        style={{ height: '86px' }}
+        className={`fixed top-0 left-0 w-full py-4 z-50 transition-all duration-300 ${getHeaderStyles()}`}
+        style={{ height: '80px' }}
       >
         <div className="flex items-center justify-between h-full px-4 sm:px-6 md:px-[33px] container">
           <Link
@@ -144,7 +144,7 @@ export default function Header({ variant = 'default' }: HeaderProps) {
               className={`flex items-center gap-4 lg:gap-8 text-sm lg:text-[15px] font-medium ${isOverlay && !scrolled ? 'text-white' : 'text-black/80'}`}
             >
               <Link href="/catalog" className="hover:opacity-80 transition whitespace-nowrap">Каталог</Link>
-              <Link href="/category/diffuzory" className="hover:opacity-80 transition whitespace-nowrap">Ароматы</Link>
+              <Link href="/#vse-aromaty" className="hover:opacity-80 transition whitespace-nowrap">Ароматы</Link>
               <Link
                 href="https://t.me/vspomni_zabota"
                 target="_blank"
@@ -234,7 +234,7 @@ export default function Header({ variant = 'default' }: HeaderProps) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.25 }}
-              className="absolute top-[86px] left-0 w-full bg-white border-t border-black/10 shadow-md"
+              className="absolute top-full left-0 w-full bg-white border-t border-black/10 shadow-md mt-px"
             >
               <div className="container px-4 sm:px-6 md:px-8 py-4 relative z-50">
                 <div className="flex items-center justify-between gap-2">
@@ -283,7 +283,7 @@ export default function Header({ variant = 'default' }: HeaderProps) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.25 }}
-              className={`absolute top-[86px] left-0 w-full border-t shadow-md md:hidden ${
+              className={`absolute top-full left-0 w-full border-t shadow-md md:hidden mt-px ${
                 isOverlay && !scrolled
                   ? 'bg-white/95 backdrop-blur-md border-white/20 text-black'
                   : 'bg-white border-black/10'
@@ -291,7 +291,7 @@ export default function Header({ variant = 'default' }: HeaderProps) {
             >
               <nav className="flex flex-col px-6 py-5 text-md font-medium gap-4">
                 <Link href="/catalog" onClick={() => setMenuOpen(false)}>Каталог</Link>
-                <Link href="/category/diffuzory" onClick={() => setMenuOpen(false)}>Ароматы</Link>
+                <Link href="/#vse-aromaty" onClick={() => setMenuOpen(false)}>Ароматы</Link>
                 <Link
                   href="https://t.me/vspomni_zabota"
                   target="_blank"

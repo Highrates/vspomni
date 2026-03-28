@@ -7,6 +7,14 @@ export interface ChoiceCardProps {
 }
 
 export default function ChoiceCard({product}: ChoiceCardProps) {
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const target = e.currentTarget
+    if (!target.dataset.fallback) {
+      target.src = '/images/choice-1.jpg'
+      target.dataset.fallback = 'true'
+    }
+  }
+
   return (
     <div className="relative w-full rounded-[20px] overflow-hidden">
       <div className="relative w-full aspect-[498/685] bg-gray-100">
@@ -14,6 +22,7 @@ export default function ChoiceCard({product}: ChoiceCardProps) {
           src={product.image}
           alt={product.name}
           className="w-full h-full object-cover"
+          onError={handleImageError}
         />
 
         {/* Имя и дата над плашкой */}
@@ -29,6 +38,7 @@ export default function ChoiceCard({product}: ChoiceCardProps) {
               src={product.thumbnail}
               alt={product.star}
               className="w-full h-full object-cover"
+              onError={handleImageError}
             />
           </div>
 

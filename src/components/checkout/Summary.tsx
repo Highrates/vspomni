@@ -10,17 +10,21 @@ type SummaryProps = {
   appliedPromoCode: string | null
   discountPercent: number
   totalItems: number
+  shipping: number
+  shippingLoading: boolean
   discountType?: 'PERCENTAGE' | 'FIXED'
 }
 
-export const Summary = ({ 
-  total, 
-  subtotal, 
-  discount, 
-  promoDiscount, 
+export const Summary = ({
+  total,
+  subtotal,
+  discount,
+  promoDiscount,
   appliedPromoCode,
   discountPercent,
   totalItems,
+  shipping,
+  shippingLoading,
   discountType,
 }: SummaryProps) => {
   const hasDiscount = discount > 0
@@ -62,6 +66,18 @@ export const Summary = ({
           </div>
         </div>
       )}
+
+      {/* Доставка */}
+      <div className="flex justify-between text-[15px] font-medium text-gray-600 mb-3">
+        <span>Доставка</span>
+        <span>
+          {shippingLoading
+            ? 'Рассчитывается...'
+            : shipping > 0
+              ? `${formatCurrency(shipping)} ₽`
+              : 'Бесплатно'}
+        </span>
+      </div>
 
       {/* Итоговая сумма к оплате */}
       <div className="flex justify-between items-baseline mt-2">

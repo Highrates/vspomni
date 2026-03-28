@@ -57,13 +57,13 @@ export async function createAddress(
       lastName: input.lastName,
       phone: input.phone,
       country: input.country,
-      countryArea: input.countryArea.trim(),
       city: input.city,
-      cityArea: input.cityArea,
       streetAddress1: input.streetAddress1,
       streetAddress2: input.streetAddress2 || '',
       postalCode: input.postalCode,
       companyName: input.companyName,
+      ...(input.countryArea?.trim() ? { countryArea: input.countryArea.trim() } : {}),
+      ...(input.cityArea?.trim() ? { cityArea: input.cityArea.trim() } : {}),
     },
     type: isDefaultShipping ? 'SHIPPING' : 'BILLING',
   }
@@ -75,18 +75,20 @@ export async function createAddress(
   if (errors.length > 0) {
     const errorMessages = errors.map((e) => {
       let msg = e.message || ''
+      const field = e.field ? `[${e.field}] ` : ''
+
       if (e.field === 'countryArea' && (msg.includes('not valid') || e.code === 'INVALID')) {
         return 'Регион не распознан. Оставьте поле «Регион» пустым или укажите область/край (например: Москва, Московская область).'
       }
       if (msg.includes('required') || msg.includes('обязательное')) {
-        return 'Заполните все обязательные поля'
+        return `${field}Заполните это обязательное поле`
       }
       if (msg.includes('address') && msg.includes('required')) {
         return 'Адрес обязателен для заполнения'
       }
-      return msg
+      return `${field}${msg}`
     }).join(', ')
-    throw new Error(`Ошибка создания адреса: ${errorMessages}`)
+    throw new Error(`Ошибка: ${errorMessages}`)
   }
 
   if (!result.accountAddressCreate.user) {
@@ -139,12 +141,20 @@ export async function updateAddress(
     }
   `
 
-  const { countryArea, ...rest } = input
   const variables = {
     id,
     input: {
-      ...rest,
-      ...(countryArea?.trim() ? { countryArea: countryArea.trim() } : {}),
+      firstName: input.firstName,
+      lastName: input.lastName,
+      phone: input.phone,
+      country: input.country,
+      city: input.city,
+      streetAddress1: input.streetAddress1,
+      streetAddress2: input.streetAddress2 || '',
+      postalCode: input.postalCode,
+      companyName: input.companyName,
+      ...(input.countryArea?.trim() ? { countryArea: input.countryArea.trim() } : {}),
+      ...(input.cityArea?.trim() ? { cityArea: input.cityArea.trim() } : {}),
     },
   }
 

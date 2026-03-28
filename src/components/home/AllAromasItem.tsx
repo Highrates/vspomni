@@ -18,7 +18,7 @@ export default function AllAromasItem({ item }: AllAromasItemProps) {
       className="rounded-xl bg-white flex flex-col hover:shadow-lg transition-shadow"
     >
       {/* Image Container */}
-      <div className="w-full aspect-square sm:aspect-[369/384] relative overflow-hidden rounded-[12px] sm:rounded-[16px] bg-neutral-50">
+      <div className="w-full aspect-square relative overflow-hidden rounded-[12px] sm:rounded-[16px] bg-neutral-50">
         {item.image && (
           <Image
             src={item.image}
@@ -39,7 +39,7 @@ export default function AllAromasItem({ item }: AllAromasItemProps) {
           </h3>
         )}
         {!item.text && item.title && (
-          <h3 className="font-semibold text-brand text-[13px] sm:text-base lg:text-lg select-none cursor-pointer line-clamp-2 leading-tight">
+          <h3 className="font-semibold text-brand text-[12px] sm:text-base lg:text-lg select-none cursor-pointer line-clamp-2 leading-[1.2] break-words [hyphens:auto]">
             {item.title}
           </h3>
         )}

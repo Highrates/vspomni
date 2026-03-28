@@ -15,6 +15,8 @@ export default function OrderSummary() {
     discountAmount,
     discountType,
     appliedPromoCode,
+    shippingPrice,
+    shippingLoading,
     decreaseQuantity,
     increaseQuantity,
     removeItem,
@@ -31,6 +33,7 @@ export default function OrderSummary() {
       : discount > 0
         ? (subtotal * discount) / 100
         : 0
+
   return (
     <section className="select-none">
       <h2 className="text-2xl sm:text-3xl lg:text-[32px] leading-tight font-bold mb-8 sm:mb-12 lg:mb-20 mt-4 sm:mt-6 lg:mt-8">
@@ -40,20 +43,20 @@ export default function OrderSummary() {
       <div className='flex flex-col gap-3 sm:gap-4'>
 
         {items.length > 0 ? (
-                    items.map((item) => (
-                      <CartCard
-                        key={item.id}
-                        product={item.product}
-                        quantity={item.quantity}
-                        size={item.size}
-                        onDecrease={() => decreaseQuantity(item.id)}
-                        onIncrease={() => increaseQuantity(item.id)}
-                        onRemove={() => removeItem(item.id)}
-                      />
-                    ))
-                  ) : (
-                    <p className="text-black/60 text-center py-10">Корзина пуста</p>
-                  )}
+          items.map((item) => (
+            <CartCard
+              key={item.id}
+              product={item.product}
+              quantity={item.quantity}
+              size={item.size}
+              onDecrease={() => decreaseQuantity(item.id)}
+              onIncrease={() => increaseQuantity(item.id)}
+              onRemove={() => removeItem(item.id)}
+            />
+          ))
+        ) : (
+          <p className="text-black/60 text-center py-10">Корзина пуста</p>
+        )}
       </div>
 
       <PromoCodeInput checkoutId='sample-checkout-id' />
@@ -66,6 +69,8 @@ export default function OrderSummary() {
         appliedPromoCode={appliedPromoCode}
         discountPercent={discount}
         totalItems={totalItems}
+        shipping={shippingPrice}
+        shippingLoading={shippingLoading}
         discountType={discountType}
       />
     </section>
