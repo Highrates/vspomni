@@ -1,6 +1,7 @@
 import AddCartBtn from '../ui/addCartBtn'
 import Link from 'next/link'
 import { StarChoiceItem } from '@/types/product'
+import { productDetailPath } from '@/lib/productPaths'
 
 export interface ChoiceCardProps {
   product: StarChoiceItem
@@ -44,7 +45,10 @@ export default function ChoiceCard({product}: ChoiceCardProps) {
 
           {/* Название и цена */}
           <div className="flex flex-col flex-1 min-w-0 justify-between h-[52px]">
-            <Link href={'/product/' + product.slug} className="text-[16px] leading-[22px] font-semibold text-black truncate">
+            <Link
+              href={productDetailPath(product)}
+              className="text-[16px] leading-[22px] font-semibold text-black truncate"
+            >
               {product.name}
             </Link>
 

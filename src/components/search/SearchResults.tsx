@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { ProductNode } from '@/graphql/types/product.types'
+import { productDetailPath } from '@/lib/productPaths'
 
 interface SearchResultsProps {
   products: ProductNode[]
@@ -45,7 +46,10 @@ export default function SearchResults({ products, loading, onClose }: SearchResu
             return (
               <Link
                 key={product.id}
-                href={`/product/${product.slug}`}
+                href={productDetailPath({
+                  slug: product.slug,
+                  categorySlug: product.category?.slug,
+                })}
                 onClick={onClose}
                 className="flex items-center gap-4 p-3 hover:bg-black/5 rounded-lg transition-colors group"
               >

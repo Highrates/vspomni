@@ -144,3 +144,14 @@ export async function getAllAromas(): Promise<AllAromasItem[]> {
 
   return allAromas
 }
+
+/** Заголовок страницы аромата для крошек (по slug страницы Saleor) */
+export async function getAromaBreadcrumbTitleBySlug(
+  slug: string,
+): Promise<string | null> {
+  const list = await getAllAromas()
+  const item = list.find((a) => a.slug === slug)
+  if (!item) return null
+  const label = (item.text || item.title || '').trim()
+  return label || null
+}

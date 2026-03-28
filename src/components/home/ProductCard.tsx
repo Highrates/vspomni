@@ -9,6 +9,7 @@ import 'swiper/css'
 import 'swiper/css/pagination'
 import AddCartBtn from '@/components/ui/addCartBtn'
 import { ProductCardItem } from '@/types/product'
+import { productDetailPath } from '@/lib/productPaths'
 
 interface ProductCardProps {
   product: ProductCardItem
@@ -27,8 +28,8 @@ export default function ProductCard({ product, isNew = false, hideAromas = false
 
   return (
     <Link
-      href={'/product/' + product.slug}
-      className="rounded-xl bg-white sm:hover:shadow-xl sm:hover:-translate-y-1 transition-all duration-300 flex flex-col group"
+      href={productDetailPath(product)}
+      className="rounded-xl bg-white sm:hover:shadow-xl sm:hover:-translate-y-1 transition-all duration-300 flex h-full flex-col group"
       draggable={false}
     >
       <div className="w-full aspect-square sm:aspect-[369/384] relative overflow-hidden rounded-[12px] sm:rounded-[16px] bg-neutral-50">
@@ -93,18 +94,20 @@ export default function ProductCard({ product, isNew = false, hideAromas = false
         </div>
       </div>
 
-      <div className="flex flex-col gap-1 sm:gap-2 pt-2 sm:pt-3 pb-2 sm:pb-4 px-0.5 sm:px-1">
-        {!hideAromas && product.aromas && product.aromas.length > 0 && (
-          <p className="text-[11px] sm:text-xs text-neutral-500">
-            {product.aromas.join('  ')}
-          </p>
-        )}
+      <div className="flex flex-1 flex-col items-stretch gap-1 sm:gap-2 pt-2 sm:pt-3 pb-2 sm:pb-4 px-0.5 sm:px-1 min-w-0">
+        <div className="flex min-w-0 flex-col gap-1 sm:gap-2">
+          {!hideAromas && product.aromas && product.aromas.length > 0 && (
+            <p className="text-[11px] sm:text-xs text-neutral-500">
+              {product.aromas.join('  ')}
+            </p>
+          )}
 
-        <h3 className="font-semibold text-brand text-[12px] sm:text-base lg:text-lg select-none cursor-pointer line-clamp-2 leading-[1.2] break-words [hyphens:auto]">
-          {product.name}
-        </h3>
+          <h3 className="font-semibold text-brand text-[12px] sm:text-base lg:text-lg select-none cursor-pointer line-clamp-2 leading-[1.2] break-words [hyphens:auto]">
+            {product.name}
+          </h3>
+        </div>
 
-        <div className="flex items-center justify-between mt-1 sm:mt-2">
+        <div className="mt-auto flex w-full items-center justify-between pt-1 sm:pt-2">
           <div className="flex items-center gap-1.5">
             <span className="sm:hidden flex items-center gap-1">
               <ShoppingBag size={14} className="text-neutral-600" />

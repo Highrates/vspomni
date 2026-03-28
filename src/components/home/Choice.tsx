@@ -58,7 +58,7 @@ export default function Choice({ initialProducts = [] }: ChoiceProps) {
   }, [])
 
   return (
-    <section className="mt-4 sm:mt-6 md:mt-8 lg:mt-10 py-2 px-4 sm:px-6 md:px-8">
+    <section className="mt-4 sm:mt-6 md:mt-8 lg:mt-10 py-2 px-4 sm:px-0">
       <h2 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold text-black mb-6 sm:mb-8 flex items-center gap-2">
         Выбор{' '}
         <span className="text-[20px] sm:text-[24px] leading-none">⭐</span>

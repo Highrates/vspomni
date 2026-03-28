@@ -21,6 +21,7 @@ export interface ProductNode extends Node {
   category?: {
     id: string;
     name: string;
+    slug?: string;
   };
   collections?: ProductCollections[];
   defaultVariant?: BestSellersProductVariant;
@@ -42,6 +43,7 @@ export interface ProductDetailNode extends Omit<ProductNode, 'category'> {
   category: {
     name: string;
     id: string;
+    slug?: string;
   };
   media: MediaItem[];
   productVariants: {

@@ -187,3 +187,27 @@ export async function getCategoryById(id: string): Promise<Category | null> {
     return null
   }
 }
+
+/** Имя и slug категории по slug (для заголовка страницы, без зависимости от zustand) */
+export async function getCategoryMetaBySlug(
+  slug: string,
+): Promise<{ name: string; slug: string } | null> {
+  const query = `
+    query CategoryMeta($slug: String!) {
+      category(slug: $slug) {
+        name
+        slug
+      }
+    }
+  `
+  try {
+    const data = await graphqlRequest<{
+      category: { name: string; slug: string } | null
+    }>(query, { slug })
+    const c = data.category
+    if (!c?.name || !c?.slug) return null
+    return { name: c.name, slug: c.slug }
+  } catch {
+    return null
+  }
+}

@@ -27,7 +27,7 @@ export default function ProductGrid() {
     <section
       id="vse-aromaty"
       ref={sectionRef}
-      className="mt-4 mb-2 sm:mt-6 sm:mb-3 md:mt-8 md:mb-4 lg:mt-10 lg:mb-5 px-4 sm:px-6 md:px-8 py-2 scroll-mt-20"
+      className="mt-4 mb-2 sm:mt-6 sm:mb-3 md:mt-8 md:mb-4 lg:mt-10 lg:mb-5 px-4 sm:px-0 py-2 scroll-mt-20"
       style={{ scrollMarginTop: '80px' }}
     >
       <div className="flex items-center justify-between mb-4 sm:mb-5 md:mb-6">

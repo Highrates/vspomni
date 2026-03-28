@@ -74,6 +74,7 @@ export async function getSingleProduct(
         category {
           name
           id
+          slug
         }
         productVariants(first: 10) {
           edges {
@@ -123,6 +124,68 @@ export async function getSingleProduct(
   const variables = { slug, channel: CHANNEL }
   const data = await graphqlRequest<ProductData>(query, variables)
   return data.product
+}
+
+/** Имя товара и категории для крошек (server) */
+export async function getProductBreadcrumbMeta(productSlug: string): Promise<{
+  productName: string
+  categoryName: string | null
+  categorySlug: string | null
+} | null> {
+  const query = `
+    query ProductBreadcrumb($slug: String!, $channel: String!) {
+      product(slug: $slug, channel: $channel) {
+        name
+        slug
+        category {
+          name
+          slug
+        }
+      }
+    }
+  `
+  try {
+    const data = await graphqlRequest<{
+      product: {
+        name: string
+        slug: string
+        category: { name: string; slug: string } | null
+      } | null
+    }>(query, { slug: productSlug, channel: CHANNEL })
+    const p = data.product
+    if (!p?.name) return null
+    return {
+      productName: p.name,
+      categoryName: p.category?.name?.trim() || null,
+      categorySlug: p.category?.slug?.trim() || null,
+    }
+  } catch {
+    return null
+  }
+}
+
+/** Для редиректа /product/slug → /category/{cat}/slug (server) */
+export async function getProductCategorySlugForRedirect(
+  productSlug: string,
+): Promise<string | null> {
+  const query = `
+    query ProductCategorySlug($slug: String!, $channel: String!) {
+      product(slug: $slug, channel: $channel) {
+        category {
+          slug
+        }
+      }
+    }
+  `
+  try {
+    const data = await graphqlRequest<{
+      product: { category: { slug: string } | null } | null
+    }>(query, { slug: productSlug, channel: CHANNEL })
+    const s = data.product?.category?.slug?.trim()
+    return s || null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -211,6 +274,7 @@ export async function getAllWarehouses(
 function mapNodeToProductCard(
   node: any,
   externalDiscounts?: Record<string, number>,
+  opts?: { categorySlug?: string },
 ): ProductCardItem {
   const variant = node.productVariants.edges[0].node
   const price = variant.pricing.price.gross.amount
@@ -279,10 +343,14 @@ function mapNodeToProductCard(
   const height = Number(getMeta('dimensions.height_mm')) || undefined
   const weight = variant.weight?.value || undefined
 
+  const categorySlug =
+    (opts?.categorySlug ?? node.category?.slug)?.trim() || undefined
+
   return {
     id: variant.id,
     name: node.name,
     slug: node.slug,
+    categorySlug,
     thumbnail: node.thumbnail?.url ?? '',
     image: node.media?.[0]?.url ?? '',
     gallery: (node.media || []).map((m: any) => m?.url).filter(Boolean),
@@ -423,6 +491,9 @@ export async function getGreedProducts(): Promise<any> {
           name
           slug
         }
+        category {
+          slug
+        }
         productVariants(first: 12) {
           edges {
             node {
@@ -526,6 +597,9 @@ export async function getPopularProducts(): Promise<any> {
           name
           slug
         }
+        category {
+          slug
+        }
         productVariants(first: 12) {
           edges {
             node {
@@ -618,6 +692,9 @@ export async function getCatalogAllProducts(
             collections {
               id
               name
+              slug
+            }
+            category {
               slug
             }
             productVariants(first: 12) {
@@ -734,6 +811,9 @@ export async function getChoiceProducts(): Promise<any> {
         id
         name
         slug
+        category {
+          slug
+        }
         thumbnail {
           url
           alt
@@ -839,6 +919,7 @@ export async function getChoiceProducts(): Promise<any> {
         id: variantNode.id,
         name: n.name,
         slug: n.slug,
+        categorySlug: n.category?.slug?.trim() || undefined,
         thumbnail: thumbUrl,
         image: imageUrl,
         price: parseFloat(String(amount)),
@@ -873,6 +954,7 @@ export async function getProductsByCollectionId(
             thumbnail { url alt }
             media { id alt url }
             collections { id name slug }
+            category { slug }
             productVariants(first: 12) {
               edges {
                 node {
@@ -936,6 +1018,7 @@ export async function getProductsByAromaSlug(aromaSlug: string): Promise<Product
             thumbnail { url alt }
             media { id alt url }
             collections { id name slug }
+            category { slug }
             productVariants(first: 12) {
               edges {
                 node {
@@ -994,6 +1077,7 @@ export async function getProductsByAromaValue(aromaName: string): Promise<Produc
             thumbnail { url alt }
             media { id alt url }
             collections { id name slug }
+            category { slug }
             productVariants(first: 12) {
               edges {
                 node {
@@ -1053,6 +1137,9 @@ export async function getProductsByCategorySlug(categorySlug: string): Promise<a
         collections{
           id
           name
+          slug
+        }
+        category {
           slug
         }
         productVariants(first: 12) {

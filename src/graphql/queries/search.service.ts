@@ -30,6 +30,9 @@ export async function searchProducts(query: string, first = 10): Promise<Product
             name
             slug
             rating
+            category {
+              slug
+            }
             thumbnail {
               url
               alt
@@ -81,6 +84,9 @@ export async function searchProducts(query: string, first = 10): Promise<Product
                 name
                 slug
                 rating
+                category {
+                  slug
+                }
                 thumbnail {
                   url
                   alt
@@ -138,6 +144,9 @@ export async function searchProducts(query: string, first = 10): Promise<Product
                 name
                 slug
                 rating
+                category {
+                  slug
+                }
                 thumbnail {
                   url
                   alt

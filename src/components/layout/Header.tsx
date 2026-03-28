@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Search, User, ShoppingBag, Send, Menu, X } from 'lucide-react'
 import ModalCart from '../modals/CartModal'
@@ -30,6 +30,8 @@ export default function Header({ variant = 'default' }: HeaderProps) {
   const cartHasItems = useCartStore((state) => state.totalItems > 0)
   const { isAuthenticated } = useAuthStore()
   const router = useRouter()
+  const pathname = usePathname()
+  const isHome = pathname === '/'
 
   const searchRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -124,18 +126,30 @@ export default function Header({ variant = 'default' }: HeaderProps) {
         style={{ height: '80px' }}
       >
         <div className="flex items-center justify-between h-full px-4 sm:px-6 md:px-[33px] container">
-          <Link
-            href="/"
-            className="text-base sm:text-[18px] font-semibold tracking-wide"
-          >
-            <Image
-              src={'/logo/logo-vspomni.svg'}
-              alt="logo"
-              width={100}
-              height={20}
-              className={isOverlay && !scrolled ? 'brightness-0 invert' : ''}
-            />
-          </Link>
+          {isHome ? (
+            <span className="text-base sm:text-[18px] font-semibold tracking-wide inline-flex shrink-0">
+              <Image
+                src={'/logo/logo-vspomni.svg'}
+                alt="Vspomni"
+                width={100}
+                height={20}
+                className={isOverlay && !scrolled ? 'brightness-0 invert' : ''}
+              />
+            </span>
+          ) : (
+            <Link
+              href="/"
+              className="text-base sm:text-[18px] font-semibold tracking-wide inline-flex shrink-0"
+            >
+              <Image
+                src={'/logo/logo-vspomni.svg'}
+                alt="Vspomni"
+                width={100}
+                height={20}
+                className={isOverlay && !scrolled ? 'brightness-0 invert' : ''}
+              />
+            </Link>
+          )}
 
           {/* Desktop Menu */}
           <div

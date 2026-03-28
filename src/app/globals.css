@@ -403,13 +403,12 @@
   border-radius: 3px !important;
 }
 
-/* React Toastify: по центру экрана */
 .Toastify__toast-container.vspomni-toast-container {
-  top: 50% !important;
+  top: 20% !important;
   left: 50% !important;
   right: auto !important;
   bottom: auto !important;
-  transform: translate(-50%, -50%) !important;
+  transform: translateX(-50%) !important;
   width: auto !important;
   max-width: min(90vw, 420px);
   padding: 0 !important;

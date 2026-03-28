@@ -59,6 +59,8 @@ export interface ProductCardItem {
   id: string;
   name: string;
   slug: string;
+  /** Slug категории Saleor для ЧПУ /category/{categorySlug}/{slug} */
+  categorySlug?: string;
   size: string;
   thumbnail: string;
   image: string;
@@ -86,5 +88,5 @@ export interface StarChoiceItem {
   star: string;
   date: string
   slug: string;
-
+  categorySlug?: string;
 }
