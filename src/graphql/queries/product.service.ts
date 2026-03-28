@@ -595,11 +595,133 @@ export async function getPopularProducts(): Promise<any> {
   return result
 }
 
+/** Все товары канала (каталог). Saleor: не больше 100 записей за запрос */
+export async function getCatalogAllProducts(
+  maxProducts: number = 500,
+): Promise<ProductCardItem[]> {
+  const pageSize = 100
+  const nodeFragment = `
+            id
+            name
+            description
+            slug
+            rating
+            thumbnail {
+              url
+              alt
+            }
+            media {
+              id
+              alt
+              url
+            }
+            collections {
+              id
+              name
+              slug
+            }
+            productVariants(first: 12) {
+              edges {
+                node {
+                  id
+                  name
+                  sku
+                  pricing {
+                    price {
+                      gross {
+                        currency
+                        amount
+                      }
+                    }
+                    priceUndiscounted {
+                      gross {
+                        currency
+                        amount
+                      }
+                    }
+                    discount {
+                      net {
+                        amount
+                        currency
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            attributes {
+              attribute {
+                id
+                slug
+                name
+              }
+              values {
+                name
+              }
+            }
+  `
+
+  const query = `
+    query getCatalogAllProducts($channel: String!, $first: Int!, $after: String) {
+      products(first: $first, channel: $channel, after: $after) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        edges {
+          node {
+            ${nodeFragment}
+          }
+        }
+      }
+    }
+  `
+
+  const allNodes: any[] = []
+  let after: string | undefined
+  let safety = 0
+  const maxPages = Math.ceil(maxProducts / pageSize) + 2
+
+  while (allNodes.length < maxProducts && safety < maxPages) {
+    safety += 1
+    const first = Math.min(pageSize, maxProducts - allNodes.length)
+    const variables: Record<string, unknown> = {
+      channel: CHANNEL,
+      first,
+      after: after ?? null,
+    }
+
+    const data = await graphqlRequest<{
+      products: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null }
+        edges: { node: any }[]
+      }
+    }>(query, variables)
+
+    const edges = data.products?.edges ?? []
+    for (const e of edges) {
+      if (e?.node) allNodes.push(e.node)
+    }
+
+    const pi = data.products?.pageInfo
+    if (!pi?.hasNextPage || !edges.length) break
+    after = pi.endCursor ?? undefined
+    if (!after) break
+  }
+
+  const variantIds = allNodes
+    .map((node: any) => node.productVariants?.edges?.[0]?.node?.id as string)
+    .filter(Boolean)
+  const discounts = await getCatalogDiscounts(variantIds)
+  return allNodes.map((node: any) => mapNodeToProductCard(node, discounts))
+}
+
 /**
  * QUERY: Fetches bestseller products from a collection.
  * SERVICE NAME: collection (Bestsellers)
  */
 export async function getChoiceProducts(): Promise<any> {
+  /* Не запрашиваем assignedAttributes: на проде тип multiselect-images даёт KeyError в резолвере Saleor. */
   const query = `
     query getGreedProducts($channel: String!) {
   products(
@@ -611,22 +733,13 @@ export async function getChoiceProducts(): Promise<any> {
       node {
         id
         name
-        description
         slug
-        rating
         thumbnail {
           url
           alt
         }
         media {
-          id
-          alt
           url
-        }
-        collections{
-          id
-          name
-          slug
         }
         productVariants(first: 12) {
           edges {
@@ -648,28 +761,16 @@ export async function getChoiceProducts(): Promise<any> {
                     amount
                   }
                 }
-                priceUndiscounted {
-                  gross {
-                    currency
-                    amount
-                  }
-                }
-                discount {
-                  net {
-                    amount
-                    currency
-                  }
-                }
               }
             }
           }
         }
-        attributes{
-          attribute{
-            name  
+        attributes {
+          attribute {
+            name
             slug
           }
-          values{
+          values {
             name
             file {
               url
@@ -687,53 +788,67 @@ export async function getChoiceProducts(): Promise<any> {
   }
 
   const data = await graphqlRequest<BestSellersResponse>(query, variables)
-  const result = data.products.edges.map((node: any) => {
-    const n = node.node
-    const photoAttr = n.attributes?.find(
-      (i: any) =>
-        i.attribute?.slug === 'vybor-foto' ||
-        i.attribute?.slug === 'vybor-photo' ||
-        i.attribute?.name?.toLowerCase().includes('фото') ||
-        i.attribute?.name?.toLowerCase().includes('photo'),
-    )
-    const choicePhotoUrl = photoAttr?.values?.[0]?.file?.url
-    const mediaUrl = n.media?.[0]?.url || n.media?.edges?.[0]?.node?.url
-    const imageUrl = choicePhotoUrl || mediaUrl || n.thumbnail?.url || '/images/choice-1.jpg'
+  const edges = data.products?.edges ?? []
+  const result = edges
+    .map((edge: any) => {
+      const n = edge?.node
+      if (!n) return null
+      const variantNode = n.productVariants?.edges?.[0]?.node
+      const thumbUrl = n.thumbnail?.url
+      if (!variantNode || !thumbUrl) return null
 
-    const nameAttr = n.attributes?.find(
-      (i: any) =>
-        i.attribute?.slug === 'vybor-imya' ||
-        i.attribute?.slug === 'vybor-name' ||
-        i.attribute?.name?.toLowerCase().includes('имя') ||
-        i.attribute?.name?.toLowerCase().includes('name'),
-    )
-    const star = nameAttr?.values?.[0]?.name || ''
+      const photoAttr = n.attributes?.find(
+        (i: any) =>
+          i.attribute?.slug === 'vybor-foto' ||
+          i.attribute?.slug === 'vybor-photo' ||
+          i.attribute?.name?.toLowerCase().includes('фото') ||
+          i.attribute?.name?.toLowerCase().includes('photo'),
+      )
+      const choicePhotoUrl = photoAttr?.values?.[0]?.file?.url
+      const mediaUrl =
+        (Array.isArray(n.media) && n.media[0]?.url) ||
+        n.media?.edges?.[0]?.node?.url
+      const imageUrl =
+        (choicePhotoUrl && String(choicePhotoUrl).trim()) ||
+        mediaUrl ||
+        thumbUrl ||
+        '/images/choice-1.jpg'
 
-    const dateAttr = n.attributes?.find(
-      (i: any) =>
-        i.attribute?.slug === 'vybor-data' ||
-        i.attribute?.slug === 'vybor-date' ||
-        i.attribute?.name?.toLowerCase().includes('дата') ||
-        i.attribute?.name?.toLowerCase().includes('date'),
-    )
-    const date = dateAttr?.values?.[0]?.name || ''
-    const variant = node.node.productVariants?.edges?.[0]?.node
-    const thumbUrl = node.node.thumbnail?.url
-    return {
-      id: variant?.id ?? node.node.id,
-      name: node.node.name,
-      slug: node.node.slug,
-      thumbnail: thumbUrl ?? '',
-      image: imageUrl,
-      price: parseFloat(
-        variant?.pricing?.price?.gross?.amount ?? '0',
-      ),
-      oldPrice: 0,
-      size: variant?.name ?? '',
-      star: star,
-      date: formatDate(date),
-    }
-  })
+      const nameAttr = n.attributes?.find(
+        (i: any) =>
+          i.attribute?.slug === 'vybor-imya' ||
+          i.attribute?.slug === 'vybor-name' ||
+          i.attribute?.name?.toLowerCase().includes('имя') ||
+          i.attribute?.name?.toLowerCase().includes('name'),
+      )
+      const star = nameAttr?.values?.[0]?.name || ''
+
+      const dateAttr = n.attributes?.find(
+        (i: any) =>
+          i.attribute?.slug === 'vybor-data' ||
+          i.attribute?.slug === 'vybor-date' ||
+          i.attribute?.name?.toLowerCase().includes('дата') ||
+          i.attribute?.name?.toLowerCase().includes('date'),
+      )
+      const dateRaw = dateAttr?.values?.[0]?.name || ''
+
+      const amount = variantNode.pricing?.price?.gross?.amount
+      if (amount == null) return null
+
+      return {
+        id: variantNode.id,
+        name: n.name,
+        slug: n.slug,
+        thumbnail: thumbUrl,
+        image: imageUrl,
+        price: parseFloat(String(amount)),
+        oldPrice: 0,
+        size: variantNode.name ?? '',
+        star,
+        date: formatDate(dateRaw),
+      }
+    })
+    .filter(Boolean)
 
   return result
 }

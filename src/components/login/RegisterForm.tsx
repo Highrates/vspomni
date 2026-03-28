@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { toast } from 'react-toastify'
 import PhoneInput from '@/components/ui/PhoneInput'
+import { isValidRuPhone } from '@/lib/ruPhone'
 
 type TPropss = {
   onVerify: (email: string) => void
@@ -24,6 +25,10 @@ const RegisterForm = ({ onVerify, onLogin }: TPropss) => {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (checked && email.length > 5 && password.length > 3) {
+      if (phone.trim() && !isValidRuPhone(phone)) {
+        toast.error('Введите полный номер в формате +7 (900) 000-00-00')
+        return
+      }
       try {
         const { signUpService } = await import('@/graphql/queries/auth.service')
         const result = await signUpService(
@@ -147,6 +152,7 @@ const RegisterForm = ({ onVerify, onLogin }: TPropss) => {
           <PhoneInput
             value={phone}
             onChange={(value) => setPhone(value)}
+            placeholder="+7 (900) 000-00-00"
           />
         </div>
         <div>

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { getMeInfo } from '@/graphql/queries/auth.service'
+import { formatPhoneInputValue } from '@/lib/ruPhone'
 import { User } from '@/types/user'
 import { useAuthStore } from '@/stores/useAuth'
 
@@ -55,7 +56,8 @@ export const useUserStore = create<AuthState>()(
             const localPhone = state.user.phone || ''
             // если бэкенд вернул телефон и локально он ещё пустой → берём бэкенд
             // если локально уже что‑то есть → НЕ затираем его старым значением с бэка
-            const finalPhone = localPhone || phoneFromAddress || ''
+            const rawPhone = localPhone || phoneFromAddress || ''
+            const finalPhone = rawPhone ? formatPhoneInputValue(rawPhone) : ''
 
             return {
               user: {

@@ -108,9 +108,10 @@ export default function FaqBlock() {
                   transition={{ duration: 0.3, ease: 'easeInOut' }}
                   className="overflow-hidden"
                 >
-                  <p className="text-[14px] sm:text-[15px] md:text-md text-black/70 leading-5 sm:leading-[22px] pb-4 sm:pb-5">
-                    {item.answer}
-                  </p>
+                  <div
+                    className="text-[14px] sm:text-[15px] md:text-md text-black/70 leading-5 sm:leading-[22px] pb-4 sm:pb-5 faq-answer [&_a]:underline [&_a]:text-[#3D83F6] hover:[&_a]:opacity-80"
+                    dangerouslySetInnerHTML={{ __html: item.answer }}
+                  />
                 </motion.div>
               </li>
             )

@@ -109,7 +109,7 @@ export default function StoryBlock() {
                     />
                   </div>
                 </button>
-                <span className="text-[11px] sm:text-[12px] md:text-[13px] leading-[14px] sm:leading-[15px] md:leading-[16px] font-medium mt-1.5 sm:mt-2 text-neutral-700 text-center max-w-[70px] sm:max-w-[80px] md:max-w-[88px] lg:max-w-[96px] truncate">
+                <span className="text-[11px] sm:text-[12px] md:text-[13px] leading-[14px] sm:leading-[15px] md:leading-[16px] font-medium mt-1.5 sm:mt-2 text-neutral-700 text-center max-w-[70px] sm:max-w-[80px] md:max-w-[88px] lg:max-w-[96px] line-clamp-2 break-words hyphens-auto">
                   {group.title}
                 </span>
               </div>

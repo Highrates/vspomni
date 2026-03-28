@@ -8,6 +8,7 @@ import { CustomButton as Button } from '../common/CustomButton'
 import { AddressInfo } from '@/graphql/types/auth.types'
 import { createAddress, updateAddress } from '@/graphql/queries/adress.service'
 import PhoneInput from '../ui/PhoneInput'
+import { formatPhoneInputValue, isValidRuPhone } from '@/lib/ruPhone'
 import { useUserStore } from '@/stores/useUser'
 import CdekPvzList, { type CdekPvzInfo } from '../ui/CdekPvzList'
 import YandexPvzList from '../ui/YandexPvzList'
@@ -88,7 +89,7 @@ export default function AddressModal({
         setFormData({
           firstName: addressToEdit.firstName || '',
           lastName: addressToEdit.lastName || '',
-          phone: addressToEdit.phone || '',
+          phone: formatPhoneInputValue(addressToEdit.phone || ''),
           country: countryCode || 'RU', // По умолчанию Россия
           countryArea: addressToEdit.countryArea || '',
           city: addressToEdit.city || '', // Ensure this is not undefined
@@ -105,7 +106,7 @@ export default function AddressModal({
           ...initialFormState,
           firstName: user.name || '',
           lastName: user.familyName || '',
-          phone: user.phone || '',
+          phone: formatPhoneInputValue(user.phone || ''),
         })
       }
     } else {
@@ -158,7 +159,12 @@ export default function AddressModal({
     if (!formData.firstName.trim()) newErrors.firstName = 'Заполните имя'
     if (!formData.lastName.trim()) newErrors.lastName = 'Заполните фамилию'
     if (!formData.phone.trim()) newErrors.phone = 'Укажите номер телефона'
+    else if (!isValidRuPhone(formData.phone)) {
+      newErrors.phone = 'Номер в формате +7 (900) 000-00-00'
+    }
+    if (!formData.countryArea.trim()) newErrors.countryArea = 'Обязательное поле'
     if (!formData.city.trim()) newErrors.city = 'Заполните город'
+    if (!formData.cityArea.trim()) newErrors.cityArea = 'Обязательное поле'
     if (!formData.streetAddress1.trim())
       newErrors.streetAddress1 = 'Заполните улицу и номер дома'
     if (!formData.postalCode.trim()) {
@@ -379,6 +385,8 @@ export default function AddressModal({
             value={formData.phone}
             onChange={(value) => handleInputChange('phone', value)}
             error={errors.phone}
+            placeholder="+7 (900) 000-00-00"
+            showFormatHint={false}
           />
 
           {/* Доставка: выбор ПВЗ */}

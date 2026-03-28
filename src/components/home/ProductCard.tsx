@@ -28,7 +28,7 @@ export default function ProductCard({ product, isNew = false, hideAromas = false
   return (
     <Link
       href={'/product/' + product.slug}
-      className="rounded-xl bg-white hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col group"
+      className="rounded-xl bg-white sm:hover:shadow-xl sm:hover:-translate-y-1 transition-all duration-300 flex flex-col group"
       draggable={false}
     >
       <div className="w-full aspect-square sm:aspect-[369/384] relative overflow-hidden rounded-[12px] sm:rounded-[16px] bg-neutral-50">
@@ -124,6 +124,16 @@ export default function ProductCard({ product, isNew = false, hideAromas = false
           <div className="hidden sm:block shrink-0" onClick={(e) => e.preventDefault()}>
             <AddCartBtn product={product} size={product.size} variantId={product.variantId} />
           </div>
+        </div>
+
+        {/* Мобилка: «В корзину» / степпер под ценой */}
+        <div className="sm:hidden mt-2 w-full" onClick={(e) => e.preventDefault()}>
+          <AddCartBtn
+            product={product}
+            size={product.size}
+            variantId={product.variantId}
+            mobileRow
+          />
         </div>
       </div>
     </Link>

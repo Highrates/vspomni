@@ -7,6 +7,7 @@ import YooKassaWidget from '@/components/ui/YooKassaWidget'
 import { createCart } from '@/graphql/queries/cart.service'
 import { getSingleProduct } from '@/graphql/queries/product.service'
 import { toast } from 'react-toastify'
+import { isValidRuPhone } from '@/lib/ruPhone'
 
 export default function PaymentBlock() {
   const [confirmationToken, setConfirmationToken] = useState<string | null>(null)
@@ -446,7 +447,7 @@ export default function PaymentBlock() {
             user.familyName.length > 0 &&
             user.email.length > 5 &&
             user.email.includes('@') &&
-            user.phone.length > 0,
+            isValidRuPhone(user.phone),
           )
         }
         onClick={handleCreateDraftOrder}

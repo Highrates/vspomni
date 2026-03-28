@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation'
 import Footer from '@/components/layout/Footer'
 import Header from '@/components/layout/Header'
 import { ToastContainer } from 'react-toastify'
+import 'react-toastify/dist/ReactToastify.css'
 
 export default function ClientChrome({
   children,
@@ -30,7 +31,14 @@ export default function ClientChrome({
       >
         <div className="container">{children}</div>
       </main>
-      <ToastContainer pauseOnHover={false} theme="dark" />
+      <ToastContainer
+        className="vspomni-toast-container"
+        position="top-center"
+        autoClose={2000}
+        pauseOnHover={false}
+        theme="dark"
+        limit={3}
+      />
       {!hideChrome && <Footer />}
     </>
   )

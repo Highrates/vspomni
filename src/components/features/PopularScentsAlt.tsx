@@ -21,7 +21,7 @@ export default function PopularScentsAlt() {
           Диффузоры для дома
         </h3>
         <Link
-          href="/catalog"
+          href="/category/diffuzory"
           className="text-base text-black font-medium flex items-center -ml-5"
         >
           <span className="text-md font-medium">Все</span>

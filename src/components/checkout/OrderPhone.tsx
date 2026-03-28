@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import PhoneInput from '../ui/PhoneInput'
 import { useUserStore } from '@/stores/useUser'
+import { formatPhoneInputValue } from '@/lib/ruPhone'
 
 const OrderPhone = () => {
   const { user, setUser } = useUserStore()
@@ -11,7 +12,7 @@ const OrderPhone = () => {
   // Подтягиваем телефон из профиля при загрузке
   useEffect(() => {
     if (user.phone) {
-      setPhone(user.phone)
+      setPhone(formatPhoneInputValue(user.phone))
     }
   }, [user.phone])
 
@@ -27,6 +28,7 @@ const OrderPhone = () => {
         <PhoneInput
           onChange={(value) => handlePhoneChange(value)}
           value={phone}
+          placeholder="+7 (900) 000-00-00"
         />
       </div>
     </>

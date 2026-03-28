@@ -26,7 +26,8 @@ export default function Header({ variant = 'default' }: HeaderProps) {
   const [searchResults, setSearchResults] = useState<ProductNode[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
   
-  const cartQuantity = useCartStore((state) => state.items.length)
+  const cartQuantity = useCartStore((state) => state.totalItems)
+  const cartHasItems = useCartStore((state) => state.totalItems > 0)
   const { isAuthenticated } = useAuthStore()
   const router = useRouter()
 
@@ -107,6 +108,7 @@ export default function Header({ variant = 'default' }: HeaderProps) {
   }
 
   const iconColor = isOverlay && !scrolled ? '#FFFFFF' : '#000000'
+  const cartIconColor = cartHasItems ? '#E52F20' : iconColor
 
   return (
     <>
@@ -172,7 +174,7 @@ export default function Header({ variant = 'default' }: HeaderProps) {
                 className="relative hover:opacity-70 transition-opacity cursor-pointer"
                 onClick={() => setShowCart(!showCart)}
               >
-                <ShoppingBag size={22} strokeWidth={1.8} color={iconColor} />
+                <ShoppingBag size={22} strokeWidth={1.8} color={cartIconColor} />
                 <span className={`absolute -top-1 -right-4 text-[12px] font-semibold ${isOverlay && !scrolled ? 'text-white' : 'text-black'}`}>
                   ({cartQuantity})
                 </span>
@@ -203,7 +205,7 @@ export default function Header({ variant = 'default' }: HeaderProps) {
               className="relative cursor-pointer"
               onClick={() => setShowCart(!showCart)}
             >
-              <ShoppingBag size={20} strokeWidth={1.8} color={iconColor} />
+              <ShoppingBag size={20} strokeWidth={1.8} color={cartIconColor} />
               <span className={`absolute -top-1 -right-3 text-[11px] font-semibold ${isOverlay && !scrolled ? 'text-white' : 'text-black'}`}>
                 ({cartQuantity})
               </span>

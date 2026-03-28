@@ -12,6 +12,9 @@ import {
   TabsTrigger,
 } from '@/components/ui/profile-tabs'
 import Image from 'next/image'
+import Link from 'next/link'
+import PhoneInput from '@/components/ui/PhoneInput'
+import { isValidRuPhone } from '@/lib/ruPhone'
 import OrdersTabs from './orders-tabs'
 
 // --- Imports from OrderDelivery logic ---
@@ -192,6 +195,11 @@ export default function ProfileIndex() {
           : null
       if (!token || token === 'null' || token === 'undefined') {
         toast.error('Сессия истекла. Войдите снова.')
+        return
+      }
+
+      if (user.phone.trim() && !isValidRuPhone(user.phone)) {
+        toast.error('Введите полный номер в формате +7 (900) 000-00-00')
         return
       }
 
@@ -405,9 +413,14 @@ export default function ProfileIndex() {
             <div className="mt-8 md:mt-[55px] h-px bg-textgrey mb-6" />
             <div>
               <p className="text-sm text-textgrey mb-1">Нужна помощь?</p>
-              <button className="text-md font-medium cursor-pointer hover:underline">
+              <Link
+                href="https://t.me/vspomni_zabota"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-md font-medium cursor-pointer hover:underline inline-block"
+              >
                 Свяжитесь с нами
-              </button>
+              </Link>
             </div>
           </aside>
 
@@ -479,12 +492,13 @@ export default function ProfileIndex() {
                       <label className="block text-xs sm:text-sm mb-2 sm:mb-2.5 text-textgrey">
                         Телефон
                       </label>
-                      <input
-                        type="tel"
-                        name="phone"
+                      <PhoneInput
+                        hideLabel
                         value={user.phone}
-                        onChange={handleChange}
-                        className="w-full rounded-xl bg-[#F9F7F5] px-3 sm:px-4 text-sm sm:text-md font-medium py-2 border border-bordergrey outline-none focus:outline-none focus:ring-1 focus:ring-black transition-all"
+                        onChange={(v) => setUser({ ...user, phone: v })}
+                        showFormatHint={false}
+                        placeholder="+7 (900) 000-00-00"
+                        inputClassName="w-full rounded-xl bg-[#F9F7F5] px-3 sm:px-4 text-sm sm:text-md font-medium py-2 h-auto min-h-[42px] border border-bordergrey outline-none focus:outline-none focus:ring-1 focus:ring-black transition-all"
                       />
                     </div>
                   </div>
