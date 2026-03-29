@@ -11,8 +11,6 @@ import PhoneInput from '../ui/PhoneInput'
 import { formatPhoneInputValue, isValidRuPhone } from '@/lib/ruPhone'
 import { useUserStore } from '@/stores/useUser'
 import CdekPvzList, { type CdekPvzInfo } from '../ui/CdekPvzList'
-import YandexPvzList from '../ui/YandexPvzList'
-import type { YandexPickupPoint } from '@/types/yandexDelivery'
 
 interface AddressModalProps {
   visible: boolean
@@ -42,6 +40,7 @@ interface FormErrors {
   [key: string]: string
 }
 
+/** Одна сущность для профиля и checkout: `ProfileIndex`, `OrderDelivery`. */
 export default function AddressModal({
   visible,
   onClose,
@@ -78,6 +77,7 @@ export default function AddressModal({
   useEffect(() => {
     if (visible) {
       setShow(true)
+      setDeliveryService('cdek')
 
       if (addressToEdit) {
         // Safe extraction of country code (handles if backend returns object or string)
@@ -286,34 +286,6 @@ export default function AddressModal({
     }))
   }
 
-  const handleYandexPvzChoose = (pvz: YandexPickupPoint) => {
-    // Город может быть в locality или в region (если это город-регион)
-    const city = pvz.address?.locality || pvz.address?.region || ''
-    const region = pvz.address?.region || ''
-
-    const isMoscow = city.toLowerCase().includes('москва') || city.toLowerCase().includes('зеленоград')
-    const finalRegion = isMoscow ? 'Москва' : (region || '')
-
-    setFormData((prev) => ({
-      ...prev,
-      country: 'RU',
-      countryArea: finalRegion,
-      city: city || prev.city,
-      cityArea: pvz.address?.sub_region || pvz.address?.subRegion || prev.cityArea || '',
-      streetAddress1: pvz.address?.full_address || prev.streetAddress1,
-      postalCode: pvz.address?.postal_code || prev.postalCode,
-      companyName: pvz.name || prev.companyName,
-    }))
-    setErrors((prev) => ({
-      ...prev,
-      countryArea: '',
-      city: '',
-      cityArea: '',
-      streetAddress1: '',
-      postalCode: '',
-    }))
-  }
-
   if (!show) return null
 
   return (
@@ -400,7 +372,6 @@ export default function AddressModal({
               </div>
             </div>
 
-            {/* Tabs Trigger */}
             <div className="flex gap-2 p-1 bg-black/5 rounded-xl">
               <button
                 type="button"
@@ -410,22 +381,25 @@ export default function AddressModal({
               >
                 СДЭК
               </button>
-              {/* === ЯНДЕКС ПВЗ (временно отключен, ждём ответ поддержки по NDD) ===
               <button
                 type="button"
                 onClick={() => setDeliveryService('yandex')}
-                className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${deliveryService === 'yandex' ? 'bg-[#FFCC00] shadow-sm text-black' : 'text-black/40 hover:text-black/60'
+                className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${deliveryService === 'yandex' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
                   }`}
               >
                 Яндекс
               </button>
-              */}
             </div>
 
-            <div className="mt-2 border border-black/10 rounded-xl p-3 bg-white max-h-[400px] overflow-y-auto">
-              {/* Пока только СДЭК, Яндекс закомментирован */}
-              <CdekPvzList onChoose={handleCdekPvzChoose} />
-              {/* deliveryService === 'yandex' && <YandexPvzList onChoose={handleYandexPvzChoose} /> */}
+            <div className="mt-2 border border-black/10 rounded-xl p-3 bg-white max-h-[400px] overflow-y-auto min-h-[200px]">
+              {deliveryService === 'cdek' ? (
+                <CdekPvzList onChoose={handleCdekPvzChoose} />
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-2 py-12 px-4 text-center text-black/50 text-sm">
+                  <p className="font-medium text-black/70">Яндекс.Доставка</p>
+                  <p>Виджет выбора пункта выдачи будет доступен здесь позже.</p>
+                </div>
+              )}
             </div>
           </div>
 

@@ -9,7 +9,14 @@ import 'swiper/css/effect-fade'
 
 import { motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
-import { getSlider, getMobileSlider, getHeroBottomBanners, SliderItem } from '@/graphql/queries/slider.service'
+import Link from 'next/link'
+import {
+  getSlider,
+  getMobileSlider,
+  getHeroBottomBanners,
+  SliderItem,
+  type HeroBottomBanner,
+} from '@/graphql/queries/slider.service'
 import { useMobile } from '@/lib/hooks'
 
 interface HeroSlide {
@@ -19,6 +26,8 @@ interface HeroSlide {
   badgeImage: string
   title: string
   text: string
+  /** С плашки: атрибут ssylka-na-tovar и т.п. */
+  href?: string
 }
 
 /** Блок внизу слайдера (плашка): всегда этот контент — один источник для десктопа и мобилки */
@@ -44,12 +53,13 @@ const defaultSlides: HeroSlide[] = [
 /** Картинки слайдера из API; блок внизу — из bottomBanners по индексу (1→банер 1, 2→банер 2), иначе defaultSlides */
 function apiSlidesToHero(
   apiSlides: SliderItem[],
-  bottomBanners: { image: string; title: string; description: string }[] = []
+  bottomBanners: HeroBottomBanner[] = []
 ): HeroSlide[] {
   if (apiSlides.length === 0) return []
   return apiSlides.map((slide, i) => {
     const def = defaultSlides[i % defaultSlides.length]
     const banner = bottomBanners[i]
+    const href = banner?.href?.trim()
     return {
       id: slide.id,
       image: slide.image || def.image,
@@ -57,11 +67,88 @@ function apiSlidesToHero(
       badgeImage: banner?.image || def.badgeImage,
       title: (banner?.title && banner.title.trim()) ? banner.title : def.title,
       text: (banner?.description && banner.description.trim()) ? banner.description : def.text,
+      ...(href ? { href } : {}),
     }
   })
 }
 
 const SWIPER_CLASS = 'hero-swiper w-full h-[70vh] sm:h-[80vh] md:h-[85vh] lg:h-[90vh]'
+
+function HeroBottomBadge({ slide }: { slide: HeroSlide }) {
+  const href = slide.href?.trim()
+  const motionClass =
+    'absolute left-3 right-3 md:left-6 md:right-6 bottom-4 md:bottom-8 flex flex-row gap-4 md:gap-5 bg-white/30 backdrop-blur-md rounded-4xl p-3 md:p-2.5 shadow-[0_4px_20px_rgba(0,0,0,0.08)]'
+  const inner = (
+    <motion.div
+      key={slide.id + '-badge'}
+      initial={{ opacity: 0, y: 40 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }}
+      className={`${motionClass}${href ? ' cursor-pointer' : ''}`}
+    >
+      <motion.div
+        key={slide.id + '-img'}
+        initial={{ opacity: 0, x: -10 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.5, delay: 0.3 }}
+        className="w-[70px] h-[70px] sm:w-[100px] sm:h-[100px] md:w-[122px] md:h-[122px] rounded-xl overflow-hidden shrink-0"
+      >
+        <img
+          src={slide.badgeImage}
+          alt=""
+          className="w-full h-full object-cover rounded-xl"
+        />
+      </motion.div>
+      <motion.div
+        key={slide.id + '-text'}
+        initial={{ opacity: 0, x: 15 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.5, delay: 0.35 }}
+        className="flex flex-col justify-center text-black text-left flex-1 min-w-0"
+      >
+        <h2 className="text-[11px] sm:text-[16px] md:text-[20px] font-semibold mb-0.5 sm:mb-2 leading-tight">
+          {slide.title.split('.')[0]}
+          {slide.title.split('.')[1] ? (
+            <>
+              <br className="hidden sm:block" />
+              <span className="sm:hidden">, </span>
+              {slide.title.split('.')[1]}
+            </>
+          ) : null}
+        </h2>
+        <p className="text-[9px] sm:text-[13px] md:text-[15px] text-black/80 leading-snug line-clamp-3">
+          {slide.text}
+        </p>
+      </motion.div>
+    </motion.div>
+  )
+
+  if (!href) return inner
+
+  if (/^https?:\/\//i.test(href)) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="contents cursor-pointer"
+        aria-label={`${slide.title}: перейти`}
+      >
+        {inner}
+      </a>
+    )
+  }
+
+  return (
+    <Link
+      href={href}
+      className="contents cursor-pointer"
+      aria-label={`${slide.title}: перейти`}
+    >
+      {inner}
+    </Link>
+  )
+}
 
 function HeroSwiper({
   slides,
@@ -95,8 +182,8 @@ function HeroSwiper({
       simulateTouch={true}
       threshold={5}
       touchRatio={1}
-      preventClicks={true}
-      preventClicksPropagation={true}
+      preventClicks={false}
+      preventClicksPropagation={false}
       className={className}
     >
       {slides.map((slide) => (
@@ -111,48 +198,7 @@ function HeroSwiper({
             {/* Блок внизу — всегда из defaultSlides (badgeImage, title, text) */}
             <div className="absolute inset-0 flex">
               <div className="relative lg:flex-1 w-full h-full items-center">
-                <motion.div
-                  key={slide.id + '-badge'}
-                  initial={{ opacity: 0, y: 40 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }}
-                  className="absolute left-3 right-3 md:left-6 md:right-6 bottom-4 md:bottom-8 flex flex-row gap-4 md:gap-5 bg-white/30 backdrop-blur-md rounded-4xl p-3 md:p-2.5 shadow-[0_4px_20px_rgba(0,0,0,0.08)]"
-                >
-                  <motion.div
-                    key={slide.id + '-img'}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.5, delay: 0.3 }}
-                    className="w-[70px] h-[70px] sm:w-[100px] sm:h-[100px] md:w-[122px] md:h-[122px] rounded-xl overflow-hidden shrink-0"
-                  >
-                    <img
-                      src={slide.badgeImage}
-                      alt="badge"
-                      className="w-full h-full object-cover rounded-xl"
-                    />
-                  </motion.div>
-                  <motion.div
-                    key={slide.id + '-text'}
-                    initial={{ opacity: 0, x: 15 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.5, delay: 0.35 }}
-                    className="flex flex-col justify-center text-black text-left flex-1 min-w-0"
-                  >
-                    <h2 className="text-[11px] sm:text-[16px] md:text-[20px] font-semibold mb-0.5 sm:mb-2 leading-tight">
-                      {slide.title.split('.')[0]}
-                      {slide.title.split('.')[1] ? (
-                        <>
-                          <br className="hidden sm:block" />
-                          <span className="sm:hidden">, </span>
-                          {slide.title.split('.')[1]}
-                        </>
-                      ) : null}
-                    </h2>
-                    <p className="text-[9px] sm:text-[13px] md:text-[15px] text-black/80 leading-snug line-clamp-3">
-                      {slide.text}
-                    </p>
-                  </motion.div>
-                </motion.div>
+                <HeroBottomBadge slide={slide} />
               </div>
               <div className="flex-1"></div>
             </div>

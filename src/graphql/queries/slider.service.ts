@@ -254,6 +254,8 @@ export interface HeroBottomBanner {
   image: string
   title: string
   description: string
+  /** Путь (/product/slug) или полный URL из атрибута «ссылка на товар» */
+  href: string
 }
 
 /** Совпадение по slug или name: в дашборде «Него-слайдер нижний банер заголовок/описание» */
@@ -273,6 +275,27 @@ function matchBottomBannerAttr(
   if (kind === 'title') return s.includes('zagolovok') || s.includes('title') || n.includes('заголовок')
   if (kind === 'description') return s.includes('opisanie') || s.includes('description') || n.includes('описание')
   return false
+}
+
+/** Атрибут вроде ssylka-na-tovar: ссылка на товар (reference или текст/URL) */
+function isProductLinkAttribute(slug: string, name: string): boolean {
+  const s = (slug || '').toLowerCase()
+  const n = (name || '').toLowerCase()
+  return (
+    s === 'ssylka-na-tovar' ||
+    (s.includes('ssylka') && s.includes('tovar')) ||
+    (s.includes('ssylka') && s.includes('product')) ||
+    (n.includes('ссылка') && n.includes('товар'))
+  )
+}
+
+/** Текст из CMS: абсолютный URL, путь с / или slug товара */
+function normalizeProductLinkHref(raw: string): string {
+  const t = raw.trim()
+  if (!t) return ''
+  if (/^https?:\/\//i.test(t)) return t
+  if (t.startsWith('/')) return t
+  return `/product/${t}`
 }
 
 /** Достать строку из value атрибута (plain text или rich text JSON) */
@@ -341,6 +364,16 @@ export async function getHeroBottomBanners(): Promise<HeroBottomBanner[]> {
               ... on AssignedFileAttribute { fileValue: value { url } }
               ... on AssignedTextAttribute { textValueRich: value }
               ... on AssignedPlainTextAttribute { textValuePlain: value }
+              ... on AssignedSingleProductReferenceAttribute {
+                linkProduct: value {
+                  slug
+                }
+              }
+              ... on AssignedMultiProductReferenceAttribute {
+                linkProducts: value(limit: 1) {
+                  slug
+                }
+              }
             }
           }
         }
@@ -362,7 +395,25 @@ export async function getHeroBottomBanners(): Promise<HeroBottomBanner[]> {
       (acc, a) => {
         const slug = a.attribute?.slug ?? ''
         const name = a.attribute?.name ?? ''
-        if (matchBottomBannerAttr(slug, name, 'image') && a.fileValue?.url) {
+        if (isProductLinkAttribute(slug, name)) {
+          const ext = a as {
+            linkProduct?: { slug?: string } | null
+            linkProducts?: { slug?: string }[]
+            textValuePlain?: string
+            textValueRich?: unknown
+          }
+          let href = ''
+          if (ext.linkProduct?.slug) {
+            href = `/product/${ext.linkProduct.slug}`
+          } else if (ext.linkProducts?.[0]?.slug) {
+            href = `/product/${ext.linkProducts[0].slug}`
+          } else {
+            const raw = ext.textValuePlain ?? ext.textValueRich
+            const v = getTextFromAttributeValue(raw)
+            if (v) href = normalizeProductLinkHref(v)
+          }
+          if (href) acc.href = href
+        } else if (matchBottomBannerAttr(slug, name, 'image') && a.fileValue?.url) {
           acc.image = toAbsoluteMediaUrl(a.fileValue.url) || a.fileValue.url
         } else if (matchBottomBannerAttr(slug, name, 'title')) {
           const raw = (a as { textValuePlain?: string; textValueRich?: unknown }).textValuePlain ?? (a as { textValuePlain?: string; textValueRich?: unknown }).textValueRich
@@ -375,7 +426,12 @@ export async function getHeroBottomBanners(): Promise<HeroBottomBanner[]> {
         }
         return acc
       },
-      { image: '', title: '', description: '' } as { image: string; title: string; description: string }
+      { image: '', title: '', description: '', href: '' } as {
+        image: string
+        title: string
+        description: string
+        href: string
+      }
     )
     // Заголовок и описание из атрибутов; если пусто — из полей страницы (title, content)
     const pageTitle = (node.title ?? '').trim()
@@ -385,6 +441,7 @@ export async function getHeroBottomBanners(): Promise<HeroBottomBanner[]> {
       image: attrs.image,
       title: attrs.title || pageTitle,
       description: attrs.description || pageContent,
+      href: attrs.href,
     }
   })
 
@@ -396,5 +453,6 @@ export async function getHeroBottomBanners(): Promise<HeroBottomBanner[]> {
     image: x.image || '',
     title: x.title || '',
     description: x.description || '',
+    href: x.href || '',
   }))
 }
