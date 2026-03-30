@@ -8,6 +8,7 @@ import { Search, User, ShoppingBag, Send, Menu, X } from 'lucide-react'
 import ModalCart from '../modals/CartModal'
 import SearchResults from '../search/SearchResults'
 import { useCartStore } from '@/stores/useCart'
+import { useCartUiStore } from '@/stores/useCartUiStore'
 import { useAuthStore } from '@/stores/useAuth'
 import { searchProducts } from '@/graphql/queries/search.service'
 import { ProductNode } from '@/graphql/types/product.types'
@@ -44,6 +45,11 @@ export default function Header({ variant = 'default' }: HeaderProps) {
     window.addEventListener('scroll', handleScroll)
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
+
+  const cartModalOpenSignal = useCartUiStore((s) => s.openSignal)
+  useEffect(() => {
+    if (cartModalOpenSignal > 0) setShowCart(true)
+  }, [cartModalOpenSignal])
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

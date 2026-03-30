@@ -2,6 +2,7 @@
 
 import { Minus, Plus } from "lucide-react";
 import { useCartStore } from "@/stores/useCart";
+import { useCartUiStore } from "@/stores/useCartUiStore";
 import { ProductCardItem } from "@/types/product";
 import { toast } from "react-toastify";
 
@@ -15,6 +16,7 @@ export default function AddCartButton({ product, size, variantId }: AddCartButto
   const addItem = useCartStore((state) => state.addItem);
   const increaseQuantity = useCartStore((state) => state.increaseQuantity);
   const decreaseQuantity = useCartStore((state) => state.decreaseQuantity);
+  const openCartModal = useCartUiStore((state) => state.openCartModal);
 
   const lineId = product
     ? String(variantId || product.variantId || product.id)
@@ -45,25 +47,35 @@ export default function AddCartButton({ product, size, variantId }: AddCartButto
 
   if (canAdd && quantity > 0) {
     return (
-      <div className="w-full h-12 rounded-full bg-black flex items-center justify-between px-2 gap-1 select-none">
+      <div className="w-full flex flex-row flex-wrap sm:flex-nowrap items-stretch gap-2">
+        <div className="min-w-0 flex-1 h-12 rounded-full bg-black flex items-center justify-between px-2 gap-1 select-none">
+          <button
+            type="button"
+            aria-label="Уменьшить количество"
+            className="w-10 h-10 shrink-0 flex items-center justify-center rounded-full hover:bg-white/15 active:bg-white/20 transition-colors"
+            onClick={handleDec}
+          >
+            <Minus className="w-5 h-5 text-white" strokeWidth={2.2} />
+          </button>
+          <span className="text-white text-base font-semibold tabular-nums min-w-[1.5rem] text-center flex-1">
+            {quantity}
+          </span>
+          <button
+            type="button"
+            aria-label="Увеличить количество"
+            className="w-10 h-10 shrink-0 flex items-center justify-center rounded-full hover:bg-white/15 active:bg-white/20 transition-colors"
+            onClick={handleInc}
+          >
+            <Plus className="w-5 h-5 text-white" strokeWidth={2.2} />
+          </button>
+        </div>
         <button
           type="button"
-          aria-label="Уменьшить количество"
-          className="w-10 h-10 shrink-0 flex items-center justify-center rounded-full hover:bg-white/15 active:bg-white/20 transition-colors"
-          onClick={handleDec}
+          onClick={openCartModal}
+          className="shrink-0 h-12 rounded-full border border-black bg-white px-4 sm:px-5 text-sm font-semibold text-black hover:bg-black/5 transition-colors cursor-pointer select-none whitespace-nowrap"
+          aria-label="Открыть корзину"
         >
-          <Minus className="w-5 h-5 text-white" strokeWidth={2.2} />
-        </button>
-        <span className="text-white text-base font-semibold tabular-nums min-w-[1.5rem] text-center flex-1">
-          {quantity}
-        </span>
-        <button
-          type="button"
-          aria-label="Увеличить количество"
-          className="w-10 h-10 shrink-0 flex items-center justify-center rounded-full hover:bg-white/15 active:bg-white/20 transition-colors"
-          onClick={handleInc}
-        >
-          <Plus className="w-5 h-5 text-white" strokeWidth={2.2} />
+          В корзине →
         </button>
       </div>
     );
