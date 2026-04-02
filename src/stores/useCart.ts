@@ -12,6 +12,8 @@ interface CartState {
   discountType?: 'PERCENTAGE' | 'FIXED'
   shippingPrice: number
   shippingLoading: boolean
+  /** Как считалась доставка на checkout (по метке в адресе) */
+  shippingCarrier: 'cdek' | 'yandex' | null
   appliedPromoCode: string | null
 
   addItem: (product: ProductCardItem, quantity: number, size: string, variantId?: string) => void
@@ -21,6 +23,7 @@ interface CartState {
   clearCart: () => void
   setShippingPrice: (price: number) => void
   setShippingLoading: (loading: boolean) => void
+  setShippingCarrier: (carrier: 'cdek' | 'yandex' | null) => void
   applyPromoCode: (
     code: string,
     discountPercent: number,
@@ -63,6 +66,7 @@ export const useCartStore = create<CartState>()(
       discountType: undefined,
       shippingPrice: 0,
       shippingLoading: false,
+      shippingCarrier: null,
       appliedPromoCode: null,
 
       addItem: (product, quantity, size, variantId) => {
@@ -116,6 +120,8 @@ export const useCartStore = create<CartState>()(
 
       setShippingLoading: (loading) => set({ shippingLoading: loading }),
 
+      setShippingCarrier: (carrier) => set({ shippingCarrier: carrier }),
+
       applyPromoCode: (code, discountPercent, discountAmount, discountType) => {
         const { items, shippingPrice } = get()
         const totals = calcTotals(items, discountPercent, discountAmount, shippingPrice)
@@ -148,6 +154,7 @@ export const useCartStore = create<CartState>()(
         discountAmount: undefined,
         discountType: undefined,
         shippingPrice: 0,
+        shippingCarrier: null,
         appliedPromoCode: null,
       }),
     }),

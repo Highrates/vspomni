@@ -1,9 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server'
+import {
+  isHyphenatedUuidPointId,
+  isLikelyYandexPlatformStationId,
+} from '@/lib/yandexPickupPointId'
+import {
+  capYandexNddPvzPackageDims,
+  resolveYandexShipmentPackage,
+  toYandexPricingCalculatorDimsCm,
+} from '@/lib/yandexShipmentEstimate'
 
 const YANDEX_API_BASE = 'https://b2b.taxi.yandex.net'
 const YANDEX_PLATFORM_API_BASE = process.env.YANDEX_DELIVERY_PLATFORM_URL || 'https://b2b-authproxy.taxi.yandex.net'
 const CARGO_PATH = '/b2b/cargo/integration/v2'
 const PLATFORM_PICKUP_LIST_PATH = '/api/b2b/platform/pickup-points/list'
+const PLATFORM_PRICING_CALCULATOR_PATH = '/api/b2b/platform/pricing-calculator'
+const PLATFORM_WAREHOUSES_LIST_PATH = '/api/b2b/platform/warehouses/list'
+
+/** Запятая после города: «Россия, Москва улица …» → «Россия, Москва, улица …» (рекомендации Яндекса по полному адресу). */
+function normalizeRuAddressForYandex(fullname: string): string {
+  const s = fullname.trim()
+  return s
+    .replace(/^Россия,\s*Москва\s+(?!,)/i, 'Россия, Москва, ')
+    .replace(/^Россия,\s*Санкт-Петербург\s+(?!,)/i, 'Россия, Санкт-Петербург, ')
+}
+
+/**
+ * Парсинг pricing_total из pricing-calculator (пример из доки: "225.7 RUB" — рубли с десятыми).
+ * @see https://yandex.com/support/delivery-profile/ru/api/other-day/ref/1.-Podgotovka-zayavki/apib2bplatformpricing-calculator-post
+ */
+function parsePricingTotalRub(s: string | undefined): number {
+  if (!s || typeof s !== 'string') return NaN
+  const m = s.replace(/\s/g, '').match(/^([\d.,]+)/)
+  if (!m) return NaN
+  return parseFloat(m[1].replace(',', '.'))
+}
 
 function getToken(): string {
   const token = process.env.YANDEX_DELIVERY_TOKEN
@@ -51,6 +81,54 @@ function yandexErrorToMessage(resStatus: number, err: Record<string, unknown>): 
   return 'Ошибка расчёта доставки Яндекса. Попробуйте позже или измените адрес.'
 }
 
+/** Ошибки Platform API (NDD): не подменяем 404 текстом про «B2B такси» — это другой контур. */
+function yandexPlatformErrorToMessage(
+  resStatus: number,
+  err: Record<string, unknown>,
+  responseText: string,
+): string {
+  const raw =
+    typeof err.message === 'string'
+      ? err.message
+      : typeof err.error === 'string'
+        ? err.error
+        : typeof err.code === 'string'
+          ? err.code
+          : ''
+  if (/merchant not found/i.test(raw)) {
+    return (
+      'Яндекс: Merchant not found — значение в YANDEX_PLATFORM_MERCHANT_ID не является merchant_id в API «доставка в другой день». ' +
+      'ID клиента в ЛК часто другой идентификатор. Запросите у поддержки Яндекса поле merchant_id для POST .../platform/warehouses/list.'
+    )
+  }
+  if (/source station is invalid/i.test(raw)) {
+    return (
+      'Platform API: source.platform_station_id не принят (склад не найден в платформе). ' +
+      'Укажите station_id из ответа POST .../platform/warehouses/list для вашего склада, либо совпадающий с point_id отправления в Cargo (YANDEX_DELIVERY_WAREHOUSE_ID). ' +
+      raw
+    )
+  }
+  if (raw && !/^parse error/i.test(raw)) return raw
+  if (resStatus === 400) {
+    return (
+      'Platform API: неверный запрос (400). Проверьте filter.merchant_id и тело запроса. ' +
+      (responseText || '').slice(0, 500)
+    )
+  }
+  if (resStatus === 404) {
+    return (
+      'Platform API (доставка в другой день): метод недоступен или не найден (404). ' +
+      'Часто у токена нет доступа к API складов/мерчанта, либо неверный merchant_id, либо склад не создан в платформе. ' +
+      'Уточните в поддержке Яндекса доступ к POST .../platform/warehouses/list. Ответ: ' +
+      (responseText || '').slice(0, 400)
+    )
+  }
+  if (resStatus === 401 || resStatus === 403) {
+    return 'Доступ к Platform API запрещён. Проверьте токен в dostavka.yandex.ru → Интеграция.'
+  }
+  return raw || responseText.slice(0, 300) || `Platform API HTTP ${resStatus}`
+}
+
 /** Запрос к B2B Platform API (ПВЗ и т.д.) — другой хост */
 async function yandexPlatformRequest<T>(
   path: string,
@@ -75,8 +153,8 @@ async function yandexPlatformRequest<T>(
     } catch {
       err = { message: text || res.statusText }
     }
-    console.error('Yandex Platform API raw error:', res.status, text)
-    const userMsg = yandexErrorToMessage(res.status, err)
+    console.error('Yandex Platform API raw error:', res.status, path, text)
+    const userMsg = yandexPlatformErrorToMessage(res.status, err, text)
     throw new Error(userMsg)
   }
   return text ? (JSON.parse(text) as T) : ({} as T)
@@ -134,26 +212,44 @@ async function geocodeAddress(fullname: string): Promise<[number, number] | null
   return null
 }
 
+/**
+ * Точка отправления (ПВЗ/склад в ЛК Яндекса).
+ * Для сценария ПВЗ→ПВЗ в offers/calculate у точки id:1 должен быть point_id из pickup-points/list.
+ */
+/**
+ * Дефолтный ПВЗ/склад СПб (Ватутина). Поддержка Яндекса: старый пункт мог закрыться —
+ * обновите YANDEX_DELIVERY_WAREHOUSE_ID + координаты из актуального pickup-points/list.
+ */
+const DEFAULT_SPB_WAREHOUSE_POINT_ID = '019c55f8c0d972ea9b59302a85430825'
+
+/** Полный адрес (страна, город, улица, дом) — иначе Cargo может вернуть пустой offers (ответ поддержки). */
+const DEFAULT_SPB_WAREHOUSE_ADDRESS =
+  'Россия, Санкт-Петербург, улица Ватутина, дом 8/7Д'
+
 function getWarehousePoint(): { coordinates?: [number, number]; fullname: string; point_id?: string } {
   const lat = process.env.YANDEX_DELIVERY_WAREHOUSE_LAT
   const lng = process.env.YANDEX_DELIVERY_WAREHOUSE_LNG
   const fullname =
-    process.env.YANDEX_DELIVERY_WAREHOUSE_FULLNAME || 'Россия, Санкт-Петербург, улица Ватутина 8/7Д'
-  const point_id = process.env.YANDEX_DELIVERY_WAREHOUSE_ID
+    process.env.YANDEX_DELIVERY_WAREHOUSE_FULLNAME?.trim() ||
+    DEFAULT_SPB_WAREHOUSE_ADDRESS
+  const envId = process.env.YANDEX_DELIVERY_WAREHOUSE_ID?.trim()
+  const warehousePointId = envId || DEFAULT_SPB_WAREHOUSE_POINT_ID
 
   if (lat && lng) {
     const lon = parseFloat(lng)
     const latN = parseFloat(lat)
     if (Number.isFinite(lon) && Number.isFinite(latN)) {
-      return { coordinates: [lon, latN], fullname, point_id }
+      return {
+        coordinates: [lon, latN],
+        fullname,
+        point_id: warehousePointId,
+      }
     }
   }
-  // Дефолт: ПВЗ Яндекса в Санкт-Петербурге, ул. Ватутина 8/7Д
-  // Поддержка сообщила об обновлении ПВЗ, используем проверенный point_id и координаты
   return {
     coordinates: [30.379738, 59.962021],
-    fullname: 'Санкт-Петербург улица Ватутина 8/7Д',
-    point_id: '019c55f8c0d972ea9b59302a85430825',
+    fullname: DEFAULT_SPB_WAREHOUSE_ADDRESS,
+    point_id: warehousePointId,
   }
 }
 
@@ -171,9 +267,31 @@ export async function POST(req: NextRequest) {
           building?: string
           fullname?: string
           coordinates?: [number, number]
+          /** id пункта из pickup-points/list — иначе нельзя вешать type=pvz на точку */
+          yandex_point_id?: string
+          yandexPointId?: string
         }
         mode?: 'door' | 'pvz'
+        shipment?: {
+          total_weight_g?: number
+          length_cm?: number
+          width_cm?: number
+          height_cm?: number
+        }
+        shipment_lines?: Array<{
+          quantity?: number
+          weight_kg?: number
+          length_mm?: number
+          width_mm?: number
+          height_mm?: number
+        }>
       }
+      const pkgResolved = resolveYandexShipmentPackage(body)
+      const yandexDropoffPointId = (
+        to.yandex_point_id ||
+        to.yandexPointId ||
+        ''
+      ).trim()
       const fullname =
         to.fullname ||
         [to.city, to.street, to.building].filter(Boolean).join(', ')
@@ -231,46 +349,232 @@ export async function POST(req: NextRequest) {
             .replace(new RegExp(`^${cityNorm}\\s+`, 'i'), '')
             .trim() || to.building}`
           : fullname
-      const isPvzMode = mode === 'pvz'
+      // Поддержка Яндекса: адрес до двери/ПВЗ — полностью (страна + город + улица + дом), иначе пустой offers
+      let dropoffFullnameForApi =
+        dropoffFullname.trim() && !/^россия\b/i.test(dropoffFullname.trim())
+          ? `Россия, ${dropoffFullname.trim()}`
+          : dropoffFullname
+      dropoffFullnameForApi = normalizeRuAddressForYandex(dropoffFullnameForApi)
+      // type=pvz только вместе с point_id из сети Яндекса; иначе — расчёт «до двери» по координатам
+      const useYandexPvzDropoff =
+        mode === 'pvz' && Boolean(yandexDropoffPointId)
+
+      const pkg = useYandexPvzDropoff
+        ? capYandexNddPvzPackageDims(pkgResolved)
+        : pkgResolved
+
+      /** dx=длина, dy=высота, dz=ширина (см) — как в Platform 1.01; Cargo size в метрах */
+      const physicalCm = toYandexPricingCalculatorDimsCm(
+        pkg.dxCm,
+        pkg.dyCm,
+        pkg.dzCm,
+      )
+
+      if (useYandexPvzDropoff && isHyphenatedUuidPointId(yandexDropoffPointId)) {
+        console.warn(
+          '[Yandex] В запросе point_id пункта доставки в формате UUID. Для offers/calculate обычно нужен `id` из pickup-points/list (hex без дефисов) или operator_station_id. Пересохраните адрес, снова выбрав ПВЗ в модалке.',
+        )
+      }
 
       const route_points = [
         {
           id: 1,
-          fullname: warehouse.fullname,
+          fullname: normalizeRuAddressForYandex(warehouse.fullname),
           coordinates: warehouse.coordinates,
           ...(warehouse.point_id ? { point_id: warehouse.point_id } : {})
         },
         {
           id: 2,
           coordinates,
-          fullname: dropoffFullname,
-          ...(isPvzMode ? { type: 'pvz' } : {})
+          fullname: dropoffFullnameForApi,
+          ...(useYandexPvzDropoff
+            ? { type: 'pvz', point_id: yandexDropoffPointId }
+            : {}),
         },
       ]
       const items = [
         {
-          size: { length: 0.3, width: 0.2, height: 0.2 },
-          weight: 2,
+          size: {
+            length: physicalCm.dx / 100,
+            width: physicalCm.dz / 100,
+            height: physicalCm.dy / 100,
+          },
+          weight: Math.max(0.001, pkg.totalWeightG / 1000),
           quantity: 1,
           pickup_point: 1,
           dropoff_point: 2,
         },
       ]
-      const requirements: Record<string, unknown> = {
-        taxi_classes: ['express', 'courier', 'ndd', 'cargo'],
-        // Для доставки до ПВЗ можно отключать услугу «до двери»
-        skip_door_to_door: isPvzMode ? true : false,
-        ndd: true, // Явно указываем для поддержки Яндекса
+      // Поддержка Яндекса: для NDD не уходить в «экспресс» на длинной дистанции —
+      // явно ndd + delivery_type (повтор в ретрае при пустых offers).
+      const requirements: Record<string, unknown> = useYandexPvzDropoff
+        ? {
+            taxi_classes: ['ndd'],
+            skip_door_to_door: true,
+            ndd: true,
+            delivery_type: 'ndd',
+          }
+        : {
+            taxi_classes: ['ndd', 'courier', 'express', 'cargo'],
+            skip_door_to_door: false,
+            ndd: true,
+            delivery_type: 'ndd',
+          }
+
+      /**
+       * «Доставка в другой день» в ЛК = Platform API, не Cargo v2.
+       * POST .../api/b2b/platform/pricing-calculator, tariff: self_pickup (до ПВЗ).
+       * source.platform_station_id — склад в платформе (разд. 6 доки, warehouses/list).
+       */
+      const platformSourceStationId =
+        process.env.YANDEX_PLATFORM_SOURCE_STATION_ID?.trim()
+      if (useYandexPvzDropoff && platformSourceStationId) {
+        try {
+          type PricingDest =
+            | { platform_station_id: string }
+            | { address: string }
+          const destinationPrimary: PricingDest =
+            isLikelyYandexPlatformStationId(yandexDropoffPointId)
+              ? { platform_station_id: yandexDropoffPointId }
+              : { address: dropoffFullnameForApi }
+
+          const warehousePointId = warehouse.point_id?.trim() || ''
+          const fallbackSourceId =
+            warehousePointId &&
+            isLikelyYandexPlatformStationId(warehousePointId) &&
+            warehousePointId !== platformSourceStationId
+              ? warehousePointId
+              : ''
+
+          const wg = Math.max(1, Math.round(pkg.totalWeightG))
+          const { dx, dy, dz } = physicalCm
+
+          const buildPricingBody = (
+            sourceStationId: string,
+            destination: PricingDest,
+          ) => ({
+            source: { platform_station_id: sourceStationId },
+            destination,
+            tariff: 'self_pickup' as const,
+            total_weight: wg,
+            total_assessed_price: 0,
+            client_price: 0,
+            payment_method: 'already_paid' as const,
+            places: [
+              {
+                physical_dims: {
+                  weight_gross: wg,
+                  dx,
+                  dy,
+                  dz,
+                },
+              },
+            ],
+          })
+
+          let sourceId = platformSourceStationId
+          let dest: PricingDest = destinationPrimary
+          let ndd: { pricing_total?: string; delivery_days?: number } | undefined
+          const maxPricingAttempts = 5
+          for (let attempt = 0; attempt < maxPricingAttempts; attempt++) {
+            try {
+              ndd = await yandexPlatformRequest<{
+                pricing_total?: string
+                delivery_days?: number
+              }>(PLATFORM_PRICING_CALCULATOR_PATH, {
+                body: buildPricingBody(sourceId, dest),
+              })
+              if (attempt > 0) {
+                console.log(
+                  '[Yandex Platform] pricing-calculator успех после ретрая',
+                  { sourceId: sourceId.slice(0, 12) + '…', destKind: 'platform_station_id' in dest ? 'id' : 'address' },
+                )
+              }
+              break
+            } catch (pricingErr) {
+              const msg =
+                pricingErr instanceof Error
+                  ? pricingErr.message
+                  : String(pricingErr)
+              let adjusted = false
+              if (/source station is invalid/i.test(msg) && fallbackSourceId) {
+                if (sourceId !== fallbackSourceId) {
+                  sourceId = fallbackSourceId
+                  adjusted = true
+                }
+              }
+              if (
+                !adjusted &&
+                /no_station|station id for point|cant get station/i.test(
+                  msg,
+                ) &&
+                'platform_station_id' in dest
+              ) {
+                dest = { address: dropoffFullnameForApi }
+                adjusted = true
+              }
+              if (!adjusted) {
+                throw pricingErr
+              }
+            }
+          }
+          if (!ndd) {
+            throw new Error('Platform pricing-calculator: не удалось получить ответ')
+          }
+          console.log(
+            '--- Yandex Platform NDD pricing-calculator (full) ---',
+            JSON.stringify(ndd, null, 2),
+          )
+          const rub = parsePricingTotalRub(ndd.pricing_total)
+          const rubCheckout = Number.isFinite(rub) ? Math.round(rub) : NaN
+          if (Number.isFinite(rubCheckout) && rubCheckout > 0) {
+            return json({
+              offers: [
+                {
+                  price: {
+                    total_price: String(rubCheckout),
+                    total_price_with_vat: String(rubCheckout),
+                    base_price: String(rubCheckout),
+                    currency: 'RUB',
+                  },
+                  taxi_class: 'ndd_self_pickup',
+                  description: 'platform/pricing-calculator',
+                  payload: 'ndd-platform-pricing',
+                  offer_ttl: '',
+                },
+              ],
+              delivery_days: ndd.delivery_days,
+              _pricing_source: 'yandex_platform_ndd',
+            })
+          }
+        } catch (nddErr) {
+          console.warn(
+            'Platform pricing-calculator (NDD ПВЗ) не удался, переходим к Cargo offers/calculate:',
+            nddErr,
+          )
+        }
+      } else if (useYandexPvzDropoff && !platformSourceStationId) {
+        console.log(
+          '[Yandex NDD] Для расчёта «в другой день» до ПВЗ задайте YANDEX_PLATFORM_SOURCE_STATION_ID — platform_station_id склада из POST .../warehouses/list (док: 1.01 pricing-calculator). Сейчас используется только Cargo v2.',
+        )
       }
-      let result = await yandexRequest<{ offers: any[]; error_messages?: any[] }>(
-        `${CARGO_PATH}/offers/calculate`,
-        { body: { items, route_points, requirements } }
+
+      const calculatePayload = { items, route_points, requirements }
+      console.log(
+        '--- Yandex offers/calculate OUT (route_points + requirements) ---',
+        JSON.stringify(calculatePayload, null, 2),
       )
 
-      console.log('--- Yandex Delivery Offers Result ---', JSON.stringify({
-        offers_count: result.offers?.length || 0,
-        errors: result.error_messages
-      }, null, 2))
+      let result = await yandexRequest<{ offers: any[]; error_messages?: any[] }>(
+        `${CARGO_PATH}/offers/calculate`,
+        { body: calculatePayload }
+      )
+
+      // Полное тело ответа (в т.ч. error_messages / коды estimating.*) — для отладки пустых offers
+      console.log(
+        '--- Yandex Delivery Offers Result (full JSON, first offers/calculate) ---',
+        JSON.stringify(result, null, 2),
+      )
 
       // Если нет офферов, пробуем более агрессивно запросить именно NDD,
       // как советовала поддержка (явная передача параметров).
@@ -302,14 +606,19 @@ export async function POST(req: NextRequest) {
 
       if (!result.offers?.length) {
         console.warn('Yandex offers/calculate returned empty offers after all retries', {
-          dropoffFullname,
+          dropoffFullname: dropoffFullnameForApi,
           coordinates,
-          warehouse: warehouse.coordinates,
-          lastError: result.error_messages
+          warehouseCoords: warehouse.coordinates,
+          warehouse_point_id: warehouse.point_id ?? null,
+          dropoff_point_id: yandexDropoffPointId || null,
+          lastError: result.error_messages,
         })
         return json({
           ...result,
-          error: 'По этому адресу нет доступных тарифов доставки Яндекса. Попробуйте другой адрес или выберите ПВЗ.',
+          error:
+            'По этому маршруту Cargo API не вернул тарифы (NDD и курьер пусто). ' +
+            'Для межгорода СПб→МСК и ПВЗ→ПВЗ часто нужен расчёт через Platform NDD (pricing-calculator) и YANDEX_PLATFORM_SOURCE_STATION_ID от менеджера Яндекса. ' +
+            'Либо уточните в поддержке подключён ли тариф на такой коридор.',
           offers: result.offers || [],
         }, 200)
       }
@@ -335,7 +644,30 @@ export async function POST(req: NextRequest) {
       return json(result)
     }
 
-    return json({ error: 'Unknown action. Use action: "calculate" or "list-pickup-points"' }, 400)
+    if (action === 'warehouses-list') {
+      const { merchant_id } = body as { merchant_id?: string }
+      const mid =
+        merchant_id?.trim() ||
+        process.env.YANDEX_PLATFORM_MERCHANT_ID?.trim()
+      // API Яндекса требует ключ filter; часто нужен filter.merchant_id (см. доку 6.02)
+      const requestBody = {
+        filter: mid ? { merchant_id: mid } : {},
+      }
+      const result = await yandexPlatformRequest<{
+        warehouses?: Array<{
+          station_id?: string
+          name?: string
+          location?: unknown
+          client_warehouse_id?: string
+        }>
+      }>(PLATFORM_WAREHOUSES_LIST_PATH, { body: requestBody })
+      return json(result)
+    }
+
+    return json({
+      error:
+        'Unknown action. Use action: "calculate" | "list-pickup-points" | "warehouses-list"',
+    }, 400)
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
     console.error('Yandex Delivery API error:', message)
@@ -355,6 +687,12 @@ export async function POST(req: NextRequest) {
               : message
       return json({ error: msg }, 400)
     } catch {
+      if (
+        /merchant not found/i.test(message) ||
+        message.includes('YANDEX_PLATFORM_MERCHANT_ID')
+      ) {
+        return json({ error: message }, 400)
+      }
       return json({ error: message }, 500)
     }
   }

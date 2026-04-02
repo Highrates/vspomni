@@ -46,6 +46,7 @@ import PasswordChangeModal from '@/components/modals/PasswordChangeModal'
 import ProductCard from '@/components/home/ProductCard'
 import { usePopularScentsStore } from '@/stores/usePopularScents'
 import { formatDate } from '@/lib/functions'
+import { displayStreetAddress2Comment } from '@/lib/addressVspMeta'
 
 export default function ProfileIndex() {
   const { isAuthenticated, logout } = useAuthStore()
@@ -645,6 +646,8 @@ function AddressRow({
     }
   }
 
+  const addrComment = displayStreetAddress2Comment(address.streetAddress2)
+
   return (
     <div className="flex flex-col sm:flex-row justify-between gap-2 sm:gap-0 border-b border-gray-100 pb-4 sm:border-none sm:pb-0 last:border-0">
       <hgroup className="max-w">
@@ -656,15 +659,14 @@ function AddressRow({
           {address.streetAddress1}
         </p>
 
-        {/* Render Comment if exists (Logic from design) */}
-        {address.streetAddress2 && (
+        {addrComment ? (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
             <p className="text-textgrey text-sm">Комментарий:</p>{' '}
             <span className="font-medium text-sm">
-              {address.streetAddress2}
+              {addrComment}
             </span>
           </div>
-        )}
+        ) : null}
       </hgroup>
 
       <div className="flex items-center justify-between sm:justify-start gap-2 mt-2 sm:mt-0">

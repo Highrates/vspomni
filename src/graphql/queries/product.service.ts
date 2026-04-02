@@ -17,6 +17,7 @@ import type {
 } from '../types/product.types'
 import { formatDate } from '@/lib/functions'
 import type { ProductCardItem } from '@/types/product'
+import { variantShippingFromSaleorVariant } from '@/lib/saleorVariantShipping'
 
 // -----------------------------------------------------------
 // A. Product Queries (products, product)
@@ -83,6 +84,13 @@ export async function getSingleProduct(
               name
               sku
               quantityAvailable
+              weight {
+                value
+              }
+              metadata {
+                key
+                value
+              }
               pricing {
                 priceUndiscounted {
                   gross {
@@ -334,14 +342,10 @@ function mapNodeToProductCard(
     { id: 3, group: 'wood', title: 'Древесный 🪵' },
   ]
 
-  // Извлекаем габариты из metadata варианта
-  const metadata = variant.metadata || []
-  const getMeta = (key: string) => metadata.find((m: any) => m.key === key)?.value
-
-  const length = Number(getMeta('dimensions.length_mm')) || undefined
-  const width = Number(getMeta('dimensions.width_mm')) || undefined
-  const height = Number(getMeta('dimensions.height_mm')) || undefined
-  const weight = variant.weight?.value || undefined
+  const { weight, length, width, height } = variantShippingFromSaleorVariant(
+    variant,
+    node.metadata,
+  )
 
   const categorySlug =
     (opts?.categorySlug ?? node.category?.slug)?.trim() || undefined
@@ -477,6 +481,10 @@ export async function getGreedProducts(): Promise<any> {
         description
         slug
         rating
+        metadata {
+          key
+          value
+        }
         thumbnail {
           url
           alt
@@ -583,6 +591,10 @@ export async function getPopularProducts(): Promise<any> {
         description
         slug
         rating
+        metadata {
+          key
+          value
+        }
         thumbnail {
           url
           alt
@@ -1125,6 +1137,10 @@ export async function getProductsByCategorySlug(categorySlug: string): Promise<a
         description
         slug
         rating
+        metadata {
+          key
+          value
+        }
         thumbnail {
           url
           alt

@@ -75,6 +75,15 @@ export interface ProductVariant {
     sku: string;
     name: string;
     quantityAvailable?: number;
+    /** Вес в кг (Saleor Dashboard → вариант → доставка) */
+    weight?: {
+      value: number;
+    };
+    /** Габариты: dimensions.*_mm, dimensions.volume_m3 */
+    metadata?: {
+      key: string;
+      value: string;
+    }[];
     pricing: {
       discount?: {
         net?: {

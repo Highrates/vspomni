@@ -13,6 +13,7 @@ import PageTransition from '@/components/layout/PageTransition'
 import { toast } from 'react-toastify'
 import { formatCurrency, parseEditorJS } from '@/lib/functions'
 import { getSingleProduct, getCatalogDiscounts } from '@/graphql/queries/product.service'
+import { variantShippingFromSaleorVariant } from '@/lib/saleorVariantShipping'
 import { ProductDetailNode } from '@/graphql/types/product.types'
 import { ProductCardItem } from '@/types/product'
 import { useMobile } from '@/lib/hooks'
@@ -140,6 +141,11 @@ export default function ProductPageClient({
         { id: 3, group: 'wood', title: 'Древесный 🪵' },
       ]
 
+      const ship = variantShippingFromSaleorVariant(
+        firstVariant,
+        data.metadata,
+      )
+
       setProductCartFormat({
         id: String(data.id),
         name: data.name,
@@ -154,6 +160,10 @@ export default function ProductPageClient({
         size: firstVariant.name,
         variantId: firstVariant.id,
         group: group.length > 0 ? group : defaultGroup,
+        weight: ship.weight,
+        length: ship.length,
+        width: ship.width,
+        height: ship.height,
       })
 
       if (data.productVariants?.edges?.length > 0) {
@@ -190,6 +200,21 @@ export default function ProductPageClient({
     if (variant) {
       setSelectedVariantId(variantId)
       setPrice(variant.pricing.price.gross.amount)
+      const ship = variantShippingFromSaleorVariant(variant, product.metadata)
+      setProductCartFormat((prev) =>
+        prev
+          ? {
+              ...prev,
+              price: variant.pricing.price.gross.amount,
+              size: variant.name,
+              variantId: variant.id,
+              weight: ship.weight,
+              length: ship.length,
+              width: ship.width,
+              height: ship.height,
+            }
+          : prev,
+      )
     }
   }
   

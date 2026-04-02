@@ -23,10 +23,21 @@ import {
 } from '../ui/dropdown-menu'
 import { deleteAddress } from '@/graphql/queries/adress.service'
 import { toast } from 'react-toastify'
-import { calculateDelivery as calculateYandex } from '@/lib/api/yandexDelivery'
 import { useCdek } from '@/stores/useCdek'
+import { pickCdekCityForAddress, cleanRuPostalCode } from '@/lib/cdekCityPick'
+import { filterCdekPvzTariffs } from '@/lib/cdekPvzTariffs'
+import type { CdekTariff } from '@/types/cdek'
 import { useCartStore } from '@/stores/useCart'
-// Яндекс-доставка/ПВЗ теперь используется для расчета стоимости
+import {
+  calculateDelivery,
+  getCheapestOffer,
+  parseYandexOfferPrice,
+} from '@/lib/api/yandexDelivery'
+import {
+  parseVspAddressMeta,
+  getShippingCarrierFromAddress,
+  displayStreetAddress2Comment,
+} from '@/lib/addressVspMeta'
 
 export default function OrderDelivery() {
   const [selected, setSelected] = useState('')
@@ -35,9 +46,11 @@ export default function OrderDelivery() {
   const [modalVisible, setModalVisible] = useState(false)
   const [editingAddress, setEditingAddress] = useState<AddressInfo | null>(null)
   const { calculateDelivery: calculateCdek } = useCdek()
-  const { items, setShippingPrice, setShippingLoading } = useCartStore()
+  const { items, setShippingPrice, setShippingLoading, setShippingCarrier } =
+    useCartStore()
 
   const updateShippingPrice = async (address: AddressInfo) => {
+    const carrier = getShippingCarrierFromAddress(address.streetAddress2)
     try {
       setShippingLoading(true)
 
@@ -45,17 +58,88 @@ export default function OrderDelivery() {
       if (!address.city) {
         console.warn('Skipping shipping calculation: City is missing')
         setShippingPrice(0)
+        setShippingCarrier(carrier)
         return
       }
 
-      // === СДЭК — основной расчёт доставки ===
-      console.log('Calculating CDEK shipping for city:', address.city)
-      const { getCities } = await import('@/lib/api/cdek')
-      const cities = await getCities({ city: address.city, country_codes: 'RU', size: 5 })
+      // === Яндекс.Доставка (ПВЗ, расчёт через cargo offers + координаты ПВЗ при наличии) ===
+      if (carrier === 'yandex') {
+        try {
+          const { meta } = parseVspAddressMeta(address.streetAddress2 || '')
+          const coords =
+            meta?.lon != null &&
+            meta?.lat != null &&
+            Number.isFinite(meta.lon) &&
+            Number.isFinite(meta.lat)
+              ? ([meta.lon, meta.lat] as [number, number])
+              : undefined
+          const pvzId = meta?.yandexPvzId?.trim()
+          const shipmentLines = items
+            .filter((i) => i.product)
+            .map((i) => ({
+              quantity: i.quantity,
+              weightKg: i.product.weight,
+              lengthMm: i.product.length,
+              widthMm: i.product.width,
+              heightMm: i.product.height,
+            }))
+          const res = await calculateDelivery({
+            city: address.city.trim(),
+            fullname: address.streetAddress1,
+            coordinates: coords,
+            mode: pvzId ? 'pvz' : 'door',
+            ...(pvzId ? { yandexPointId: pvzId } : {}),
+            ...(shipmentLines.length > 0 ? { shipmentLines } : {}),
+          })
+          const allOffers = res.offers || []
+          const positiveOffers = allOffers.filter(
+            (o) => parseYandexOfferPrice(o.price?.total_price) > 0,
+          )
+          const cheapest = getCheapestOffer(
+            positiveOffers.length > 0 ? positiveOffers : allOffers,
+          )
+          if (cheapest?.price?.total_price != null) {
+            const sum = parseYandexOfferPrice(cheapest.price.total_price)
+            setShippingCarrier('yandex')
+            setShippingPrice(sum > 0 ? Math.round(sum) : 0)
+            return
+          }
+        } catch (yErr) {
+          console.error('Yandex shipping calculation failed:', yErr)
+        }
+        setShippingCarrier('yandex')
+        setShippingPrice(0)
+        return
+      }
 
-      if (cities?.length > 0) {
-        const toCityCode = cities[0].code
-        const FROM_SPB_CODE = 137 // Код Санкт-Петербурга в СДЭК (склад)
+      // === СДЭК — расчёт до ПВЗ ===
+      const { getCities } = await import('@/lib/api/cdek')
+      const cityQuery = address.city.trim()
+      const postal = cleanRuPostalCode(address.postalCode)
+
+      let cities = await getCities({
+        city: cityQuery,
+        country_codes: 'RU',
+        size: 40,
+        ...(postal ? { postal_code: postal } : {}),
+      })
+
+      if ((!cities || cities.length === 0) && postal) {
+        cities = await getCities({
+          city: cityQuery,
+          country_codes: 'RU',
+          size: 40,
+        })
+      }
+
+      const pickedCity = cities?.length
+        ? pickCdekCityForAddress(address, cities)
+        : null
+
+      if (pickedCity) {
+        const toCityCode = pickedCity.code
+        // Справочник СДЭК v2: Санкт-Петербург (склад отправителя)
+        const FROM_CITY_CODE = 137
 
         // Подсчёт суммарного веса и габаритов из корзины
         // Fallback значения если габариты не указаны в товаре
@@ -92,7 +176,7 @@ export default function OrderDelivery() {
         }
 
         const cdekTariffs = await calculateCdek({
-          fromCityCode: FROM_SPB_CODE,
+          fromCityCode: FROM_CITY_CODE,
           toCityCode,
           weight: Math.ceil(totalWeight), // Вес в граммах (округляем вверх)
           length: Math.ceil(maxLength / 10), // СДЭК принимает в см
@@ -101,18 +185,28 @@ export default function OrderDelivery() {
         })
 
         if (cdekTariffs?.length > 0) {
-          const cheapest = cdekTariffs.reduce((min: any, t: any) =>
-            t.delivery_sum < min.delivery_sum ? t : min, cdekTariffs[0])
-          console.log('CDEK shipping price:', cheapest.delivery_sum, '₽, tariff:', cheapest.tariff_name || cheapest.tariff_code, 'weight:', totalWeight)
-          setShippingPrice(cheapest.delivery_sum)
+          const pvzTariffs = filterCdekPvzTariffs(cdekTariffs)
+          const pool: CdekTariff[] =
+            pvzTariffs.length > 0 ? pvzTariffs : cdekTariffs
+          const positive = pool.filter((t) => Number(t.delivery_sum) > 0)
+          const tariffPool = positive.length > 0 ? positive : pool
+          const cheapest = tariffPool.reduce((min, t) =>
+            Number(t.delivery_sum) < Number(min.delivery_sum) ? t : min,
+            tariffPool[0],
+          )
+          const sum = Number(cheapest.delivery_sum)
+          setShippingCarrier('cdek')
+          setShippingPrice(Number.isFinite(sum) && sum > 0 ? sum : 0)
           return
         }
       }
 
       console.warn('CDEK: no city or tariffs found for', address.city)
+      setShippingCarrier('cdek')
       setShippingPrice(0)
     } catch (e) {
       console.error('Failed to calculate shipping:', e)
+      setShippingCarrier(carrier)
       setShippingPrice(0)
     } finally {
       setShippingLoading(false)
@@ -235,14 +329,18 @@ export default function OrderDelivery() {
             </p>
           ) : (
             <ul className="space-y-4 sm:space-y-5 md:space-y-6 mb-4 sm:mb-5 md:mb-6">
-              {addresses.map((address) => (
+              {addresses.map((address) => {
+                const addrComment = displayStreetAddress2Comment(
+                  address.streetAddress2,
+                )
+                return (
                 <li key={address.id} className="relative">
-                  <button
-                    type="button"
-                    onClick={() => handleAddressSelect(address.id)}
-                    className="w-full text-left"
-                  >
-                    <div className="flex items-start sm:items-center gap-2 sm:gap-3">
+                  <div className="flex items-start sm:items-center gap-2 sm:gap-3">
+                    <button
+                      type="button"
+                      onClick={() => handleAddressSelect(address.id)}
+                      className="min-w-0 flex-1 text-left flex items-start sm:items-center gap-2 sm:gap-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-black/20"
+                    >
                       <span className="mt-1 sm:mt-0 inline-flex h-4 w-4 sm:h-5 sm:w-5 shrink-0 items-center justify-center rounded-full bg-[#2688EB]">
                         {selected === address.id ? (
                           <svg
@@ -264,24 +362,24 @@ export default function OrderDelivery() {
                           {address.countryArea}{address.city ? `, ${address.city}` : ''}{address.cityArea ? `, ${address.cityArea}` : ''}, {address.streetAddress1}
                           {address.companyName ? `, ${address.companyName}` : ''}
                         </div>
-                        {address.streetAddress2 && (
+                        {addrComment ? (
                           <div className="text-xs sm:text-[13px] md:text-[14px] leading-5 sm:leading-6 text-black/40">
                             <span>Комментарий: </span>
                             <span className="text-black font-medium">
-                              {address.streetAddress2}
+                              {addrComment}
                             </span>
                           </div>
-                        )}
+                        ) : null}
                       </div>
+                    </button>
 
-                      <AddressOptions
-                        onDelete={handleDeleteAddress}
-                        onEdit={() => handleOpenEdit(address)}
-                      />
-                    </div>
-                  </button>
+                    <AddressOptions
+                      onDelete={handleDeleteAddress}
+                      onEdit={() => handleOpenEdit(address)}
+                    />
+                  </div>
                 </li>
-              ))}
+              )})}
             </ul>
           )}
 

@@ -11,6 +11,16 @@ import PhoneInput from '../ui/PhoneInput'
 import { formatPhoneInputValue, isValidRuPhone } from '@/lib/ruPhone'
 import { useUserStore } from '@/stores/useUser'
 import CdekPvzList, { type CdekPvzInfo } from '../ui/CdekPvzList'
+import YandexPvzList from '../ui/YandexPvzList'
+import type { YandexPickupPoint } from '@/types/yandexDelivery'
+import {
+  buildStreetAddress2WithMeta,
+  parseVspAddressMeta,
+  type VspAddressMeta,
+} from '@/lib/addressVspMeta'
+import { yandexPickupCityArea } from '@/lib/yandexPickupCityArea'
+import { inferRuCountryAreaFromYandexPvz } from '@/lib/ruAddressRegion'
+import { yandexPointIdForCargoOffers } from '@/lib/yandexPickupPointId'
 
 interface AddressModalProps {
   visible: boolean
@@ -73,13 +83,36 @@ export default function AddressModal({
   const [formData, setFormData] = useState<FormData>(initialFormState)
   const [errors, setErrors] = useState<FormErrors>({})
   const [deliveryService, setDeliveryService] = useState<'cdek' | 'yandex'>('cdek')
+  /** Координаты выбранного ПВЗ Яндекса (для расчёта доставки на checkout) */
+  const [yandexPvzCoords, setYandexPvzCoords] = useState<{
+    lon: number
+    lat: number
+  } | null>(null)
+  /** id пункта из API Яндекса — для расчёта с type=pvz */
+  const [yandexPvzId, setYandexPvzId] = useState<string | null>(null)
 
   useEffect(() => {
     if (visible) {
       setShow(true)
-      setDeliveryService('cdek')
 
       if (addressToEdit) {
+        const { meta, comment } = parseVspAddressMeta(
+          addressToEdit.streetAddress2 || '',
+        )
+        setDeliveryService(meta?.carrier ?? 'cdek')
+        if (
+          meta?.carrier === 'yandex' &&
+          meta.lon != null &&
+          meta.lat != null &&
+          Number.isFinite(meta.lon) &&
+          Number.isFinite(meta.lat)
+        ) {
+          setYandexPvzCoords({ lon: meta.lon, lat: meta.lat })
+        } else {
+          setYandexPvzCoords(null)
+        }
+        setYandexPvzId(meta?.yandexPvzId?.trim() || null)
+
         // Safe extraction of country code (handles if backend returns object or string)
         const countryCode =
           typeof addressToEdit.country === 'object' && addressToEdit.country !== null
@@ -95,12 +128,15 @@ export default function AddressModal({
           city: addressToEdit.city || '', // Ensure this is not undefined
           cityArea: addressToEdit.cityArea || '',
           streetAddress1: addressToEdit.streetAddress1 || '',
-          streetAddress2: addressToEdit.streetAddress2 || '',
+          streetAddress2: comment,
           postalCode: addressToEdit.postalCode || '',
           companyName: addressToEdit.companyName || '',
           isDefaultShippingAddress: addressToEdit.isDefaultShippingAddress || false,
         })
       } else {
+        setDeliveryService('cdek')
+        setYandexPvzCoords(null)
+        setYandexPvzId(null)
         // Pre-fill for new address using User Profile data
         setFormData({
           ...initialFormState,
@@ -162,9 +198,17 @@ export default function AddressModal({
     else if (!isValidRuPhone(formData.phone)) {
       newErrors.phone = 'Номер в формате +7 (900) 000-00-00'
     }
-    if (!formData.countryArea.trim()) newErrors.countryArea = 'Обязательное поле'
+    // Для РФ Saleor часто принимает пустой регион; неверная строка даёт INVALID
+    if (
+      formData.country !== 'RU' &&
+      !formData.countryArea.trim()
+    ) {
+      newErrors.countryArea = 'Обязательное поле'
+    }
     if (!formData.city.trim()) newErrors.city = 'Заполните город'
-    if (!formData.cityArea.trim()) newErrors.cityArea = 'Обязательное поле'
+    if (formData.country !== 'RU' && !formData.cityArea.trim()) {
+      newErrors.cityArea = 'Обязательное поле'
+    }
     if (!formData.streetAddress1.trim())
       newErrors.streetAddress1 = 'Заполните улицу и номер дома'
     if (!formData.postalCode.trim()) {
@@ -200,6 +244,23 @@ export default function AddressModal({
     setLoading(true)
 
     try {
+      const metaPayload: VspAddressMeta = {
+        carrier: deliveryService,
+        ...(deliveryService === 'yandex' &&
+        yandexPvzCoords &&
+        Number.isFinite(yandexPvzCoords.lon) &&
+        Number.isFinite(yandexPvzCoords.lat)
+          ? { lon: yandexPvzCoords.lon, lat: yandexPvzCoords.lat }
+          : {}),
+        ...(deliveryService === 'yandex' && yandexPvzId?.trim()
+          ? { yandexPvzId: yandexPvzId.trim() }
+          : {}),
+      }
+      const streetAddress2WithMeta = buildStreetAddress2WithMeta(
+        metaPayload,
+        formData.streetAddress2,
+      )
+
       const addressInput = {
         firstName: formData.firstName,
         lastName: formData.lastName,
@@ -209,7 +270,7 @@ export default function AddressModal({
         city: formData.city,
         cityArea: formData.cityArea,
         streetAddress1: formData.streetAddress1,
-        streetAddress2: formData.streetAddress2,
+        streetAddress2: streetAddress2WithMeta,
         postalCode: formData.postalCode,
         companyName: formData.companyName,
       }
@@ -268,6 +329,8 @@ export default function AddressModal({
   }
 
   const handleCdekPvzChoose = (pvz: CdekPvzInfo) => {
+    setYandexPvzCoords(null)
+    setYandexPvzId(null)
     setFormData((prev) => ({
       ...prev,
       country: 'RU',
@@ -284,6 +347,41 @@ export default function AddressModal({
       streetAddress1: '',
       postalCode: '',
     }))
+  }
+
+  const handleYandexPvzChoose = (pvz: YandexPickupPoint) => {
+    const city =
+      pvz.address?.locality || pvz.address?.region || ''
+    const inferredRegion = inferRuCountryAreaFromYandexPvz(pvz, city)
+
+    const area = yandexPickupCityArea(pvz.address)
+
+    setFormData((prev) => ({
+      ...prev,
+      country: 'RU',
+      countryArea: inferredRegion || prev.countryArea,
+      city: city || prev.city,
+      cityArea: area || prev.cityArea,
+      streetAddress1: pvz.address?.full_address || prev.streetAddress1,
+      postalCode: pvz.address?.postal_code || prev.postalCode,
+      companyName: pvz.name || prev.companyName,
+    }))
+
+    const cargoId = yandexPointIdForCargoOffers(pvz)
+    setYandexPvzId(cargoId || null)
+
+    if (
+      pvz.position &&
+      Number.isFinite(pvz.position.longitude) &&
+      Number.isFinite(pvz.position.latitude)
+    ) {
+      setYandexPvzCoords({
+        lon: pvz.position.longitude,
+        lat: pvz.position.latitude,
+      })
+    } else {
+      setYandexPvzCoords(null)
+    }
   }
 
   if (!show) return null
@@ -375,7 +473,11 @@ export default function AddressModal({
             <div className="flex gap-2 p-1 bg-black/5 rounded-xl">
               <button
                 type="button"
-                onClick={() => setDeliveryService('cdek')}
+                onClick={() => {
+                  setDeliveryService('cdek')
+                  setYandexPvzCoords(null)
+                  setYandexPvzId(null)
+                }}
                 className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${deliveryService === 'cdek' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
                   }`}
               >
@@ -395,16 +497,21 @@ export default function AddressModal({
               {deliveryService === 'cdek' ? (
                 <CdekPvzList onChoose={handleCdekPvzChoose} />
               ) : (
-                <div className="flex flex-col items-center justify-center gap-2 py-12 px-4 text-center text-black/50 text-sm">
-                  <p className="font-medium text-black/70">Яндекс.Доставка</p>
-                  <p>Виджет выбора пункта выдачи будет доступен здесь позже.</p>
-                </div>
+                <YandexPvzList
+                  onChoose={handleYandexPvzChoose}
+                  defaultCity={formData.city?.trim() || 'Москва'}
+                />
               )}
             </div>
           </div>
 
           <div className="flex flex-col">
-            <label className="text-sm font-medium mb-2">Регион</label>
+            <label className="text-sm font-medium mb-2">
+              Регион
+              {formData.country === 'RU' && (
+                <span className="font-normal text-black/50"> — для РФ можно оставить пустым</span>
+              )}
+            </label>
             <input
               type="text"
               value={formData.countryArea}
@@ -440,7 +547,12 @@ export default function AddressModal({
             </div>
 
             <div className="flex flex-col">
-              <label className="text-sm font-medium mb-2">Район</label>
+              <label className="text-sm font-medium mb-2">
+                Район
+                {formData.country === 'RU' && (
+                  <span className="font-normal text-black/50"> — необязательно</span>
+                )}
+              </label>
               <input
                 type="text"
                 value={formData.cityArea}

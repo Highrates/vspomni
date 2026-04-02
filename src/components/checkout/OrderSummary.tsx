@@ -17,6 +17,7 @@ export default function OrderSummary() {
     appliedPromoCode,
     shippingPrice,
     shippingLoading,
+    shippingCarrier,
     decreaseQuantity,
     increaseQuantity,
     removeItem,
@@ -71,6 +72,7 @@ export default function OrderSummary() {
         totalItems={totalItems}
         shipping={shippingPrice}
         shippingLoading={shippingLoading}
+        shippingCarrier={shippingCarrier ?? null}
         discountType={discountType}
       />
     </section>

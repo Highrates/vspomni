@@ -88,11 +88,18 @@ export interface YandexPickupPointAddress {
   full_address?: string
   postal_code?: string
   comment?: string
+  /** Встречаются в ответах platform/pickup-points */
+  district?: string
+  area?: string
+  borough?: string
+  dependent_locality?: string
 }
 
 export interface YandexPickupPoint {
   id: string
   operator_station_id?: string
+  /** camelCase, если прокси/API нормализует ключи */
+  operatorStationId?: string
   name: string
   type: 'pickup_point' | 'terminal' | 'warehouse'
   position?: { latitude: number; longitude: number }
