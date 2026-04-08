@@ -196,6 +196,9 @@ export function useCdek() {
     length?: number
     width?: number
     height?: number
+    /** Курьер до двери: полный адрес и индекс для калькулятора СДЭК */
+    toStreetAddress?: string
+    toPostalCode?: string
   }) => {
     store.setCalculating(true)
     store.setError(null)
@@ -205,7 +208,15 @@ export function useCdek() {
         type: 1,
         currency: 1,
         from_location: { code: params.fromCityCode },
-        to_location: { code: params.toCityCode },
+        to_location: {
+          code: params.toCityCode,
+          ...(params.toStreetAddress?.trim()
+            ? { address: params.toStreetAddress.trim() }
+            : {}),
+          ...(params.toPostalCode?.trim()
+            ? { postal_code: params.toPostalCode.trim() }
+            : {}),
+        },
         packages: [{
           weight: params.weight,
           length: params.length || 20,

@@ -10,6 +10,8 @@ export type VspAddressMeta = {
   lat?: number
   /** id пункта из API Яндекса (pickup-points); для offers/calculate с type=pvz */
   yandexPvzId?: string
+  /** Пункт выдачи или курьер до двери (по умолчанию для старых адресов — ПВЗ) */
+  dropoff?: 'pvz' | 'courier'
 }
 
 function parseMetaFirstLine(first: string): VspAddressMeta | null {
@@ -33,6 +35,8 @@ function parseMetaFirstLine(first: string): VspAddressMeta | null {
       if (Number.isFinite(n)) meta.lat = n
     } else if (key === 'pvz' && val) {
       meta.yandexPvzId = val
+    } else if (key === 'dropoff' && (val === 'pvz' || val === 'courier')) {
+      meta.dropoff = val
     }
   }
   return meta
@@ -72,6 +76,9 @@ export function buildStreetAddress2WithMeta(
   if (pvz) {
     line += `|pvz=${pvz}`
   }
+  if (meta.dropoff) {
+    line += `|dropoff=${meta.dropoff}`
+  }
   line += `__`
   const c = (userComment || '').trim()
   return c ? `${line}\n${c}` : line
@@ -86,4 +93,61 @@ export function getShippingCarrierFromAddress(
   streetAddress2: string | undefined | null,
 ): 'cdek' | 'yandex' {
   return parseVspAddressMeta(streetAddress2 || '').meta?.carrier ?? 'cdek'
+}
+
+/** Режим доставки для отображения (ПВЗ / курьер) по метаданным адреса. */
+export function getDeliveryDisplayMode(
+  streetAddress2: string | undefined | null,
+): { carrier: 'cdek' | 'yandex'; mode: 'pvz' | 'courier' } {
+  const { meta } = parseVspAddressMeta(streetAddress2 || '')
+  const carrier = meta?.carrier ?? 'cdek'
+  if (!meta) {
+    return { carrier: 'cdek', mode: 'pvz' }
+  }
+  if (meta.dropoff === 'courier') {
+    return { carrier, mode: 'courier' }
+  }
+  if (meta.dropoff === 'pvz') {
+    return { carrier, mode: 'pvz' }
+  }
+  if (carrier === 'yandex') {
+    if (meta.yandexPvzId?.trim()) {
+      return { carrier, mode: 'pvz' }
+    }
+    if (
+      meta.lon != null &&
+      meta.lat != null &&
+      Number.isFinite(meta.lon) &&
+      Number.isFinite(meta.lat)
+    ) {
+      return { carrier, mode: 'courier' }
+    }
+    return { carrier, mode: 'pvz' }
+  }
+  if (
+    meta.lon != null &&
+    meta.lat != null &&
+    Number.isFinite(meta.lon) &&
+    Number.isFinite(meta.lat)
+  ) {
+    return { carrier, mode: 'courier' }
+  }
+  return { carrier, mode: 'pvz' }
+}
+
+/**
+ * Одна строка для списка доставки: «Яндекс Доставка, ПВЗ: Город, адрес».
+ */
+export function formatDeliveryAddressSummary(address: {
+  streetAddress2?: string | null
+  city?: string | null
+  streetAddress1?: string | null
+}): string {
+  const { carrier, mode } = getDeliveryDisplayMode(address.streetAddress2)
+  const carrierLabel = carrier === 'yandex' ? 'Яндекс Доставка' : 'СДЭК'
+  const modeLabel = mode === 'pvz' ? 'ПВЗ' : 'Курьер'
+  const city = (address.city || '').trim()
+  const street = (address.streetAddress1 || '').trim()
+  const loc = [city, street].filter(Boolean).join(', ')
+  return loc ? `${carrierLabel}, ${modeLabel}: ${loc}` : `${carrierLabel}, ${modeLabel}`
 }

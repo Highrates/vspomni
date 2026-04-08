@@ -12,6 +12,7 @@ import { formatPhoneInputValue, isValidRuPhone } from '@/lib/ruPhone'
 import { useUserStore } from '@/stores/useUser'
 import CdekPvzList, { type CdekPvzInfo } from '../ui/CdekPvzList'
 import YandexPvzList from '../ui/YandexPvzList'
+import DeliveryCourierMap, { type CourierMapResult } from '../ui/DeliveryCourierMap'
 import type { YandexPickupPoint } from '@/types/yandexDelivery'
 import {
   buildStreetAddress2WithMeta,
@@ -90,6 +91,13 @@ export default function AddressModal({
   } | null>(null)
   /** id пункта из API Яндекса — для расчёта с type=pvz */
   const [yandexPvzId, setYandexPvzId] = useState<string | null>(null)
+  const [cdekDropoff, setCdekDropoff] = useState<'pvz' | 'courier'>('pvz')
+  const [yandexDropoff, setYandexDropoff] = useState<'pvz' | 'courier'>('pvz')
+  /** Курьер до двери (СДЭК и Яндекс): координаты с карты */
+  const [courierCoords, setCourierCoords] = useState<{
+    lon: number
+    lat: number
+  } | null>(null)
 
   useEffect(() => {
     if (visible) {
@@ -100,18 +108,72 @@ export default function AddressModal({
           addressToEdit.streetAddress2 || '',
         )
         setDeliveryService(meta?.carrier ?? 'cdek')
-        if (
-          meta?.carrier === 'yandex' &&
-          meta.lon != null &&
-          meta.lat != null &&
-          Number.isFinite(meta.lon) &&
-          Number.isFinite(meta.lat)
-        ) {
-          setYandexPvzCoords({ lon: meta.lon, lat: meta.lat })
-        } else {
+        const carrier = meta?.carrier ?? 'cdek'
+
+        if (carrier === 'cdek') {
+          const cdekCourier =
+            meta?.dropoff === 'courier' ||
+            (meta?.lon != null &&
+              meta?.lat != null &&
+              Number.isFinite(meta.lon) &&
+              Number.isFinite(meta.lat))
+          setCdekDropoff(cdekCourier ? 'courier' : 'pvz')
+          if (
+            cdekCourier &&
+            meta?.lon != null &&
+            meta?.lat != null &&
+            Number.isFinite(meta.lon) &&
+            Number.isFinite(meta.lat)
+          ) {
+            setCourierCoords({ lon: meta.lon, lat: meta.lat })
+          } else {
+            setCourierCoords(null)
+          }
           setYandexPvzCoords(null)
+          setYandexPvzId(null)
+          setYandexDropoff('pvz')
+        } else {
+          setCdekDropoff('pvz')
+          setCourierCoords(null)
+          const yPvz = Boolean(meta?.yandexPvzId?.trim())
+          const yCourier =
+            meta?.dropoff === 'courier' ||
+            (!yPvz &&
+              meta?.lon != null &&
+              meta?.lat != null &&
+              Number.isFinite(meta.lon) &&
+              Number.isFinite(meta.lat))
+          setYandexDropoff(yCourier ? 'courier' : 'pvz')
+          if (yCourier) {
+            if (
+              meta?.lon != null &&
+              meta?.lat != null &&
+              Number.isFinite(meta.lon) &&
+              Number.isFinite(meta.lat)
+            ) {
+              setCourierCoords({ lon: meta.lon, lat: meta.lat })
+            } else {
+              setCourierCoords(null)
+            }
+            setYandexPvzCoords(null)
+            setYandexPvzId(null)
+          } else if (yPvz) {
+            setYandexPvzId(meta?.yandexPvzId?.trim() || null)
+            if (
+              meta?.lon != null &&
+              meta?.lat != null &&
+              Number.isFinite(meta.lon) &&
+              Number.isFinite(meta.lat)
+            ) {
+              setYandexPvzCoords({ lon: meta.lon, lat: meta.lat })
+            } else {
+              setYandexPvzCoords(null)
+            }
+          } else {
+            setYandexPvzCoords(null)
+            setYandexPvzId(null)
+          }
         }
-        setYandexPvzId(meta?.yandexPvzId?.trim() || null)
 
         // Safe extraction of country code (handles if backend returns object or string)
         const countryCode =
@@ -135,6 +197,9 @@ export default function AddressModal({
         })
       } else {
         setDeliveryService('cdek')
+        setCdekDropoff('pvz')
+        setYandexDropoff('pvz')
+        setCourierCoords(null)
         setYandexPvzCoords(null)
         setYandexPvzId(null)
         // Pre-fill for new address using User Profile data
@@ -244,16 +309,29 @@ export default function AddressModal({
     setLoading(true)
 
     try {
+      const dropoff =
+        deliveryService === 'cdek' ? cdekDropoff : yandexDropoff
+
       const metaPayload: VspAddressMeta = {
         carrier: deliveryService,
+        dropoff,
+        ...(dropoff === 'courier' &&
+        courierCoords &&
+        Number.isFinite(courierCoords.lon) &&
+        Number.isFinite(courierCoords.lat)
+          ? { lon: courierCoords.lon, lat: courierCoords.lat }
+          : {}),
         ...(deliveryService === 'yandex' &&
+        dropoff === 'pvz' &&
+        yandexPvzId?.trim()
+          ? { yandexPvzId: yandexPvzId.trim() }
+          : {}),
+        ...(deliveryService === 'yandex' &&
+        dropoff === 'pvz' &&
         yandexPvzCoords &&
         Number.isFinite(yandexPvzCoords.lon) &&
         Number.isFinite(yandexPvzCoords.lat)
           ? { lon: yandexPvzCoords.lon, lat: yandexPvzCoords.lat }
-          : {}),
-        ...(deliveryService === 'yandex' && yandexPvzId?.trim()
-          ? { yandexPvzId: yandexPvzId.trim() }
           : {}),
       }
       const streetAddress2WithMeta = buildStreetAddress2WithMeta(
@@ -329,6 +407,8 @@ export default function AddressModal({
   }
 
   const handleCdekPvzChoose = (pvz: CdekPvzInfo) => {
+    setCdekDropoff('pvz')
+    setCourierCoords(null)
     setYandexPvzCoords(null)
     setYandexPvzId(null)
     setFormData((prev) => ({
@@ -350,6 +430,8 @@ export default function AddressModal({
   }
 
   const handleYandexPvzChoose = (pvz: YandexPickupPoint) => {
+    setYandexDropoff('pvz')
+    setCourierCoords(null)
     const city =
       pvz.address?.locality || pvz.address?.region || ''
     const inferredRegion = inferRuCountryAreaFromYandexPvz(pvz, city)
@@ -381,6 +463,25 @@ export default function AddressModal({
       })
     } else {
       setYandexPvzCoords(null)
+    }
+  }
+
+  const handleCourierMapChoose = (r: CourierMapResult) => {
+    setCourierCoords({ lon: r.lon, lat: r.lat })
+    setFormData((prev) => ({
+      ...prev,
+      country: 'RU',
+      countryArea: r.region || prev.countryArea,
+      city: r.city || prev.city,
+      streetAddress1: r.addressLine || prev.streetAddress1,
+      postalCode: r.postalCode || prev.postalCode,
+    }))
+    if (deliveryService === 'yandex') {
+      setYandexDropoff('courier')
+      setYandexPvzId(null)
+      setYandexPvzCoords(null)
+    } else {
+      setCdekDropoff('courier')
     }
   }
 
@@ -459,13 +560,13 @@ export default function AddressModal({
             showFormatHint={false}
           />
 
-          {/* Доставка: выбор ПВЗ */}
+          {/* Доставка: выбор ПВЗ / курьер */}
           <div className="flex flex-col gap-3 p-4 border border-black/10 rounded-xl bg-gray-50/50">
             <div className="flex items-center justify-between mb-2">
               <div>
-                <h3 className="text-base font-semibold">Пункты выдачи</h3>
+                <h3 className="text-base font-semibold">Способ доставки</h3>
                 <p className="text-sm text-black/60">
-                  Выберите пункт выдачи на карте или укажите адрес вручную
+                  Перевозчик, затем пункт выдачи или курьер до двери
                 </p>
               </div>
             </div>
@@ -477,6 +578,7 @@ export default function AddressModal({
                   setDeliveryService('cdek')
                   setYandexPvzCoords(null)
                   setYandexPvzId(null)
+                  setCourierCoords(null)
                 }}
                 className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${deliveryService === 'cdek' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
                   }`}
@@ -485,7 +587,10 @@ export default function AddressModal({
               </button>
               <button
                 type="button"
-                onClick={() => setDeliveryService('yandex')}
+                onClick={() => {
+                  setDeliveryService('yandex')
+                  setCourierCoords(null)
+                }}
                 className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${deliveryService === 'yandex' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
                   }`}
               >
@@ -493,13 +598,86 @@ export default function AddressModal({
               </button>
             </div>
 
-            <div className="mt-2 border border-black/10 rounded-xl p-3 bg-white max-h-[400px] overflow-y-auto min-h-[200px]">
-              {deliveryService === 'cdek' ? (
+            {deliveryService === 'cdek' && (
+              <div className="flex gap-2 p-1 bg-black/5 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCdekDropoff('pvz')
+                    setCourierCoords(null)
+                  }}
+                  className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${cdekDropoff === 'pvz' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
+                    }`}
+                >
+                  Пункт выдачи
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCdekDropoff('courier')
+                    setYandexPvzId(null)
+                    setYandexPvzCoords(null)
+                  }}
+                  className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${cdekDropoff === 'courier' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
+                    }`}
+                >
+                  Курьером
+                </button>
+              </div>
+            )}
+
+            {deliveryService === 'yandex' && (
+              <div className="flex gap-2 p-1 bg-black/5 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setYandexDropoff('pvz')
+                    setCourierCoords(null)
+                  }}
+                  className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${yandexDropoff === 'pvz' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
+                    }`}
+                >
+                  Пункт выдачи
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setYandexDropoff('courier')
+                    setYandexPvzId(null)
+                    setYandexPvzCoords(null)
+                  }}
+                  className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${yandexDropoff === 'courier' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
+                    }`}
+                >
+                  Курьером
+                </button>
+              </div>
+            )}
+
+            <div className="mt-2 border border-black/10 rounded-xl p-3 bg-white max-h-[520px] overflow-y-auto min-h-[200px]">
+              {deliveryService === 'cdek' && cdekDropoff === 'pvz' && (
                 <CdekPvzList onChoose={handleCdekPvzChoose} />
-              ) : (
+              )}
+              {deliveryService === 'cdek' && cdekDropoff === 'courier' && (
+                <DeliveryCourierMap
+                  key={`cdek-courier-${addressToEdit?.id ?? 'new'}`}
+                  onSelect={handleCourierMapChoose}
+                  initialCoords={courierCoords}
+                  hintCity={formData.city?.trim() || 'Москва'}
+                />
+              )}
+              {deliveryService === 'yandex' && yandexDropoff === 'pvz' && (
                 <YandexPvzList
                   onChoose={handleYandexPvzChoose}
                   defaultCity={formData.city?.trim() || 'Москва'}
+                />
+              )}
+              {deliveryService === 'yandex' && yandexDropoff === 'courier' && (
+                <DeliveryCourierMap
+                  key={`yandex-courier-${addressToEdit?.id ?? 'new'}`}
+                  onSelect={handleCourierMapChoose}
+                  initialCoords={courierCoords}
+                  hintCity={formData.city?.trim() || 'Москва'}
                 />
               )}
             </div>

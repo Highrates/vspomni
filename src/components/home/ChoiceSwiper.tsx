@@ -2,8 +2,7 @@
 
 import 'swiper/css'
 import 'swiper/css/navigation'
-import 'swiper/css/pagination'
-import { Autoplay, Navigation, Pagination } from 'swiper/modules'
+import { Navigation } from 'swiper/modules'
 import { Swiper, SwiperSlide } from 'swiper/react'
 
 import { motion } from 'framer-motion'
@@ -22,7 +21,7 @@ export default function ChoiceSwiper({ products }: Props) {
 
   return (
     <Swiper
-      modules={[Autoplay, Pagination, Navigation]}
+      modules={[Navigation]}
       slidesPerView="auto"
       spaceBetween={12}
       grabCursor
@@ -32,7 +31,6 @@ export default function ChoiceSwiper({ products }: Props) {
       touchRatio={1}
       preventClicks
       preventClicksPropagation
-      autoplay={{ delay: 5500, disableOnInteraction: false }}
       navigation={{ enabled: true }}
       className="choice-swiper pb-10 rounded-[20px] [&_.swiper-button-prev]:hidden [&_.swiper-button-next]:hidden sm:[&_.swiper-button-prev]:flex sm:[&_.swiper-button-next]:flex"
       breakpoints={{

@@ -24,6 +24,11 @@ function normalizeRuAddressForYandex(fullname: string): string {
     .replace(/^Россия,\s*Санкт-Петербург\s+(?!,)/i, 'Россия, Санкт-Петербург, ')
 }
 
+/** Для Platform pricing-calculator в примерах доки адрес без префикса «Россия,». */
+function addressForPlatformPricing(full: string): string {
+  return full.replace(/^Россия,\s*/i, '').trim() || full.trim()
+}
+
 /**
  * Парсинг pricing_total из pricing-calculator (пример из доки: "225.7 RUB" — рубли с десятыми).
  * @see https://yandex.com/support/delivery-profile/ru/api/other-day/ref/1.-Podgotovka-zayavki/apib2bplatformpricing-calculator-post
@@ -369,6 +374,8 @@ export async function POST(req: NextRequest) {
         pkg.dyCm,
         pkg.dzCm,
       )
+      const platformWeightG = Math.max(1, Math.round(pkg.totalWeightG))
+      const { dx: platDx, dy: platDy, dz: platDz } = physicalCm
 
       if (useYandexPvzDropoff && isHyphenatedUuidPointId(yandexDropoffPointId)) {
         console.warn(
@@ -405,8 +412,9 @@ export async function POST(req: NextRequest) {
           dropoff_point: 2,
         },
       ]
-      // Поддержка Яндекса: для NDD не уходить в «экспресс» на длинной дистанции —
-      // явно ndd + delivery_type (повтор в ретрае при пустых offers).
+      // ПВЗ→ПВЗ (NDD): только ndd + skip_door_to_door.
+      // До двери: НЕ форсировать ndd/delivery_type — иначе Cargo часто отдаёт пустой offers
+      // на межгороде (СПб→МСК и т.д.); сначала даём API выбрать cargo/courier/express/ndd.
       const requirements: Record<string, unknown> = useYandexPvzDropoff
         ? {
             taxi_classes: ['ndd'],
@@ -415,10 +423,8 @@ export async function POST(req: NextRequest) {
             delivery_type: 'ndd',
           }
         : {
-            taxi_classes: ['ndd', 'courier', 'express', 'cargo'],
+            taxi_classes: ['cargo', 'courier', 'express', 'ndd'],
             skip_door_to_door: false,
-            ndd: true,
-            delivery_type: 'ndd',
           }
 
       /**
@@ -446,9 +452,6 @@ export async function POST(req: NextRequest) {
               ? warehousePointId
               : ''
 
-          const wg = Math.max(1, Math.round(pkg.totalWeightG))
-          const { dx, dy, dz } = physicalCm
-
           const buildPricingBody = (
             sourceStationId: string,
             destination: PricingDest,
@@ -456,17 +459,17 @@ export async function POST(req: NextRequest) {
             source: { platform_station_id: sourceStationId },
             destination,
             tariff: 'self_pickup' as const,
-            total_weight: wg,
+            total_weight: platformWeightG,
             total_assessed_price: 0,
             client_price: 0,
             payment_method: 'already_paid' as const,
             places: [
               {
                 physical_dims: {
-                  weight_gross: wg,
-                  dx,
-                  dy,
-                  dz,
+                  weight_gross: platformWeightG,
+                  dx: platDx,
+                  dy: platDy,
+                  dz: platDz,
                 },
               },
             ],
@@ -553,9 +556,106 @@ export async function POST(req: NextRequest) {
             nddErr,
           )
         }
+      } else if (!useYandexPvzDropoff && platformSourceStationId) {
+        /**
+         * Доставка до двери (межгород): по доке 1.01 тариф `time_interval`, не Cargo offers/calculate.
+         * @see https://yandex.com/support/delivery-profile/ru/api/other-day/ref/1.-Podgotovka-zayavki/apib2bplatformpricing-calculator-post
+         */
+        try {
+          const doorAddress = addressForPlatformPricing(dropoffFullnameForApi)
+          const warehousePointId = warehouse.point_id?.trim() || ''
+          const fallbackSourceId =
+            warehousePointId &&
+            isLikelyYandexPlatformStationId(warehousePointId) &&
+            warehousePointId !== platformSourceStationId
+              ? warehousePointId
+              : ''
+
+          const buildDoorPricingBody = (sourceStationId: string) => ({
+            source: { platform_station_id: sourceStationId },
+            destination: { address: doorAddress },
+            tariff: 'time_interval' as const,
+            total_weight: platformWeightG,
+            total_assessed_price: 0,
+            client_price: 0,
+            payment_method: 'already_paid' as const,
+            places: [
+              {
+                physical_dims: {
+                  weight_gross: platformWeightG,
+                  dx: platDx,
+                  dy: platDy,
+                  dz: platDz,
+                },
+              },
+            ],
+          })
+
+          let sourceId = platformSourceStationId
+          let doorPricing: { pricing_total?: string; delivery_days?: number } | undefined
+          for (let attempt = 0; attempt < 5; attempt++) {
+            try {
+              doorPricing = await yandexPlatformRequest<{
+                pricing_total?: string
+                delivery_days?: number
+              }>(PLATFORM_PRICING_CALCULATOR_PATH, {
+                body: buildDoorPricingBody(sourceId),
+              })
+              break
+            } catch (pricingErr) {
+              const msg =
+                pricingErr instanceof Error
+                  ? pricingErr.message
+                  : String(pricingErr)
+              if (/source station is invalid/i.test(msg) && fallbackSourceId && sourceId !== fallbackSourceId) {
+                sourceId = fallbackSourceId
+                continue
+              }
+              throw pricingErr
+            }
+          }
+          if (doorPricing) {
+            console.log(
+              '--- Yandex Platform door pricing-calculator (time_interval) ---',
+              JSON.stringify(doorPricing, null, 2),
+            )
+            const rub = parsePricingTotalRub(doorPricing.pricing_total)
+            const rubCheckout = Number.isFinite(rub) ? Math.round(rub) : NaN
+            if (Number.isFinite(rubCheckout) && rubCheckout > 0) {
+              return json({
+                offers: [
+                  {
+                    price: {
+                      total_price: String(rubCheckout),
+                      total_price_with_vat: String(rubCheckout),
+                      base_price: String(rubCheckout),
+                      currency: 'RUB',
+                    },
+                    taxi_class: 'platform_time_interval',
+                    description: 'platform/pricing-calculator (door)',
+                    payload: 'platform-door-pricing',
+                    offer_ttl: '',
+                  },
+                ],
+                delivery_days: doorPricing.delivery_days,
+                _pricing_source: 'yandex_platform_door',
+              })
+            }
+          }
+        } catch (doorErr) {
+          console.warn(
+            'Platform pricing-calculator (до двери, time_interval) не удался, пробуем Cargo offers/calculate:',
+            doorErr,
+          )
+        }
       } else if (useYandexPvzDropoff && !platformSourceStationId) {
         console.log(
           '[Yandex NDD] Для расчёта «в другой день» до ПВЗ задайте YANDEX_PLATFORM_SOURCE_STATION_ID — platform_station_id склада из POST .../warehouses/list (док: 1.01 pricing-calculator). Сейчас используется только Cargo v2.',
+        )
+      } else if (!useYandexPvzDropoff && !platformSourceStationId) {
+        console.log(
+          '[Yandex door] Для межгорода до двери задайте YANDEX_PLATFORM_SOURCE_STATION_ID (station_id склада из POST .../warehouses/list). ' +
+            'Иначе расчёт идёт через Cargo offers/calculate — на многих маршрутах он возвращает пустой offers.',
         )
       }
 
@@ -576,32 +676,59 @@ export async function POST(req: NextRequest) {
         JSON.stringify(result, null, 2),
       )
 
-      // Если нет офферов, пробуем более агрессивно запросить именно NDD,
-      // как советовала поддержка (явная передача параметров).
-      if (!result.offers?.length) {
-        console.log('No offers found, retrying with explicit NDD requirements...')
+      // Ретраи при пустых offers (door): разные профили — межгород часто даёт только cargo/ndd.
+      if (!result.offers?.length && !useYandexPvzDropoff) {
+        const doorRetries: Array<Record<string, unknown>> = [
+          { taxi_classes: ['cargo'], skip_door_to_door: false },
+          { taxi_classes: ['ndd'], skip_door_to_door: false, ndd: true, delivery_type: 'ndd' },
+          { taxi_classes: ['courier', 'express'], skip_door_to_door: false },
+          { taxi_classes: ['cargo', 'courier', 'express', 'ndd'], skip_door_to_door: false, ndd: true, delivery_type: 'ndd' },
+        ]
+        for (let i = 0; i < doorRetries.length && !result.offers?.length; i++) {
+          const req = { ...requirements, ...doorRetries[i] }
+          console.log(
+            `--- Yandex door retry ${i + 1}/${doorRetries.length} requirements ---`,
+            JSON.stringify(req),
+          )
+          result = await yandexRequest<{ offers: any[]; error_messages?: any[] }>(
+            `${CARGO_PATH}/offers/calculate`,
+            { body: { items, route_points, requirements: req } },
+          )
+          console.log(
+            `--- Yandex door retry ${i + 1} result ---`,
+            JSON.stringify(result, null, 2),
+          )
+        }
+      }
+
+      // ПВЗ: если пусто — явный NDD (как раньше).
+      if (!result.offers?.length && useYandexPvzDropoff) {
+        console.log('No offers found (PVZ), retrying with explicit NDD requirements...')
         requirements.taxi_classes = ['ndd']
         requirements.ndd = true
         requirements.delivery_type = 'ndd'
 
         result = await yandexRequest<{ offers: any[]; error_messages?: any[] }>(
           `${CARGO_PATH}/offers/calculate`,
-          { body: { items, route_points, requirements } }
+          { body: { items, route_points, requirements } },
         )
         console.log('--- Yandex Delivery Explicit NDD Result ---', JSON.stringify(result, null, 2))
       }
 
-      if (!result.offers?.length) {
-        // Fallback на курьера, если NDD не сработал (вдруг расстояние наоборот маленькое)
-        requirements.taxi_classes = ['courier', 'express']
-        delete requirements.ndd
-        delete requirements.delivery_type
+      if (!result.offers?.length && !useYandexPvzDropoff) {
+        const req = {
+          ...requirements,
+          taxi_classes: ['courier', 'express'],
+          skip_door_to_door: false,
+        }
+        delete (req as { ndd?: unknown }).ndd
+        delete (req as { delivery_type?: unknown }).delivery_type
 
         result = await yandexRequest<{ offers: any[]; error_messages?: any[] }>(
           `${CARGO_PATH}/offers/calculate`,
-          { body: { items, route_points, requirements } }
+          { body: { items, route_points, requirements: req } },
         )
-        console.log('--- Yandex Delivery Courier Fallback Result ---', JSON.stringify(result, null, 2))
+        console.log('--- Yandex Delivery Courier-only Fallback ---', JSON.stringify(result, null, 2))
       }
 
       if (!result.offers?.length) {
@@ -616,9 +743,9 @@ export async function POST(req: NextRequest) {
         return json({
           ...result,
           error:
-            'По этому маршруту Cargo API не вернул тарифы (NDD и курьер пусто). ' +
-            'Для межгорода СПб→МСК и ПВЗ→ПВЗ часто нужен расчёт через Platform NDD (pricing-calculator) и YANDEX_PLATFORM_SOURCE_STATION_ID от менеджера Яндекса. ' +
-            'Либо уточните в поддержке подключён ли тариф на такой коридор.',
+            'По этому маршруту Cargo offers/calculate не вернул тарифы. ' +
+            'Для курьера до двери (межгород) нужен Platform API pricing-calculator с тарифом time_interval и переменная YANDEX_PLATFORM_SOURCE_STATION_ID (station_id склада из warehouses/list). ' +
+            'Для ПВЗ — tariff self_pickup и тот же station_id. Уточните в поддержке Яндекс Доставки, если расчёт пустой.',
           offers: result.offers || [],
         }, 200)
       }

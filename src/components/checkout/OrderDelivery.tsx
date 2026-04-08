@@ -25,7 +25,7 @@ import { deleteAddress } from '@/graphql/queries/adress.service'
 import { toast } from 'react-toastify'
 import { useCdek } from '@/stores/useCdek'
 import { pickCdekCityForAddress, cleanRuPostalCode } from '@/lib/cdekCityPick'
-import { filterCdekPvzTariffs } from '@/lib/cdekPvzTariffs'
+import { filterCdekPvzTariffs, filterCdekCourierTariffs } from '@/lib/cdekPvzTariffs'
 import type { CdekTariff } from '@/types/cdek'
 import { useCartStore } from '@/stores/useCart'
 import {
@@ -37,6 +37,7 @@ import {
   parseVspAddressMeta,
   getShippingCarrierFromAddress,
   displayStreetAddress2Comment,
+  formatDeliveryAddressSummary,
 } from '@/lib/addressVspMeta'
 
 export default function OrderDelivery() {
@@ -62,10 +63,15 @@ export default function OrderDelivery() {
         return
       }
 
-      // === Яндекс.Доставка (ПВЗ, расчёт через cargo offers + координаты ПВЗ при наличии) ===
+      // === Яндекс.Доставка (ПВЗ или курьер: offers + mode door|pvz) ===
       if (carrier === 'yandex') {
         try {
           const { meta } = parseVspAddressMeta(address.streetAddress2 || '')
+          const usePvz =
+            meta?.dropoff === 'pvz' ||
+            (meta?.dropoff !== 'courier' &&
+              Boolean(meta?.yandexPvzId?.trim()))
+          const pvzId = usePvz ? meta?.yandexPvzId?.trim() : undefined
           const coords =
             meta?.lon != null &&
             meta?.lat != null &&
@@ -73,7 +79,6 @@ export default function OrderDelivery() {
             Number.isFinite(meta.lat)
               ? ([meta.lon, meta.lat] as [number, number])
               : undefined
-          const pvzId = meta?.yandexPvzId?.trim()
           const shipmentLines = items
             .filter((i) => i.product)
             .map((i) => ({
@@ -87,8 +92,8 @@ export default function OrderDelivery() {
             city: address.city.trim(),
             fullname: address.streetAddress1,
             coordinates: coords,
-            mode: pvzId ? 'pvz' : 'door',
-            ...(pvzId ? { yandexPointId: pvzId } : {}),
+            mode: usePvz && pvzId ? 'pvz' : 'door',
+            ...(usePvz && pvzId ? { yandexPointId: pvzId } : {}),
             ...(shipmentLines.length > 0 ? { shipmentLines } : {}),
           })
           const allOffers = res.offers || []
@@ -141,6 +146,9 @@ export default function OrderDelivery() {
         // Справочник СДЭК v2: Санкт-Петербург (склад отправителя)
         const FROM_CITY_CODE = 137
 
+        const { meta } = parseVspAddressMeta(address.streetAddress2 || '')
+        const isCdekCourier = meta?.dropoff === 'courier'
+
         // Подсчёт суммарного веса и габаритов из корзины
         // Fallback значения если габариты не указаны в товаре
         const DEFAULT_WEIGHT_G = 300 // 300 г
@@ -182,12 +190,20 @@ export default function OrderDelivery() {
           length: Math.ceil(maxLength / 10), // СДЭК принимает в см
           width: Math.ceil(maxWidth / 10), // СДЭК принимает в см
           height: Math.ceil(totalHeight / 10), // СДЭК принимает в см
+          ...(isCdekCourier
+            ? {
+                toStreetAddress: address.streetAddress1?.trim(),
+                toPostalCode: postal || undefined,
+              }
+            : {}),
         })
 
         if (cdekTariffs?.length > 0) {
-          const pvzTariffs = filterCdekPvzTariffs(cdekTariffs)
+          const filtered = isCdekCourier
+            ? filterCdekCourierTariffs(cdekTariffs)
+            : filterCdekPvzTariffs(cdekTariffs)
           const pool: CdekTariff[] =
-            pvzTariffs.length > 0 ? pvzTariffs : cdekTariffs
+            filtered.length > 0 ? filtered : cdekTariffs
           const positive = pool.filter((t) => Number(t.delivery_sum) > 0)
           const tariffPool = positive.length > 0 ? positive : pool
           const cheapest = tariffPool.reduce((min, t) =>
@@ -341,7 +357,13 @@ export default function OrderDelivery() {
                       onClick={() => handleAddressSelect(address.id)}
                       className="min-w-0 flex-1 text-left flex items-start sm:items-center gap-2 sm:gap-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-black/20"
                     >
-                      <span className="mt-1 sm:mt-0 inline-flex h-4 w-4 sm:h-5 sm:w-5 shrink-0 items-center justify-center rounded-full bg-[#2688EB]">
+                      <span
+                        className={`mt-1 sm:mt-0 inline-flex h-4 w-4 sm:h-5 sm:w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                          selected === address.id
+                            ? 'border-[#2688EB] bg-[#2688EB]'
+                            : 'border-black/25 bg-transparent'
+                        }`}
+                      >
                         {selected === address.id ? (
                           <svg
                             viewBox="0 0 20 20"
@@ -349,18 +371,16 @@ export default function OrderDelivery() {
                           >
                             <path d="M7.6 14.2 3.8 10.4l1.4-1.4 2.4 2.4L14.8 4.8l1.4 1.4-8.6 8z" />
                           </svg>
-                        ) : (
-                          <span className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 rounded-full bg-white/30" />
-                        )}
+                        ) : null}
                       </span>
 
                       <div className="flex-1 min-w-0">
                         <div className="text-sm sm:text-[15px] md:text-[16px] leading-5 sm:leading-6 font-medium">
                           {address.firstName} {address.lastName}
                         </div>
-                        <div className="text-xs sm:text-[13px] md:text-[14px] leading-5 sm:leading-6 text-black/40 break-words">
-                          {address.countryArea}{address.city ? `, ${address.city}` : ''}{address.cityArea ? `, ${address.cityArea}` : ''}, {address.streetAddress1}
-                          {address.companyName ? `, ${address.companyName}` : ''}
+                        <div className="text-xs sm:text-[13px] md:text-[14px] leading-5 sm:leading-6 text-black/50 break-words">
+                          {formatDeliveryAddressSummary(address)}
+                          {address.companyName ? ` · ${address.companyName}` : ''}
                         </div>
                         {addrComment ? (
                           <div className="text-xs sm:text-[13px] md:text-[14px] leading-5 sm:leading-6 text-black/40">

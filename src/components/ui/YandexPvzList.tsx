@@ -6,7 +6,8 @@ import type { YandexPickupPoint } from '@/types/yandexDelivery'
 import YandexPvzMap from './YandexPvzMap'
 import { useYandexPvzStore } from '@/stores/useYandexPvz'
 
-const POPULAR_CITIES = ['Москва', 'Санкт-Петербург', 'Новосибирск', 'Екатеринбург', 'Казань']
+/** Москва и Санкт-Петербург — в начале, затем остальные по алфавиту */
+const PRIORITY_CITIES_FIRST = ['Москва', 'Санкт-Петербург']
 
 export interface YandexPvzListProps {
   onChoose: (point: YandexPickupPoint) => void
@@ -34,9 +35,9 @@ export default function YandexPvzList({ onChoose, defaultCity = 'Москва' }
       byCity.get(city)!.push(p)
     }
     const list = Array.from(byCity.keys()).sort((a, b) => a.localeCompare(b, 'ru'))
-    const popular = list.filter(c => POPULAR_CITIES.some(p => p === c))
-    const rest = list.filter(c => !popular.includes(c))
-    return [...popular, ...rest]
+    const first = PRIORITY_CITIES_FIRST.filter((p) => list.includes(p))
+    const rest = list.filter((c) => !first.includes(c))
+    return [...first, ...rest]
   }, [points])
 
   const selectedCity = defaultCity && cities.includes(defaultCity) ? defaultCity : cities[0] ?? null

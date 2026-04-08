@@ -54,19 +54,8 @@ interface Pvz {
   }
 }
 
-// Популярные города для быстрого выбора
-const POPULAR_CITIES = [
-  'Москва',
-  'Санкт-Петербург',
-  'Новосибирск',
-  'Екатеринбург',
-  'Казань',
-  'Нижний Новгород',
-  'Челябинск',
-  'Самара',
-  'Омск',
-  'Ростов-на-Дону',
-]
+/** Москва и Санкт-Петербург — в начале списка, затем остальные по алфавиту */
+const PRIORITY_CITIES_FIRST = ['Москва', 'Санкт-Петербург']
 
 export default function CdekPvzList({
   onChoose,
@@ -117,24 +106,28 @@ export default function CdekPvzList({
           return
         }
 
-        // Сортируем по алфавиту
-        const sortedCities = citiesList.sort((a, b) =>
-          a.city.localeCompare(b.city, 'ru')
+        const sortedCities = [...citiesList].sort((a, b) =>
+          a.city.localeCompare(b.city, 'ru'),
         )
+        const priority = PRIORITY_CITIES_FIRST.map((name) =>
+          sortedCities.find((c) => c.city === name),
+        ).filter(Boolean) as City[]
+        const rest = sortedCities.filter(
+          (c) => !PRIORITY_CITIES_FIRST.includes(c.city),
+        )
+        const orderedCities = [...priority, ...rest]
 
-        setCities(sortedCities)
+        setCities(orderedCities)
 
-        // Находим город по умолчанию
-        const defaultCityData = sortedCities.find(
+        const defaultCityData = orderedCities.find(
           (c) => c.city.toLowerCase() === defaultCity.toLowerCase(),
         )
 
         if (defaultCityData) {
           setSelectedCity(defaultCityData)
-        } else if (sortedCities.length > 0) {
-          // Если не нашли, берём Москву или первый город
-          const moscow = sortedCities.find(c => c.city === 'Москва')
-          setSelectedCity(moscow || sortedCities[0])
+        } else if (orderedCities.length > 0) {
+          const moscow = orderedCities.find((c) => c.city === 'Москва')
+          setSelectedCity(moscow || orderedCities[0])
         }
       } catch (error: any) {
         setCitiesError(error?.message || 'Ошибка загрузки городов')
@@ -199,14 +192,7 @@ export default function CdekPvzList({
   // Фильтрация городов по поиску
   const filteredCities = useMemo(() => {
     if (!citySearchQuery.trim()) {
-      // Показываем популярные города первыми
-      const popular = cities.filter(c =>
-        POPULAR_CITIES.some(p => c.city.toLowerCase() === p.toLowerCase())
-      )
-      const others = cities.filter(c =>
-        !POPULAR_CITIES.some(p => c.city.toLowerCase() === p.toLowerCase())
-      )
-      return [...popular, ...others].slice(0, 50)
+      return cities.slice(0, 50)
     }
 
     const query = citySearchQuery.toLowerCase().trim()

@@ -29,3 +29,30 @@ export function filterCdekPvzTariffs(tariffs: CdekTariff[]): CdekTariff[] {
   const heuristic = tariffs.filter(looksLikeDeliveryToPickup)
   return heuristic.length > 0 ? heuristic : tariffs
 }
+
+/**
+ * Тарифы СДЭК с доставкой курьером до двери (склад отправителя → адрес получателя).
+ */
+const COURIER_TARIFF_CODES = new Set<number>([
+  CDEK_TARIFFS.WAREHOUSE_TO_DOOR,
+  CDEK_TARIFFS.ECONOMY_DOOR,
+  CDEK_TARIFFS.EXPRESS_DOOR,
+  CDEK_TARIFFS.COURIER_TO_DOOR,
+])
+
+function looksLikeCourierToDoor(t: CdekTariff): boolean {
+  if (COURIER_TARIFF_CODES.has(t.tariff_code)) return true
+  const name = `${t.tariff_name || ''} ${t.tariff_description || ''}`.toLowerCase()
+  if (name.includes('дверь') && !name.includes('пвз') && !name.includes('постамат')) {
+    return true
+  }
+  return false
+}
+
+export function filterCdekCourierTariffs(tariffs: CdekTariff[]): CdekTariff[] {
+  if (!tariffs.length) return []
+  const byCode = tariffs.filter((t) => COURIER_TARIFF_CODES.has(t.tariff_code))
+  if (byCode.length > 0) return byCode
+  const heuristic = tariffs.filter(looksLikeCourierToDoor)
+  return heuristic.length > 0 ? heuristic : tariffs
+}

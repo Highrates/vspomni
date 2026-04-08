@@ -46,7 +46,10 @@ import PasswordChangeModal from '@/components/modals/PasswordChangeModal'
 import ProductCard from '@/components/home/ProductCard'
 import { usePopularScentsStore } from '@/stores/usePopularScents'
 import { formatDate } from '@/lib/functions'
-import { displayStreetAddress2Comment } from '@/lib/addressVspMeta'
+import {
+  displayStreetAddress2Comment,
+  formatDeliveryAddressSummary,
+} from '@/lib/addressVspMeta'
 
 export default function ProfileIndex() {
   const { isAuthenticated, logout } = useAuthStore()
@@ -654,9 +657,8 @@ function AddressRow({
         <h4 className="text-md text-foreground font-medium">
           {address.companyName || `${address.firstName} ${address.lastName}`}
         </h4>
-        <p className="text-textgrey text-sm">
-          {address.countryArea ? `${address.countryArea}, ` : ''}
-          {address.streetAddress1}
+        <p className="text-textgrey text-sm break-words">
+          {formatDeliveryAddressSummary(address)}
         </p>
 
         {addrComment ? (
