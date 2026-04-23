@@ -92,7 +92,8 @@ export function displayStreetAddress2Comment(streetAddress2: string | undefined 
 export function getShippingCarrierFromAddress(
   streetAddress2: string | undefined | null,
 ): 'cdek' | 'yandex' {
-  return parseVspAddressMeta(streetAddress2 || '').meta?.carrier ?? 'cdek'
+  // СДЭК скрыт в UI — по умолчанию считаем Яндексом
+  return parseVspAddressMeta(streetAddress2 || '').meta?.carrier ?? 'yandex'
 }
 
 /** Режим доставки для отображения (ПВЗ / курьер) по метаданным адреса. */
@@ -100,9 +101,10 @@ export function getDeliveryDisplayMode(
   streetAddress2: string | undefined | null,
 ): { carrier: 'cdek' | 'yandex'; mode: 'pvz' | 'courier' } {
   const { meta } = parseVspAddressMeta(streetAddress2 || '')
-  const carrier = meta?.carrier ?? 'cdek'
+  // СДЭК скрыт в UI — отображаем как Яндекс (для старых адресов без метки)
+  const carrier = meta?.carrier ?? 'yandex'
   if (!meta) {
-    return { carrier: 'cdek', mode: 'pvz' }
+    return { carrier: 'yandex', mode: 'pvz' }
   }
   if (meta.dropoff === 'courier') {
     return { carrier, mode: 'courier' }
@@ -144,7 +146,7 @@ export function formatDeliveryAddressSummary(address: {
   streetAddress1?: string | null
 }): string {
   const { carrier, mode } = getDeliveryDisplayMode(address.streetAddress2)
-  const carrierLabel = carrier === 'yandex' ? 'Яндекс Доставка' : 'СДЭК'
+  const carrierLabel = carrier === 'yandex' ? 'Яндекс Доставка' : 'Яндекс Доставка'
   const modeLabel = mode === 'pvz' ? 'ПВЗ' : 'Курьер'
   const city = (address.city || '').trim()
   const street = (address.streetAddress1 || '').trim()
