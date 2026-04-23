@@ -1,13 +1,14 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Search, MapPin, Loader2, ChevronDown } from 'lucide-react'
 import type { YandexPickupPoint } from '@/types/yandexDelivery'
 import YandexPvzMap from './YandexPvzMap'
 import { useYandexPvzStore } from '@/stores/useYandexPvz'
-
-/** Москва и Санкт-Петербург — в начале, затем остальные по алфавиту */
-const PRIORITY_CITIES_FIRST = ['Москва', 'Санкт-Петербург']
+import {
+  orderedYandexPvzCityNames,
+  catalogDisplayCityForUserCity,
+} from '@/lib/yandexCityGeo'
 
 export interface YandexPvzListProps {
   onChoose: (point: YandexPickupPoint) => void
@@ -15,59 +16,50 @@ export interface YandexPvzListProps {
 }
 
 export default function YandexPvzList({ onChoose, defaultCity = 'Москва' }: YandexPvzListProps) {
-  const { points, loading, error, fetchPickupPoints } = useYandexPvzStore()
+  const { points, loading, error, fetchPickupPointsForCity } = useYandexPvzStore()
+  const cities = useMemo(() => orderedYandexPvzCityNames(), [])
+  const prevDefaultCity = useRef(defaultCity)
+  const [pickedCity, setPickedCity] = useState(() =>
+    catalogDisplayCityForUserCity(defaultCity),
+  )
   const [citySearchQuery, setCitySearchQuery] = useState('')
   const [showCityDropdown, setShowCityDropdown] = useState(false)
   const [pvzSearchQuery, setPvzSearchQuery] = useState('')
 
-  // Если данных ещё нет и запрос не идёт — запустить загрузку (например, модалка открыта с профиля)
   useEffect(() => {
-    if (points.length === 0 && !loading && !error) {
-      fetchPickupPoints()
+    if (prevDefaultCity.current !== defaultCity) {
+      prevDefaultCity.current = defaultCity
+      setPickedCity(catalogDisplayCityForUserCity(defaultCity))
     }
-  }, [points.length, loading, error, fetchPickupPoints])
-
-  const cities = useMemo(() => {
-    const byCity = new Map<string, YandexPickupPoint[]>()
-    for (const p of points) {
-      const city = p.address?.locality || p.address?.region || 'Другое'
-      if (!byCity.has(city)) byCity.set(city, [])
-      byCity.get(city)!.push(p)
-    }
-    const list = Array.from(byCity.keys()).sort((a, b) => a.localeCompare(b, 'ru'))
-    const first = PRIORITY_CITIES_FIRST.filter((p) => list.includes(p))
-    const rest = list.filter((c) => !first.includes(c))
-    return [...first, ...rest]
-  }, [points])
-
-  const selectedCity = defaultCity && cities.includes(defaultCity) ? defaultCity : cities[0] ?? null
-  const [pickedCity, setPickedCity] = useState<string | null>(selectedCity)
+  }, [defaultCity])
 
   useEffect(() => {
-    if (selectedCity && !pickedCity) setPickedCity(selectedCity)
-  }, [selectedCity, pickedCity])
+    if (pickedCity) void fetchPickupPointsForCity(pickedCity)
+  }, [pickedCity, fetchPickupPointsForCity])
 
   const filteredCities = useMemo(() => {
     if (!citySearchQuery.trim()) return cities.slice(0, 50)
     const q = citySearchQuery.toLowerCase().trim()
-    return cities.filter(c => c.toLowerCase().includes(q)).slice(0, 50)
+    return cities.filter((c) => c.toLowerCase().includes(q)).slice(0, 50)
   }, [cities, citySearchQuery])
 
   const pvzInCity = useMemo(() => {
     if (!pickedCity) return []
-    return points.filter(
-      p => (p.address?.locality || p.address?.region || '') === pickedCity
+    const byLabel = points.filter(
+      (p) => (p.address?.locality || p.address?.region || '') === pickedCity,
     )
+    if (byLabel.length > 0) return byLabel
+    return points
   }, [points, pickedCity])
 
   const filteredPvz = useMemo(() => {
     if (!pvzSearchQuery.trim()) return pvzInCity
     const q = pvzSearchQuery.toLowerCase()
     return pvzInCity.filter(
-      p =>
+      (p) =>
         (p.name || '').toLowerCase().includes(q) ||
         (p.address?.full_address || '').toLowerCase().includes(q) ||
-        (p.instruction || '').toLowerCase().includes(q)
+        (p.instruction || '').toLowerCase().includes(q),
     )
   }, [pvzInCity, pvzSearchQuery])
 
@@ -82,7 +74,7 @@ export default function YandexPvzList({ onChoose, defaultCity = 'Москва' }
     (pvz: YandexPickupPoint) => {
       onChoose(pvz)
     },
-    [onChoose]
+    [onChoose],
   )
 
   useEffect(() => {
@@ -94,7 +86,9 @@ export default function YandexPvzList({ onChoose, defaultCity = 'Москва' }
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  if (loading) {
+  const showBlockingLoader = loading && points.length === 0 && !error
+
+  if (showBlockingLoader) {
     return (
       <div className="flex items-center justify-center gap-2 py-8 text-black/60">
         <Loader2 className="w-5 h-5 animate-spin" />
@@ -103,7 +97,7 @@ export default function YandexPvzList({ onChoose, defaultCity = 'Москва' }
     )
   }
 
-  if (error) {
+  if (error && points.length === 0) {
     return (
       <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm">
         {error}
@@ -111,7 +105,7 @@ export default function YandexPvzList({ onChoose, defaultCity = 'Москва' }
     )
   }
 
-  if (!points.length) {
+  if (!loading && !error && !points.length) {
     return (
       <div className="p-4 rounded-xl border border-black/10 text-black/60 text-sm">
         Список ПВЗ пуст. Проверьте настройки доставки Яндекса.
@@ -121,6 +115,18 @@ export default function YandexPvzList({ onChoose, defaultCity = 'Москва' }
 
   return (
     <div className="flex flex-col gap-4">
+      {error && points.length > 0 && (
+        <div className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm">
+          {error}
+        </div>
+      )}
+      {loading && points.length > 0 && (
+        <div className="flex items-center gap-2 text-sm text-black/50">
+          <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+          Обновление списка для выбранного города…
+        </div>
+      )}
+
       <div className="yandex-pvz-city-dropdown relative flex flex-col">
         <label className="text-sm font-medium mb-2 flex items-center gap-2">
           <MapPin className="w-4 h-4" />
@@ -146,7 +152,7 @@ export default function YandexPvzList({ onChoose, defaultCity = 'Москва' }
                 <input
                   type="text"
                   value={citySearchQuery}
-                  onChange={e => setCitySearchQuery(e.target.value)}
+                  onChange={(e) => setCitySearchQuery(e.target.value)}
                   placeholder="Поиск города..."
                   className="w-full h-10 pl-9 pr-4 rounded-lg border border-black/10 text-sm outline-none focus:border-black/30"
                   autoFocus
@@ -157,7 +163,7 @@ export default function YandexPvzList({ onChoose, defaultCity = 'Москва' }
               {filteredCities.length === 0 ? (
                 <div className="p-4 text-center text-black/50 text-sm">Город не найден</div>
               ) : (
-                filteredCities.map(city => (
+                filteredCities.map((city) => (
                   <button
                     key={city}
                     type="button"
@@ -177,10 +183,7 @@ export default function YandexPvzList({ onChoose, defaultCity = 'Москва' }
 
       {pickedCity && (
         <>
-          <YandexPvzMap
-            points={pvzInCity}
-            onSelect={onChoose}
-          />
+          <YandexPvzMap points={pvzInCity} onSelect={onChoose} />
           <div className="flex flex-col">
             <label className="text-sm font-medium mb-2 flex items-center gap-2">
               <Search className="w-4 h-4" />
@@ -189,21 +192,19 @@ export default function YandexPvzList({ onChoose, defaultCity = 'Москва' }
             <input
               type="text"
               value={pvzSearchQuery}
-              onChange={e => setPvzSearchQuery(e.target.value)}
+              onChange={(e) => setPvzSearchQuery(e.target.value)}
               placeholder="Адрес или название ПВЗ"
               className="h-12 px-4 rounded-xl border border-black/10 text-base outline-none transition focus:border-black/30"
             />
           </div>
           <div className="flex flex-col gap-2 max-h-72 overflow-y-auto">
-            <div className="text-xs text-black/40">
-              Найдено: {filteredPvz.length}
-            </div>
+            <div className="text-xs text-black/40">Найдено: {filteredPvz.length}</div>
             {filteredPvz.length === 0 ? (
               <div className="text-center py-6 text-black/50 text-sm">
                 В этом городе пункты не найдены или измените поиск.
               </div>
             ) : (
-              filteredPvz.map(pvz => (
+              filteredPvz.map((pvz) => (
                 <button
                   key={pvz.id}
                   type="button"
@@ -215,7 +216,9 @@ export default function YandexPvzList({ onChoose, defaultCity = 'Москва' }
                   </div>
                   <div className="text-sm text-black/60 flex items-start gap-1.5">
                     <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                    {pvz.address?.full_address || [pvz.address?.street, pvz.address?.house].filter(Boolean).join(', ') || '—'}
+                    {pvz.address?.full_address ||
+                      [pvz.address?.street, pvz.address?.house].filter(Boolean).join(', ') ||
+                      '—'}
                   </div>
                   {pvz.instruction && (
                     <div className="text-xs text-black/40 mt-1">{pvz.instruction}</div>
