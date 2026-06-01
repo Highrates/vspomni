@@ -12,7 +12,26 @@ export function getStoryMediaType(
   return 'image'
 }
 
-export function isStoryMediaAttributeSlug(slug: string, name: string): boolean {
+/** Обложка кружка на главной (не слайд в ленте) */
+export function isStoryCoverAttributeSlug(slug: string, name: string): boolean {
+  const s = slug.toLowerCase()
+  const n = name.toLowerCase()
+  return (
+    s.includes('oblozhka') ||
+    s.includes('cover') ||
+    s.includes('preview') ||
+    s.includes('poster') ||
+    s.includes('avatar') ||
+    s.includes('обложка') ||
+    s.includes('превью') ||
+    n.includes('обложка') ||
+    n.includes('превью') ||
+    n.includes('cover')
+  )
+}
+
+export function isStorySlideAttributeSlug(slug: string, name: string): boolean {
+  if (isStoryCoverAttributeSlug(slug, name)) return false
   const s = slug.toLowerCase()
   const n = name.toLowerCase()
   return (
@@ -26,6 +45,11 @@ export function isStoryMediaAttributeSlug(slug: string, name: string): boolean {
     n.includes('видео') ||
     n.includes('video')
   )
+}
+
+/** @deprecated use isStorySlideAttributeSlug */
+export function isStoryMediaAttributeSlug(slug: string, name: string): boolean {
+  return isStorySlideAttributeSlug(slug, name)
 }
 
 export function storyMediaOrderKey(slug: string, type: StoryMediaType): number {

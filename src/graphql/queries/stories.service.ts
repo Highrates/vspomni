@@ -1,7 +1,8 @@
 import { graphqlRequest } from '@/graphql/client'
 import {
   getStoryMediaType,
-  isStoryMediaAttributeSlug,
+  isStoryCoverAttributeSlug,
+  isStorySlideAttributeSlug,
   storyMediaOrderKey,
   type StoryMediaType,
 } from '@/lib/storyMedia'
@@ -17,6 +18,8 @@ export interface StoryNode {
   id: string
   title: string
   slug: string
+  /** Обложка для кружка на главной */
+  coverUrl?: string | null
   image?: string | null
   order: number
   isPublished: boolean
@@ -143,11 +146,24 @@ export async function getAllStories(): Promise<StoryNode[]> {
     .filter((e) => e.node.isPublished === true)
     .map((e) => {
       const node = e.node
+      const coverUrl =
+        node.assignedAttributes
+          .filter((attr) => {
+            const url = attr.fileValue?.url
+            if (!url) return false
+            return isStoryCoverAttributeSlug(
+              attr.attribute.slug,
+              attr.attribute.name,
+            )
+          })
+          .map((attr) => attr.fileValue!.url)
+          .find((url) => getStoryMediaType(url) === 'image') ?? null
+
       const mediaAttributes = node.assignedAttributes
         .filter((attr) => {
           const url = attr.fileValue?.url
           if (!url) return false
-          return isStoryMediaAttributeSlug(
+          return isStorySlideAttributeSlug(
             attr.attribute.slug,
             attr.attribute.name,
           )
@@ -171,14 +187,14 @@ export async function getAllStories(): Promise<StoryNode[]> {
         order: index + 1,
       }))
 
-      const previewItem =
-        items.find((item) => item.type === 'image') ?? items[0] ?? null
+      const firstImageItem = items.find((item) => item.type === 'image')
 
       return {
         id: node.id,
         title: node.title,
         slug: node.slug,
-        image: previewItem?.type === 'image' ? previewItem.url : null,
+        coverUrl,
+        image: coverUrl ?? firstImageItem?.url ?? null,
         order: 0,
         isPublished: node.isPublished || false,
         publishedAt: node.publishedAt,

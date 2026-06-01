@@ -34,6 +34,7 @@ export default function StoryViewer({
   const [index, setIndex] = useState(initialStoryIndex)
   const [progress, setProgress] = useState(0)
   const [direction, setDirection] = useState<'next' | 'prev' | null>(null)
+  const [isMuted, setIsMuted] = useState(false)
   const touchStartX = useRef<number | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
@@ -43,6 +44,7 @@ export default function StoryViewer({
     setIndex(initialStoryIndex)
     setProgress(0)
     setDirection(null)
+    setIsMuted(false)
   }, [group?.id, currentGroupIndex, initialStoryIndex])
 
   const goToNextGroup = useCallback(() => {
@@ -73,6 +75,26 @@ export default function StoryViewer({
     }
   }, [group, index, goToNextGroup])
 
+  const playCurrentVideo = useCallback(async () => {
+    const video = videoRef.current
+    if (!video) return
+    video.muted = isMuted
+    video.volume = isMuted ? 0 : 1
+    try {
+      await video.play()
+    } catch {
+      if (!isMuted) {
+        video.muted = true
+        setIsMuted(true)
+        try {
+          await video.play()
+        } catch {
+          // пользователь включит звук кнопкой
+        }
+      }
+    }
+  }, [isMuted])
+
   // Авто-переключение для фото (4 с)
   useEffect(() => {
     if (!group || currentSlide?.type === 'video') return
@@ -88,7 +110,7 @@ export default function StoryViewer({
     return () => clearInterval(timer)
   }, [group?.id, index, handleNext, currentSlide?.type])
 
-  // Прогресс и переход для видео
+  // Прогресс и переход для видео (со звуком)
   useEffect(() => {
     if (!group || currentSlide?.type !== 'video') return
     const video = videoRef.current
@@ -106,21 +128,29 @@ export default function StoryViewer({
       handleNext()
     }
 
-    const playPromise = video.play()
-    if (playPromise) {
-      playPromise.catch(() => {
-        // autoplay может быть заблокирован — пользователь тапнет по зоне
-      })
-    }
-
     video.addEventListener('timeupdate', onTimeUpdate)
     video.addEventListener('ended', onEnded)
+    void playCurrentVideo()
+
     return () => {
       video.removeEventListener('timeupdate', onTimeUpdate)
       video.removeEventListener('ended', onEnded)
       video.pause()
     }
-  }, [group?.id, index, handleNext, currentSlide?.type, currentSlide?.url])
+  }, [
+    group?.id,
+    index,
+    handleNext,
+    currentSlide?.type,
+    currentSlide?.url,
+    playCurrentVideo,
+  ])
+
+  useEffect(() => {
+    if (currentSlide?.type === 'video') {
+      void playCurrentVideo()
+    }
+  }, [isMuted, currentSlide?.type, playCurrentVideo])
 
   const handlePrev = useCallback(() => {
     if (!group) return
@@ -131,6 +161,14 @@ export default function StoryViewer({
       goToPrevGroup()
     }
   }, [group, index, goToPrevGroup])
+
+  const toggleMute = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation()
+      setIsMuted((m) => !m)
+    },
+    [],
+  )
 
   const minSwipe = 60
   const onTouchStart = (e: React.TouchEvent) => {
@@ -196,8 +234,8 @@ export default function StoryViewer({
             src={currentSlide.url}
             className="max-h-[90vh] max-w-[90vw] rounded-2xl object-contain select-none touch-none"
             playsInline
-            muted
             preload="auto"
+            muted={isMuted}
             initial={{
               opacity: 0,
               x: direction === 'next' ? 80 : direction === 'prev' ? -80 : 0,
@@ -234,6 +272,17 @@ export default function StoryViewer({
             dragElastic={0.2}
             onDragEnd={handleDragEnd}
           />
+        )}
+
+        {currentSlide?.type === 'video' && (
+          <button
+            type="button"
+            onClick={toggleMute}
+            className="absolute bottom-10 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 rounded-full bg-black/50 px-4 py-2 text-sm text-white backdrop-blur-sm hover:bg-black/70 transition"
+            aria-label={isMuted ? 'Включить звук' : 'Выключить звук'}
+          >
+            {isMuted ? '🔇 Включить звук' : '🔊 Звук вкл.'}
+          </button>
         )}
 
         <div
