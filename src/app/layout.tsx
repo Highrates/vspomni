@@ -18,8 +18,8 @@ export const metadata: Metadata = {
   title: 'ВСПОМНИ.',
   description: 'Ароматы и подарки',
   icons: {
-    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
-    shortcut: '/favicon.svg',
+    icon: [{ url: '/favicon1.svg', type: 'image/svg+xml' }],
+    shortcut: '/favicon1.svg',
   },
 }
 
