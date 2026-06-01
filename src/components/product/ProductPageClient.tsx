@@ -13,7 +13,16 @@ import PageTransition from '@/components/layout/PageTransition'
 import { toast } from 'react-toastify'
 import { formatCurrency, parseEditorJS } from '@/lib/functions'
 import { getSingleProduct, getCatalogDiscounts } from '@/graphql/queries/product.service'
+import {
+  buildProductCartFormat,
+  getInitialProductPageUiState,
+} from '@/lib/product/buildProductCartFormat'
 import { variantShippingFromSaleorVariant } from '@/lib/saleorVariantShipping'
+import {
+  getAttributeBySlug,
+  NOTE_ATTRIBUTE_SLUGS,
+  NOTE_LABELS,
+} from '@/lib/product/productPageContent'
 import { ProductDetailNode } from '@/graphql/types/product.types'
 import { ProductCardItem } from '@/types/product'
 import { useMobile } from '@/lib/hooks'
@@ -22,149 +31,98 @@ import { Pagination } from 'swiper/modules'
 import 'swiper/css'
 import 'swiper/css/pagination'
 
-const getAttributeBySlug = (attributes: any[], slug: string) => {
-  return attributes?.find((attr) => attr.attribute.slug === slug)
-}
-
-/** Слаги атрибутов нот в Saleor */
-const NOTE_ATTRIBUTE_SLUGS = {
-  basic: 'bazovye-noty',
-  middle: 'srednie-noty',
-  head: 'verhnie-akkordy',
-} as const
-
-const NOTE_LABELS: Record<keyof typeof NOTE_ATTRIBUTE_SLUGS, string> = {
-  basic: 'Базовые ноты',
-  middle: 'Средние ноты',
-  head: 'Верхние аккорды',
-}
-
 type ProductPageClientProps = {
   productSlug: string
   /** Если URL /category/{slug}/product — проверяем совпадение с Saleor */
   expectedCategorySlug?: string
+  /** Данные с сервера (SSR) — сразу в HTML для SEO и без скелетона */
+  initialProduct?: ProductDetailNode | null
 }
 
 export default function ProductPageClient({
   productSlug,
   expectedCategorySlug,
+  initialProduct = null,
 }: ProductPageClientProps) {
-  const [product, setProduct] = useState<ProductDetailNode | null>(null)
-  const [productCartFormat, setProductCartFormat] =
-    useState<ProductCardItem | null>(null)
-  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(
-    null,
+  const initialUi =
+    initialProduct && initialProduct.slug === productSlug
+      ? getInitialProductPageUiState(initialProduct)
+      : null
+
+  const [product, setProduct] = useState<ProductDetailNode | null>(
+    initialUi ? initialProduct : null,
   )
-  const [mainImage, setMainImage] = useState('')
-  const [price, setPrice] = useState<number>(0)
+  const [productCartFormat, setProductCartFormat] =
+    useState<ProductCardItem | null>(initialUi?.productCartFormat ?? null)
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(
+    initialUi?.selectedVariantId ?? null,
+  )
+  const [mainImage, setMainImage] = useState(initialUi?.mainImage ?? '')
+  const [price, setPrice] = useState<number>(initialUi?.price ?? 0)
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0)
 
   const router = useRouter()
   const isMobile = useMobile()
   const swiperRef = useRef<any>(null)
 
-  useEffect(() => {
-    const fetch = async () => {
-      const data = await getSingleProduct(String(productSlug))
-      if (!data) return
-
-      const saleorCategorySlug = data.category?.slug?.trim()
-      if (
-        saleorCategorySlug &&
-        expectedCategorySlug &&
-        saleorCategorySlug !== expectedCategorySlug
-      ) {
-        router.replace(
-          `/category/${encodeURIComponent(saleorCategorySlug)}/${encodeURIComponent(data.slug)}`,
-        )
-        return
-      }
-
-      setProduct(data)
-
-      // initial image
-      const initialImage = data.media[0]?.url || data.thumbnail?.url || ''
-      setMainImage(initialImage)
-      setCurrentSlideIndex(0)
-
-      const firstVariant = data.productVariants.edges[0].node
-      const basePrice = firstVariant.pricing.price.gross.amount
-      let oldPrice = firstVariant.pricing.priceUndiscounted?.gross?.amount
-      let discountPercent: number | undefined
-
-      if (oldPrice && oldPrice > basePrice) {
-        discountPercent = Math.round(((oldPrice - basePrice) / oldPrice) * 100)
-      }
-
-      // Подтягиваем каталожную скидку, если есть
-      try {
-        const discounts = await getCatalogDiscounts([firstVariant.id])
-        const external = discounts[firstVariant.id]
-        if (typeof external === 'number' && external > 0) {
-          discountPercent = Math.round(external)
-          oldPrice = Math.round((basePrice * 100) / (100 - discountPercent))
-        }
-      } catch (e) {
-        console.error('Error fetching catalog discounts for PDP:', e)
-      }
-
-      // Извлекаем теги из атрибутов
-      const aromaAttribute = data.attributes?.find(
-        (attr: any) => attr.attribute?.slug === 'aromaty-v-kartochke-tovara'
+  const applyProductData = async (data: ProductDetailNode) => {
+    const saleorCategorySlug = data.category?.slug?.trim()
+    if (
+      saleorCategorySlug &&
+      expectedCategorySlug &&
+      saleorCategorySlug !== expectedCategorySlug
+    ) {
+      router.replace(
+        `/category/${encodeURIComponent(saleorCategorySlug)}/${encodeURIComponent(data.slug)}`,
       )
-      const aromaValues = aromaAttribute?.values || []
-      const aromas = aromaValues.map((val: any) => val.name || val.value || '').filter(Boolean)
-      
-      // Формируем group из aromas
-      const group = aromas.map((aroma: string, index: number) => {
-        let groupType = 'flower'
-        if (aroma.toLowerCase().includes('сладк') || aroma.includes('🤤')) {
-          groupType = 'sweet'
-        } else if (aroma.toLowerCase().includes('цветочн') || aroma.includes('🌸')) {
-          groupType = 'flower'
-        } else if (aroma.toLowerCase().includes('древесн') || aroma.includes('🪵')) {
-          groupType = 'wood'
-        }
-        
-        return {
-          id: index + 1,
-          group: groupType,
-          title: aroma,
-        }
-      })
-
-      const ship = variantShippingFromSaleorVariant(
-        firstVariant,
-        data.metadata,
-      )
-
-      setProductCartFormat({
-        id: String(data.id),
-        name: data.name,
-        price: basePrice,
-        oldPrice,
-        discountPercent,
-        image: data.media[0]?.url || data.thumbnail.url,
-        thumbnail: data.thumbnail.url,
-        slug: data.slug,
-        categorySlug: data.category?.slug,
-        aromas,
-        size: firstVariant.name,
-        variantId: firstVariant.id,
-        group,
-        weight: ship.weight,
-        length: ship.length,
-        width: ship.width,
-        height: ship.height,
-      })
-
-      if (data.productVariants?.edges?.length > 0) {
-        setSelectedVariantId(firstVariant.id)
-        setPrice(basePrice)
-      }
+      return
     }
 
-    fetch()
+    setProduct(data)
+    setMainImage(data.media[0]?.url || data.thumbnail?.url || '')
+    setCurrentSlideIndex(0)
+
+    const firstVariant = data.productVariants.edges[0]?.node
+    if (!firstVariant) return
+
+    const basePrice = firstVariant.pricing.price.gross.amount
+    let catalogDiscount: number | undefined
+
+    try {
+      const discounts = await getCatalogDiscounts([firstVariant.id])
+      const external = discounts[firstVariant.id]
+      if (typeof external === 'number' && external > 0) {
+        catalogDiscount = Math.round(external)
+      }
+    } catch (e) {
+      console.error('Error fetching catalog discounts for PDP:', e)
+    }
+
+    setProductCartFormat(buildProductCartFormat(data, catalogDiscount))
+    setSelectedVariantId(firstVariant.id)
+    setPrice(basePrice)
+  }
+
+  useEffect(() => {
+    let cancelled = false
+
+    const load = async () => {
+      const data =
+        initialProduct?.slug === productSlug
+          ? initialProduct
+          : await getSingleProduct(String(productSlug))
+
+      if (!data || cancelled) return
+      await applyProductData(data)
+    }
+
+    void load()
+
+    return () => {
+      cancelled = true
+    }
+    // initialProduct только для первого SSR-рендера; при смене slug — новый fetch
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productSlug, expectedCategorySlug, router])
 
   if (!product) {
@@ -435,16 +393,14 @@ export default function ProductPageClient({
               {aromas.length > 0 && (
                 <div className="flex flex-col gap-2 sm:gap-3">
                   <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                    {aromas.map(
-                      (aroma: { name: string; id: string }, index: number) => (
+                    {aromas.map((aroma, index) => (
                         <span
-                          key={aroma.id || index}
+                          key={aroma.slug || aroma.name || index}
                           className="px-2 sm:px-3 py-1 sm:py-1.5 border border-textgrey rounded-full text-xs sm:text-sm md:text-base select-none"
                         >
-                          {aroma.name}
+                          {aroma.name || aroma.value || ''}
                         </span>
-                      ),
-                    )}
+                      ))}
                   </div>
                 </div>
               )}

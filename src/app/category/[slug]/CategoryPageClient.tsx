@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useCategoriesStore } from '@/stores/useCategories'
 import { ProductCardItem } from '@/types/product'
+import { getProductsByCategorySlug } from '@/graphql/queries/product.service'
 import CatalogCategoryBanners from '@/components/catalog/CatalogCategoryBanners'
 import BackButton from '@/components/ui/BackButton'
 import ProductCard from '@/components/home/ProductCard'
@@ -10,41 +11,71 @@ import PageTransition from '@/components/layout/PageTransition'
 
 type Props = {
   slug: string
-  /** Имя категории с API (сервер), без подстановки из slug */
   initialCategoryTitle: string
+  /** Товары с сервера (SSR) — сразу в HTML для SEO */
+  initialProducts?: ProductCardItem[]
+  hideAromas?: boolean
 }
 
 export default function CategoryPageClient({
   slug,
   initialCategoryTitle,
+  initialProducts = [],
+  hideAromas: hideAromasProp = false,
 }: Props) {
-  const { categories, items, fetchProductsByCategorySlug } =
-    useCategoriesStore()
+  const { categories, fetchProductsByCategorySlug } = useCategoriesStore()
 
-  const currentCategory = categories.find(
-    (category) => category.slug === slug,
-  )
+  const currentCategory = categories.find((category) => category.slug === slug)
   const categoryName = currentCategory?.name
 
-  const isGiftPackages =
+  const hideAromasFromCategory =
     currentCategory?.name?.toLowerCase() === 'подарочные пакеты' ||
     slug === 'podarochnye-pakety'
-  const hideAromas = isGiftPackages
+  const hideAromas = hideAromasProp || hideAromasFromCategory
+
+  const [products, setProducts] = useState<ProductCardItem[]>(initialProducts)
+  const [loading, setLoading] = useState(initialProducts.length === 0)
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setProducts(initialProducts)
+    setLoading(initialProducts.length === 0)
+    useCategoriesStore.setState({ items: initialProducts })
+  }, [slug, initialProducts])
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
 
     const load = async () => {
+      if (initialProducts.length > 0) {
+        try {
+          const fresh = await getProductsByCategorySlug(slug)
+          if (!cancelled && fresh.length > 0) {
+            setProducts(fresh)
+            useCategoriesStore.setState({ items: fresh })
+          }
+        } catch {
+          // оставляем SSR-данные
+        }
+        return
+      }
+
+      setLoading(true)
       await fetchProductsByCategorySlug(slug)
-      if (!cancelled) setLoading(false)
+      if (!cancelled) {
+        const fromStore = useCategoriesStore.getState().items
+        setProducts(fromStore)
+        setLoading(false)
+      }
 
       retryTimerRef.current = setTimeout(() => {
         const { items: current } = useCategoriesStore.getState()
         if (current.length === 0 && !cancelled) {
-          void fetchProductsByCategorySlug(slug)
+          void fetchProductsByCategorySlug(slug).then(() => {
+            if (!cancelled) {
+              setProducts(useCategoriesStore.getState().items)
+            }
+          })
         }
         retryTimerRef.current = null
       }, 800)
@@ -59,7 +90,7 @@ export default function CategoryPageClient({
         retryTimerRef.current = null
       }
     }
-  }, [slug, fetchProductsByCategorySlug])
+  }, [slug, fetchProductsByCategorySlug, initialProducts.length])
 
   const title =
     initialCategoryTitle ||
@@ -104,15 +135,15 @@ export default function CategoryPageClient({
           </div>
         )}
 
-        {!loading && items.length < 1 && (
+        {!loading && products.length < 1 && (
           <p className="w-full min-h-[120px] flex justify-center items-center text-black/70 text-base sm:text-lg">
             Нет товаров в данной категории
           </p>
         )}
 
-        {!loading && items.length > 0 && (
+        {!loading && products.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5 w-full min-w-0 p-2 -m-2">
-            {items.map((product: ProductCardItem, index: number) => (
+            {products.map((product: ProductCardItem, index: number) => (
               <ProductCard
                 product={product}
                 key={product.id}
