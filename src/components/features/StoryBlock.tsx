@@ -6,6 +6,21 @@ import { getAllStories, StoryNode } from '@/graphql/queries/stories.service'
 
 const MAX_VISIBLE = 5
 
+function getGroupPreview(story: StoryNode) {
+  const first = story.items[0]
+  if (!first) {
+    return { url: story.image || '/images/image_faq_3.png', type: 'image' as const }
+  }
+  if (first.type === 'image') {
+    return { url: first.url, type: 'image' as const }
+  }
+  const firstImage = story.items.find((item) => item.type === 'image')
+  return {
+    url: firstImage?.url ?? first.url,
+    type: firstImage ? ('image' as const) : ('video' as const),
+  }
+}
+
 export default function StoryBlock() {
   const [activeGroupIndex, setActiveGroupIndex] = useState<number | null>(null)
   const [initialStoryIndex, setInitialStoryIndex] = useState(0)
@@ -58,7 +73,7 @@ export default function StoryBlock() {
       title: story.title,
       stories: story.items
         .sort((a, b) => a.order - b.order)
-        .map((item) => item.image),
+        .map((item) => ({ url: item.url, type: item.type })),
     }))
 
   const handleOpenGroup = (index: number) => {
@@ -87,33 +102,47 @@ export default function StoryBlock() {
             className="flex flex-none flex-row items-start justify-center gap-3 sm:gap-[14px] md:gap-4 lg:gap-[18px]"
             style={{ maxWidth: '100%' }}
           >
-            {storyGroups.map((group, index) => (
-              <div
-                key={group.id}
-                className="flex flex-col items-center text-center shrink-0"
-              >
-                <button
-                  type="button"
-                  onClick={() => handleOpenGroup(index)}
-                  className="relative flex items-center justify-center w-[70px] h-[70px] sm:w-[80px] sm:h-[80px] md:w-[88px] md:h-[88px] lg:w-[96px] lg:h-[96px] rounded-full border border-black transition-all duration-300 hover:border-black/60"
+            {storyGroups.map((group, index) => {
+              const story = stories.find((s) => s.id === group.id)
+              const preview = story ? getGroupPreview(story) : null
+              const previewUrl =
+                preview?.url || '/images/image_faq_3.png'
+
+              return (
+                <div
+                  key={group.id}
+                  className="flex flex-col items-center text-center shrink-0"
                 >
-                  <div className="w-[62px] h-[62px] sm:w-[72px] sm:h-[72px] md:w-[79px] md:h-[79px] lg:w-[87px] lg:h-[87px] rounded-full overflow-hidden bg-white">
-                    <img
-                      src={
-                        group.stories[0] ||
-                        stories.find((s) => s.id === group.id)?.image ||
-                        '/images/image_faq_3.png'
-                      }
-                      alt={group.title}
-                      className="w-full h-full object-cover rounded-full"
-                    />
-                  </div>
-                </button>
-                <span className="text-[11px] sm:text-[12px] md:text-[13px] leading-[14px] sm:leading-[15px] md:leading-[16px] font-medium mt-1.5 sm:mt-2 text-neutral-700 text-center max-w-[70px] sm:max-w-[80px] md:max-w-[88px] lg:max-w-[96px] line-clamp-2 break-words hyphens-auto">
-                  {group.title}
-                </span>
-              </div>
-            ))}
+                  <button
+                    type="button"
+                    onClick={() => handleOpenGroup(index)}
+                    className="relative flex items-center justify-center w-[70px] h-[70px] sm:w-[80px] sm:h-[80px] md:w-[88px] md:h-[88px] lg:w-[96px] lg:h-[96px] rounded-full border border-black transition-all duration-300 hover:border-black/60"
+                  >
+                    <div className="w-[62px] h-[62px] sm:w-[72px] sm:h-[72px] md:w-[79px] md:h-[79px] lg:w-[87px] lg:h-[87px] rounded-full overflow-hidden bg-white">
+                      {preview?.type === 'video' ? (
+                        <video
+                          src={previewUrl}
+                          muted
+                          playsInline
+                          preload="metadata"
+                          className="w-full h-full object-cover rounded-full pointer-events-none"
+                          aria-hidden
+                        />
+                      ) : (
+                        <img
+                          src={previewUrl}
+                          alt={group.title}
+                          className="w-full h-full object-cover rounded-full"
+                        />
+                      )}
+                    </div>
+                  </button>
+                  <span className="text-[11px] sm:text-[12px] md:text-[13px] leading-[14px] sm:leading-[15px] md:leading-[16px] font-medium mt-1.5 sm:mt-2 text-neutral-700 text-center max-w-[70px] sm:max-w-[80px] md:max-w-[88px] lg:max-w-[96px] line-clamp-2 break-words hyphens-auto">
+                    {group.title}
+                  </span>
+                </div>
+              )
+            })}
           </div>
         </div>
       </section>

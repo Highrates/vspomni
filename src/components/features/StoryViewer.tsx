@@ -2,12 +2,20 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import type { StoryMediaType } from '@/lib/storyMedia'
+
+export interface StorySlide {
+  url: string
+  type: StoryMediaType
+}
 
 export interface StoryGroup {
   id: string
   title: string
-  stories: string[]
+  stories: StorySlide[]
 }
+
+const IMAGE_DURATION_MS = 4000
 
 export default function StoryViewer({
   groups,
@@ -27,8 +35,10 @@ export default function StoryViewer({
   const [progress, setProgress] = useState(0)
   const [direction, setDirection] = useState<'next' | 'prev' | null>(null)
   const touchStartX = useRef<number | null>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
 
-  // Синхронизация индекса сторис при смене группы (или initialStoryIndex от родителя)
+  const currentSlide = group?.stories[index]
+
   useEffect(() => {
     setIndex(initialStoryIndex)
     setProgress(0)
@@ -63,20 +73,54 @@ export default function StoryViewer({
     }
   }, [group, index, goToNextGroup])
 
-  // авто-переключение
+  // Авто-переключение для фото (4 с)
   useEffect(() => {
-    if (!group) return
+    if (!group || currentSlide?.type === 'video') return
     setProgress(0)
     const start = Date.now()
     const timer = setInterval(() => {
-      const elapsed = (Date.now() - start) / 4000
+      const elapsed = (Date.now() - start) / IMAGE_DURATION_MS
       setProgress(Math.min(elapsed * 100, 100))
       if (elapsed >= 1) {
         handleNext()
       }
     }, 50)
     return () => clearInterval(timer)
-  }, [group?.id, index, handleNext])
+  }, [group?.id, index, handleNext, currentSlide?.type])
+
+  // Прогресс и переход для видео
+  useEffect(() => {
+    if (!group || currentSlide?.type !== 'video') return
+    const video = videoRef.current
+    if (!video) return
+
+    setProgress(0)
+    video.currentTime = 0
+
+    const onTimeUpdate = () => {
+      if (!video.duration || Number.isNaN(video.duration)) return
+      setProgress((video.currentTime / video.duration) * 100)
+    }
+
+    const onEnded = () => {
+      handleNext()
+    }
+
+    const playPromise = video.play()
+    if (playPromise) {
+      playPromise.catch(() => {
+        // autoplay может быть заблокирован — пользователь тапнет по зоне
+      })
+    }
+
+    video.addEventListener('timeupdate', onTimeUpdate)
+    video.addEventListener('ended', onEnded)
+    return () => {
+      video.removeEventListener('timeupdate', onTimeUpdate)
+      video.removeEventListener('ended', onEnded)
+      video.pause()
+    }
+  }, [group?.id, index, handleNext, currentSlide?.type, currentSlide?.url])
 
   const handlePrev = useCallback(() => {
     if (!group) return
@@ -96,7 +140,6 @@ export default function StoryViewer({
     if (touchStartX.current == null) return
     const dx = e.changedTouches[0].clientX - touchStartX.current
     touchStartX.current = null
-    // Как в Instagram: свайп влево = следующий кружок, свайп вправо = пред. слайд или пред. кружок
     if (dx < -minSwipe) goToNextGroup()
     else if (dx > minSwipe) handlePrev()
   }
@@ -108,7 +151,7 @@ export default function StoryViewer({
       if (offset.x < -threshold || velocity.x < -150) goToNextGroup()
       else if (offset.x > threshold || velocity.x > 150) handlePrev()
     },
-    [goToNextGroup, handlePrev]
+    [goToNextGroup, handlePrev],
   )
 
   if (!group || group.stories.length === 0) return null
@@ -117,14 +160,17 @@ export default function StoryViewer({
     <AnimatePresence>
       <motion.div
         className="fixed inset-0 z-[999] flex items-center justify-center bg-black/90"
-        style={{ height: '100dvh', minHeight: '-webkit-fill-available', touchAction: 'none' }}
+        style={{
+          height: '100dvh',
+          minHeight: '-webkit-fill-available',
+          touchAction: 'none',
+        }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
-        {/* Прогресс-бары */}
         <div className="absolute top-6 left-1/2 -translate-x-1/2 w-[60%] flex gap-2">
           {group.stories.map((_, i) => (
             <div
@@ -143,29 +189,53 @@ export default function StoryViewer({
           ))}
         </div>
 
-        {/* Картинка сториса — свайп влево = след. кружок, вправо = пред. слайд/кружок; тап по зонам = слайды */}
-        <motion.img
-          key={index}
-          src={group.stories[index]}
-          alt={`story-${index}`}
-          className="max-h-[90vh] max-w-[90vw] rounded-2xl object-contain select-none touch-none"
-          initial={{
-            opacity: 0,
-            x: direction === 'next' ? 80 : direction === 'prev' ? -80 : 0,
-          }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{
-            opacity: 0,
-            x: direction === 'next' ? -80 : direction === 'prev' ? 80 : 0,
-          }}
-          transition={{ duration: 0.3 }}
-          drag="x"
-          dragConstraints={{ left: -120, right: 120 }}
-          dragElastic={0.2}
-          onDragEnd={handleDragEnd}
-        />
+        {currentSlide?.type === 'video' ? (
+          <motion.video
+            key={`${index}-${currentSlide.url}`}
+            ref={videoRef}
+            src={currentSlide.url}
+            className="max-h-[90vh] max-w-[90vw] rounded-2xl object-contain select-none touch-none"
+            playsInline
+            muted
+            preload="auto"
+            initial={{
+              opacity: 0,
+              x: direction === 'next' ? 80 : direction === 'prev' ? -80 : 0,
+            }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{
+              opacity: 0,
+              x: direction === 'next' ? -80 : direction === 'prev' ? 80 : 0,
+            }}
+            transition={{ duration: 0.3 }}
+            drag="x"
+            dragConstraints={{ left: -120, right: 120 }}
+            dragElastic={0.2}
+            onDragEnd={handleDragEnd}
+          />
+        ) : (
+          <motion.img
+            key={`${index}-${currentSlide?.url}`}
+            src={currentSlide?.url}
+            alt={`story-${index}`}
+            className="max-h-[90vh] max-w-[90vw] rounded-2xl object-contain select-none touch-none"
+            initial={{
+              opacity: 0,
+              x: direction === 'next' ? 80 : direction === 'prev' ? -80 : 0,
+            }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{
+              opacity: 0,
+              x: direction === 'next' ? -80 : direction === 'prev' ? 80 : 0,
+            }}
+            transition={{ duration: 0.3 }}
+            drag="x"
+            dragConstraints={{ left: -120, right: 120 }}
+            dragElastic={0.2}
+            onDragEnd={handleDragEnd}
+          />
+        )}
 
-        {/* кликабельные зоны */}
         <div
           className="absolute left-0 top-0 w-1/2 h-full cursor-pointer"
           onClick={handlePrev}
@@ -175,7 +245,6 @@ export default function StoryViewer({
           onClick={handleNext}
         />
 
-        {/* крестик */}
         <button
           onClick={onClose}
           className="absolute top-6 right-6 text-white text-xl font-semibold hover:opacity-80 transition"

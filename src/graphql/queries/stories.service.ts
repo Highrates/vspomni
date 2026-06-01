@@ -1,66 +1,74 @@
-import { graphqlRequest } from '@/graphql/client';
+import { graphqlRequest } from '@/graphql/client'
+import {
+  getStoryMediaType,
+  isStoryMediaAttributeSlug,
+  storyMediaOrderKey,
+  type StoryMediaType,
+} from '@/lib/storyMedia'
 
-export interface StoryImage {
-  id: string;
-  image: string;
-  order: number;
+export interface StoryMediaItem {
+  id: string
+  url: string
+  type: StoryMediaType
+  order: number
 }
 
 export interface StoryNode {
-  id: string;
-  title: string;
-  slug: string;
-  image?: string | null;
-  order: number;
-  isPublished: boolean;
-  publishedAt?: string | null;
-  items: StoryImage[];
+  id: string
+  title: string
+  slug: string
+  image?: string | null
+  order: number
+  isPublished: boolean
+  publishedAt?: string | null
+  items: StoryMediaItem[]
 }
 
 interface StoryAssignedAttribute {
   attribute: {
-    id: string;
-    slug: string;
-    name: string;
-  };
+    id: string
+    slug: string
+    name: string
+  }
   fileValue?: {
-    url: string;
-  };
-  textValue?: string;
+    url: string
+    contentType?: string | null
+  }
+  textValue?: string
 }
 
 interface StoryPageNode {
-  id: string;
-  slug: string;
-  title: string;
-  publishedAt?: string | null;
-  isPublished?: boolean;
-  assignedAttributes: StoryAssignedAttribute[];
+  id: string
+  slug: string
+  title: string
+  publishedAt?: string | null
+  isPublished?: boolean
+  assignedAttributes: StoryAssignedAttribute[]
   pageType?: {
-    id: string;
-    name: string;
-    slug: string;
-  };
+    id: string
+    name: string
+    slug: string
+  }
 }
 
 interface StoriesPagesConnection {
   pages: {
     edges: {
-      node: StoryPageNode;
-    }[];
-  };
+      node: StoryPageNode
+    }[]
+  }
 }
 
 interface PageTypesConnection {
   pageTypes: {
     edges: {
       node: {
-        id: string;
-        name: string;
-        slug: string;
-      };
-    }[];
-  };
+        id: string
+        name: string
+        slug: string
+      }
+    }[]
+  }
 }
 
 export async function getAllStories(): Promise<StoryNode[]> {
@@ -76,15 +84,17 @@ export async function getAllStories(): Promise<StoryNode[]> {
         }
       }
     }
-  `;
+  `
 
-  const pageTypesData = await graphqlRequest<PageTypesConnection>(pageTypeQuery);
+  const pageTypesData = await graphqlRequest<PageTypesConnection>(pageTypeQuery)
   const storyPageType = pageTypesData.pageTypes.edges.find(
-    (e) => e.node.name.toLowerCase() === 'сторис' || e.node.slug.toLowerCase() === 'stories'
-  );
+    (e) =>
+      e.node.name.toLowerCase() === 'сторис' ||
+      e.node.slug.toLowerCase() === 'stories',
+  )
 
   if (!storyPageType) {
-    return [];
+    return []
   }
 
   const pagesQuery = `
@@ -111,6 +121,7 @@ export async function getAllStories(): Promise<StoryNode[]> {
               ... on AssignedFileAttribute {
                 fileValue: value {
                   url
+                  contentType
                 }
               }
               ... on AssignedTextAttribute {
@@ -121,60 +132,60 @@ export async function getAllStories(): Promise<StoryNode[]> {
         }
       }
     }
-  `;
+  `
 
-  const pagesData = await graphqlRequest<StoriesPagesConnection>(pagesQuery, { 
+  const pagesData = await graphqlRequest<StoriesPagesConnection>(pagesQuery, {
     first: 100,
-    pageTypeId: storyPageType.node.id
-  });
+    pageTypeId: storyPageType.node.id,
+  })
 
   const stories = pagesData.pages.edges
-    .filter((e) => {
-      const node = e.node;
-      return node.isPublished === true;
-    })
+    .filter((e) => e.node.isPublished === true)
     .map((e) => {
-      const node = e.node;
-      const imageAttributes = node.assignedAttributes
+      const node = e.node
+      const mediaAttributes = node.assignedAttributes
         .filter((attr) => {
-          const slug = attr.attribute.slug.toLowerCase();
-          return (
-            slug.includes('kartinka') ||
-            slug.includes('image') ||
-            slug.includes('картинка')
-          );
+          const url = attr.fileValue?.url
+          if (!url) return false
+          return isStoryMediaAttributeSlug(
+            attr.attribute.slug,
+            attr.attribute.name,
+          )
         })
-        .sort((a, b) => {
-          const aSlug = a.attribute.slug.toLowerCase();
-          const bSlug = b.attribute.slug.toLowerCase();
-          const aNum = parseInt(aSlug.match(/\d+/)?.[0] || '0');
-          const bNum = parseInt(bSlug.match(/\d+/)?.[0] || '0');
-          return aNum - bNum;
-        });
+        .map((attr) => {
+          const url = attr.fileValue!.url
+          const type = getStoryMediaType(url, attr.fileValue?.contentType)
+          return {
+            id: attr.attribute.id,
+            url,
+            type,
+            sortKey: storyMediaOrderKey(attr.attribute.slug, type),
+          }
+        })
+        .sort((a, b) => a.sortKey - b.sortKey)
 
-      const items: StoryImage[] = imageAttributes
-        .map((attr, index) => ({
-          id: attr.attribute.id,
-          image: attr.fileValue?.url || '',
-          order: index + 1,
-        }))
-        .filter((item) => item.image);
+      const items: StoryMediaItem[] = mediaAttributes.map((attr, index) => ({
+        id: attr.id,
+        url: attr.url,
+        type: attr.type,
+        order: index + 1,
+      }))
 
-      const firstImage = items[0]?.image || null;
+      const previewItem =
+        items.find((item) => item.type === 'image') ?? items[0] ?? null
 
       return {
         id: node.id,
         title: node.title,
         slug: node.slug,
-        image: firstImage,
+        image: previewItem?.type === 'image' ? previewItem.url : null,
         order: 0,
         isPublished: node.isPublished || false,
         publishedAt: node.publishedAt,
         items,
-      };
+      }
     })
-    .filter((story) => story.items.length > 0);
+    .filter((story) => story.items.length > 0)
 
-  return stories;
+  return stories
 }
-

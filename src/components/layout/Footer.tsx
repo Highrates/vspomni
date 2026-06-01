@@ -134,7 +134,7 @@ export default function Footer() {
               Условия использования
             </Link>
             <span className="text-textgrey select-none">·</span>
-            <Link href="/" className="text-textgrey hover:text-black">
+            <Link href="/article/privacy-policy" className="text-textgrey hover:text-black">
               Политика конфиденциальности
             </Link>
             <span className="text-textgrey select-none">·</span>

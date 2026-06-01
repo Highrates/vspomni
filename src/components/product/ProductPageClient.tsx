@@ -133,14 +133,6 @@ export default function ProductPageClient({
         }
       })
 
-      // Дефолтные значения, если тегов нет
-      const defaultAromas = ['Cладкий 🤤', 'Цветочный 🌸', 'Древесный 🪵']
-      const defaultGroup = [
-        { id: 1, group: 'sweet', title: 'Cладкий 🤤' },
-        { id: 2, group: 'flower', title: 'Цветочный 🌸' },
-        { id: 3, group: 'wood', title: 'Древесный 🪵' },
-      ]
-
       const ship = variantShippingFromSaleorVariant(
         firstVariant,
         data.metadata,
@@ -156,10 +148,10 @@ export default function ProductPageClient({
         thumbnail: data.thumbnail.url,
         slug: data.slug,
         categorySlug: data.category?.slug,
-        aromas: aromas.length > 0 ? aromas : defaultAromas,
+        aromas,
         size: firstVariant.name,
         variantId: firstVariant.id,
-        group: group.length > 0 ? group : defaultGroup,
+        group,
         weight: ship.weight,
         length: ship.length,
         width: ship.width,

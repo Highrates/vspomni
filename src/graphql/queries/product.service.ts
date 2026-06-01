@@ -334,14 +334,6 @@ function mapNodeToProductCard(
     }
   })
 
-  // Если тегов нет, используем дефолтные (для обратной совместимости)
-  const defaultAromas = ['Cладкий 🤤', 'Цветочный 🌸', 'Древесный 🪵']
-  const defaultGroup = [
-    { id: 1, group: 'sweet', title: 'Cладкий 🤤' },
-    { id: 2, group: 'flower', title: 'Цветочный 🌸' },
-    { id: 3, group: 'wood', title: 'Древесный 🪵' },
-  ]
-
   const { weight, length, width, height } = variantShippingFromSaleorVariant(
     variant,
     node.metadata,
@@ -362,8 +354,8 @@ function mapNodeToProductCard(
     oldPrice,
     discountPercent,
     size: variant.name,
-    group: group.length > 0 ? group : defaultGroup,
-    aromas: aromas.length > 0 ? aromas : defaultAromas,
+    group,
+    aromas,
     weight,
     length,
     width,
