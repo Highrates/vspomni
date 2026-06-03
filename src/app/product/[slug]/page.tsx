@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { notFound } from 'next/navigation'
 import PublicPageBreadcrumbs from '@/components/layout/PublicPageBreadcrumbs'
 import {
   BREADCRUMB_CATALOG,
@@ -9,6 +10,7 @@ import ProductPageClient from '@/components/product/ProductPageClient'
 import ProductPageNoscript from '@/components/product/ProductPageNoscript'
 import { getSingleProduct } from '@/graphql/queries/product.service'
 import { loadProductPageBySlug } from '@/lib/product/productPageLoader'
+import { categoryProductPath, isValidSlug } from '@/lib/productPaths'
 import { extractProductSeoContent } from '@/lib/product/productPageContent'
 import { buildProductMetadata } from '@/lib/seo/productMetadata'
 import { productJsonLdObject } from '@/lib/seo/productJsonLd'
@@ -23,27 +25,35 @@ export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
   const { slug } = await params
+  if (!isValidSlug(slug)) {
+    return { title: 'Товар | ВСПОМНИ' }
+  }
   const product = await getSingleProduct(slug)
   if (!product) {
     return { title: 'Товар | ВСПОМНИ' }
   }
   const catSlug = product.category?.slug?.trim()
-  const path = catSlug
-    ? `/category/${encodeURIComponent(catSlug)}/${encodeURIComponent(product.slug)}`
-    : `/product/${encodeURIComponent(product.slug)}`
+  const path =
+    catSlug && isValidSlug(catSlug)
+      ? categoryProductPath(catSlug, product.slug)
+      : `/product/${encodeURIComponent(product.slug)}`
+  if (!path) {
+    return { title: 'Товар | ВСПОМНИ' }
+  }
   return buildProductMetadata(product, path)
 }
 
 export default async function ProductLegacyPage({ params }: PageProps) {
   const { slug } = await params
+
+  if (!isValidSlug(slug)) {
+    notFound()
+  }
+
   const loaded = await loadProductPageBySlug(slug)
 
   if (!loaded) {
-    return (
-      <div className="px-4 py-12 text-center text-black/70">
-        Товар не найден
-      </div>
-    )
+    notFound()
   }
 
   const { product, canonicalPath } = loaded

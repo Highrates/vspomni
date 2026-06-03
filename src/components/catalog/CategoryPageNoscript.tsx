@@ -10,7 +10,12 @@ export default function CategoryPageNoscript({
   categoryName,
   products,
 }: Props) {
-  if (products.length === 0) return null
+  const linkedProducts = products.flatMap((product) => {
+    const href = productDetailPath(product)
+    return href ? [{ product, href }] : []
+  })
+
+  if (linkedProducts.length === 0) return null
 
   return (
     <noscript>
@@ -20,9 +25,9 @@ export default function CategoryPageNoscript({
       >
         <h2>{categoryName}</h2>
         <ul>
-          {products.map((product) => (
+          {linkedProducts.map(({ product, href }) => (
             <li key={product.id}>
-              <a href={productDetailPath(product)}>
+              <a href={href}>
                 {product.name}
                 {product.size ? ` — ${product.size}` : ''}
                 {product.price > 0 ? ` — ${product.price} ₽` : ''}

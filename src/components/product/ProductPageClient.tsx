@@ -6,7 +6,6 @@ import Choice from '@/components/home/Choice'
 import GiftPackagesUpsellSection from '@/components/home/GiftPackagesUpsellSection'
 import BackButton from '@/components/ui/BackButton'
 import { useEffect, useState, useRef } from 'react'
-import { useRouter } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
 import AddCartButton from '@/components/ui/AddCartButton'
 import PageTransition from '@/components/layout/PageTransition'
@@ -61,23 +60,10 @@ export default function ProductPageClient({
   const [price, setPrice] = useState<number>(initialUi?.price ?? 0)
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0)
 
-  const router = useRouter()
   const isMobile = useMobile()
   const swiperRef = useRef<any>(null)
 
   const applyProductData = async (data: ProductDetailNode) => {
-    const saleorCategorySlug = data.category?.slug?.trim()
-    if (
-      saleorCategorySlug &&
-      expectedCategorySlug &&
-      saleorCategorySlug !== expectedCategorySlug
-    ) {
-      router.replace(
-        `/category/${encodeURIComponent(saleorCategorySlug)}/${encodeURIComponent(data.slug)}`,
-      )
-      return
-    }
-
     setProduct(data)
     setMainImage(data.media[0]?.url || data.thumbnail?.url || '')
     setCurrentSlideIndex(0)
@@ -123,7 +109,7 @@ export default function ProductPageClient({
     }
     // initialProduct только для первого SSR-рендера; при смене slug — новый fetch
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [productSlug, expectedCategorySlug, router])
+  }, [productSlug, expectedCategorySlug])
 
   if (!product) {
     return (

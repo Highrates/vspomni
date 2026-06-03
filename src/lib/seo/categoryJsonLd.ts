@@ -7,12 +7,18 @@ export function categoryItemListJsonLd(
   categoryPath: string,
   products: ProductCardItem[],
 ) {
-  const itemListElement = products.map((product, index) => ({
-    '@type': 'ListItem',
-    position: index + 1,
-    name: product.name,
-    url: absoluteUrl(productDetailPath(product)),
-  }))
+  const itemListElement = products.flatMap((product, index) => {
+    const path = productDetailPath(product)
+    if (!path) return []
+    return [
+      {
+        '@type': 'ListItem' as const,
+        position: index + 1,
+        name: product.name,
+        url: absoluteUrl(path),
+      },
+    ]
+  })
 
   return {
     '@context': 'https://schema.org',
@@ -21,7 +27,7 @@ export function categoryItemListJsonLd(
     url: absoluteUrl(categoryPath),
     mainEntity: {
       '@type': 'ItemList',
-      numberOfItems: products.length,
+      numberOfItems: itemListElement.length,
       itemListElement,
     },
   }

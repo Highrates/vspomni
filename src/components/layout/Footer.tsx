@@ -20,9 +20,9 @@ export default function Footer() {
     <footer className="flex flex-col container px-5 max-sm:px-2">
       <div className="w-full border-t border-bordergrey flex flex-col gap-8 md:flex-row md:items-start md:justify-start md:gap-10 lg:gap-14 pt-6 md:pt-10 pb-8 md:pb-13.25">
         <div className="text-left min-w-0 shrink-0">
-          <h1 className="text-2xl md:text-[32px] font-bold mb-4 md:mb-6">
+          <p className="text-2xl md:text-[32px] font-bold mb-4 md:mb-6">
             ВСПОМНИ.
-          </h1>
+          </p>
           <div className="flex flex-row gap-2 items-center justify-start">
             <Image
               src="/telegram.svg"

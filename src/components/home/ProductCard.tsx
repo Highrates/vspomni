@@ -19,6 +19,7 @@ interface ProductCardProps {
 }
 
 export default function ProductCard({ product, isNew = false, hideAromas = false }: ProductCardProps) {
+  const detailHref = productDetailPath(product)
   const images =
     product.gallery && product.gallery.length > 0
       ? product.gallery
@@ -26,12 +27,12 @@ export default function ProductCard({ product, isNew = false, hideAromas = false
 
   const singleImage = images.length <= 1
 
-  return (
-    <Link
-      href={productDetailPath(product)}
-      className="rounded-xl bg-white sm:hover:shadow-xl sm:hover:-translate-y-1 transition-all duration-300 flex h-full flex-col group"
-      draggable={false}
-    >
+  if (!detailHref) {
+    return null
+  }
+
+  const cardBody = (
+    <>
       <div className="w-full aspect-square sm:aspect-[369/384] relative overflow-hidden rounded-[12px] sm:rounded-[16px] bg-neutral-50">
         {singleImage ? (
           <>
@@ -139,6 +140,16 @@ export default function ProductCard({ product, isNew = false, hideAromas = false
           />
         </div>
       </div>
+    </>
+  )
+
+  return (
+    <Link
+      href={detailHref}
+      className="rounded-xl bg-white sm:hover:shadow-xl sm:hover:-translate-y-1 transition-all duration-300 flex h-full flex-col group"
+      draggable={false}
+    >
+      {cardBody}
     </Link>
   )
 }

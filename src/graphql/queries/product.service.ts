@@ -17,6 +17,7 @@ import type {
 } from '../types/product.types'
 import { formatDate } from '@/lib/functions'
 import type { ProductCardItem } from '@/types/product'
+import { isValidSlug } from '@/lib/productPaths'
 import { variantShippingFromSaleorVariant } from '@/lib/saleorVariantShipping'
 
 // -----------------------------------------------------------
@@ -279,6 +280,10 @@ export async function getAllWarehouses(
 }
 
 // Helper: map Saleor product node to frontend ProductCardItem with discount info
+function filterValidProductCards(items: ProductCardItem[]): ProductCardItem[] {
+  return items.filter((item) => isValidSlug(item.slug))
+}
+
 function mapNodeToProductCard(
   node: any,
   externalDiscounts?: Record<string, number>,
@@ -560,8 +565,9 @@ export async function getGreedProducts(): Promise<any> {
   )
   const discounts = await getCatalogDiscounts(variantIds)
 
-  const result = nodes.map((node: any) => mapNodeToProductCard(node, discounts))
-  return result
+  return filterValidProductCards(
+    nodes.map((node: any) => mapNodeToProductCard(node, discounts)),
+  )
 }
 
 /**
@@ -669,8 +675,9 @@ export async function getPopularProducts(): Promise<any> {
   )
   const discounts = await getCatalogDiscounts(variantIds)
 
-  const result = nodes.map((node: any) => mapNodeToProductCard(node, discounts))
-  return result
+  return filterValidProductCards(
+    nodes.map((node: any) => mapNodeToProductCard(node, discounts)),
+  )
 }
 
 /** Все товары канала (каталог). Saleor: не больше 100 записей за запрос */
@@ -794,7 +801,9 @@ export async function getCatalogAllProducts(
     .map((node: any) => node.productVariants?.edges?.[0]?.node?.id as string)
     .filter(Boolean)
   const discounts = await getCatalogDiscounts(variantIds)
-  return allNodes.map((node: any) => mapNodeToProductCard(node, discounts))
+  return filterValidProductCards(
+    allNodes.map((node: any) => mapNodeToProductCard(node, discounts)),
+  )
 }
 
 /**
@@ -986,7 +995,9 @@ export async function getProductsByCollectionId(
   const nodes = data.products.edges.map((edge: any) => edge.node)
   const variantIds = nodes.map((node: any) => node.productVariants.edges[0]?.node.id).filter(Boolean)
   const discounts = await getCatalogDiscounts(variantIds)
-  return nodes.map((node: any) => mapNodeToProductCard(node, discounts))
+  return filterValidProductCards(
+    nodes.map((node: any) => mapNodeToProductCard(node, discounts)),
+  )
 }
 
 /** Slug атрибута «Аромат» в Saleor (Reference на страницы «Все ароматы») */
@@ -1051,7 +1062,9 @@ export async function getProductsByAromaSlug(aromaSlug: string): Promise<Product
     const nodes = data.products.edges.map((edge: any) => edge.node)
     const variantIds = nodes.map((node: any) => node.productVariants.edges[0]?.node.id).filter(Boolean)
     const discounts = await getCatalogDiscounts(variantIds)
-    return nodes.map((node: any) => mapNodeToProductCard(node, discounts))
+    return filterValidProductCards(
+      nodes.map((node: any) => mapNodeToProductCard(node, discounts)),
+    )
   } catch (e) {
     console.error('getProductsByAromaSlug error:', e)
     return []
@@ -1110,7 +1123,9 @@ export async function getProductsByAromaValue(aromaName: string): Promise<Produc
     const nodes = data.products.edges.map((edge: any) => edge.node)
     const variantIds = nodes.map((node: any) => node.productVariants.edges[0]?.node.id).filter(Boolean)
     const discounts = await getCatalogDiscounts(variantIds)
-    return nodes.map((node: any) => mapNodeToProductCard(node, discounts))
+    return filterValidProductCards(
+      nodes.map((node: any) => mapNodeToProductCard(node, discounts)),
+    )
   } catch (e) {
     console.error('getProductsByAromaValue error:', e)
     return []
@@ -1205,6 +1220,8 @@ export async function getProductsByCategorySlug(categorySlug: string): Promise<a
   )
   const discounts = await getCatalogDiscounts(variantIds)
 
-  const result = nodes.map((node: any) => mapNodeToProductCard(node, discounts))
-  return result
+  const result = nodes.map((node: any) =>
+    mapNodeToProductCard(node, discounts, { categorySlug }),
+  )
+  return filterValidProductCards(result)
 }

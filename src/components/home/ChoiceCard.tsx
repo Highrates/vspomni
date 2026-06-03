@@ -45,12 +45,24 @@ export default function ChoiceCard({product}: ChoiceCardProps) {
 
           {/* Название и цена */}
           <div className="flex flex-col flex-1 min-w-0 justify-between h-[52px]">
-            <Link
-              href={productDetailPath(product)}
-              className="text-[16px] leading-[22px] font-semibold text-black truncate"
-            >
-              {product.name}
-            </Link>
+            {(() => {
+              const href = productDetailPath(product)
+              if (!href) {
+                return (
+                  <span className="text-[16px] leading-[22px] font-semibold text-black truncate">
+                    {product.name}
+                  </span>
+                )
+              }
+              return (
+                <Link
+                  href={href}
+                  className="text-[16px] leading-[22px] font-semibold text-black truncate"
+                >
+                  {product.name}
+                </Link>
+              )
+            })()}
 
             <div className="flex items-center gap-[6px] whitespace-nowrap">
               {Boolean(product.oldPrice && product.oldPrice > product.price) && (

@@ -4,6 +4,7 @@ import {
   getProductCategorySlugForRedirect,
 } from '@/graphql/queries/product.service'
 import type { ProductDetailNode } from '@/graphql/types/product.types'
+import { categoryProductPath, isValidSlug } from '@/lib/productPaths'
 
 export type LoadedProductPage = {
   product: ProductDetailNode
@@ -15,34 +16,40 @@ export async function loadProductPageBySlug(
   productSlug: string,
   expectedCategorySlug?: string,
 ): Promise<LoadedProductPage | null> {
+  if (!isValidSlug(productSlug)) return null
+
   const product = await getSingleProduct(productSlug)
-  if (!product) return null
+  if (!product?.slug || !isValidSlug(product.slug)) return null
 
   const saleorCategorySlug = product.category?.slug?.trim() || null
 
-  if (
-    saleorCategorySlug &&
-    expectedCategorySlug &&
-    saleorCategorySlug !== expectedCategorySlug
-  ) {
-    redirect(
-      `/category/${encodeURIComponent(saleorCategorySlug)}/${encodeURIComponent(product.slug)}`,
+  // /category/{cat}/{slug} — canonical и JSON-LD всегда на текущий URL (не на «основную» категорию Saleor)
+  if (expectedCategorySlug) {
+    if (!isValidSlug(expectedCategorySlug)) return null
+    const canonicalPath = categoryProductPath(
+      expectedCategorySlug,
+      productSlug,
     )
-  }
-
-  if (!expectedCategorySlug) {
-    const redirectSlug = await getProductCategorySlugForRedirect(productSlug)
-    if (redirectSlug) {
-      redirect(
-        `/category/${encodeURIComponent(redirectSlug)}/${encodeURIComponent(product.slug)}`,
-      )
+    if (!canonicalPath) return null
+    return {
+      product,
+      categorySlug: expectedCategorySlug,
+      canonicalPath,
     }
   }
 
-  const categorySlug = saleorCategorySlug || expectedCategorySlug || null
+  const redirectSlug = await getProductCategorySlugForRedirect(productSlug)
+  if (redirectSlug) {
+    const redirectPath = categoryProductPath(redirectSlug, product.slug)
+    if (redirectPath) redirect(redirectPath)
+  }
+
+  const categorySlug = saleorCategorySlug || null
   const canonicalPath = categorySlug
-    ? `/category/${encodeURIComponent(categorySlug)}/${encodeURIComponent(product.slug)}`
+    ? categoryProductPath(categorySlug, product.slug)
     : `/product/${encodeURIComponent(product.slug)}`
+
+  if (!canonicalPath) return null
 
   return { product, categorySlug, canonicalPath }
 }

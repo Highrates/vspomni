@@ -39,17 +39,19 @@ export default function SearchResults({ products, loading, onClose }: SearchResu
       <div className="px-8 py-4">
         <div className="space-y-2">
           {products.map((product) => {
-            // Получаем цену из defaultVariant
             const price = (product.defaultVariant as any)?.pricing?.price?.gross;
             const thumbnail = product.thumbnail?.url || product.media?.[0]?.url;
+            const href = productDetailPath({
+              slug: product.slug,
+              categorySlug: product.category?.slug,
+            })
+
+            if (!href) return null
 
             return (
               <Link
                 key={product.id}
-                href={productDetailPath({
-                  slug: product.slug,
-                  categorySlug: product.category?.slug,
-                })}
+                href={href}
                 onClick={onClose}
                 className="flex items-center gap-4 p-3 hover:bg-black/5 rounded-lg transition-colors group"
               >

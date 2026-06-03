@@ -4,6 +4,8 @@ import { absoluteUrl, getPublicSiteUrl } from '@/lib/siteUrl'
 import { getAllCategory } from '@/graphql/queries/category.service'
 import { getAllArticles } from '@/graphql/queries/articles.service'
 import { getAllAromas } from '@/graphql/queries/allAromas.service'
+import { getProductsByCategorySlug } from '@/graphql/queries/product.service'
+import { categoryProductPath, isValidSlug } from '@/lib/productPaths'
 
 const MAX_URLS = 49_000
 const PAGE_SIZE = 100
@@ -131,6 +133,18 @@ export async function buildSitemapEntries(): Promise<MetadataRoute.Sitemap> {
     for (const c of categories) {
       if (!c.slug) continue
       push(`/category/${encodeURIComponent(c.slug)}`)
+
+      try {
+        const products = await getProductsByCategorySlug(c.slug)
+        for (const product of products) {
+          if (entries.length >= MAX_URLS) break
+          if (!isValidSlug(product.slug)) continue
+          const path = categoryProductPath(c.slug, product.slug)
+          if (path) push(path)
+        }
+      } catch {
+        /* ignore category products */
+      }
     }
   } catch {
     /* ignore */
@@ -140,7 +154,9 @@ export async function buildSitemapEntries(): Promise<MetadataRoute.Sitemap> {
     const products = await fetchAllPublishedProductsForSitemap()
     for (const p of products) {
       if (entries.length >= MAX_URLS) break
-      push(productLocPath(p.slug, p.categorySlug), toLastMod(p.updatedAt))
+      if (!p.categorySlug) {
+        push(productLocPath(p.slug, null), toLastMod(p.updatedAt))
+      }
     }
   } catch {
     /* ignore */
