@@ -1,7 +1,9 @@
 import type { Metadata } from 'next'
-import Breadcrumbs from '@/components/layout/Breadcrumbs'
+import PublicPageBreadcrumbs from '@/components/layout/PublicPageBreadcrumbs'
+import { breadcrumbCatalog } from '@/lib/seo/breadcrumbItems'
 import CategoryPageNoscript from '@/components/catalog/CategoryPageNoscript'
 import { loadCategoryPage } from '@/lib/category/categoryPageLoader'
+import { loadAllCategories } from '@/lib/category/loadAllCategories'
 import { buildCategoryMetadata } from '@/lib/seo/categoryMetadata'
 import { categoryItemListJsonLd } from '@/lib/seo/categoryJsonLd'
 import CategoryPageClient from './CategoryPageClient'
@@ -29,7 +31,10 @@ export async function generateMetadata({
 
 export default async function CategoryPage({ params }: PageProps) {
   const { slug } = await params
-  const loaded = await loadCategoryPage(slug)
+  const [loaded, allCategories] = await Promise.all([
+    loadCategoryPage(slug),
+    loadAllCategories(),
+  ])
 
   if (!loaded) {
     return (
@@ -46,12 +51,6 @@ export default async function CategoryPage({ params }: PageProps) {
     products,
   )
 
-  const breadcrumbItems = [
-    { name: 'Главная', href: '/' },
-    { name: 'Каталог', href: '/catalog' },
-    { name: categoryLabel },
-  ]
-
   return (
     <>
       <script
@@ -62,14 +61,16 @@ export default async function CategoryPage({ params }: PageProps) {
         categoryName={categoryLabel}
         products={products}
       />
-      <div className="px-2 sm:px-4 pt-2 sm:pt-3 md:pt-4">
-        <Breadcrumbs items={breadcrumbItems} currentPath={canonicalPath} />
-      </div>
+      <PublicPageBreadcrumbs
+        items={breadcrumbCatalog(categoryLabel)}
+        currentPath={canonicalPath}
+      />
       <CategoryPageClient
         slug={slug}
         initialCategoryTitle={categoryLabel}
         initialProducts={products}
         hideAromas={hideAromas}
+        initialCategories={allCategories}
       />
     </>
   )

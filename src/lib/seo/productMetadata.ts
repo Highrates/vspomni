@@ -1,10 +1,10 @@
 import type { Metadata } from 'next'
 import type { ProductDetailNode } from '@/graphql/types/product.types'
-import { absoluteUrl } from '@/lib/siteUrl'
 import {
   extractProductSeoContent,
   productMetaDescription,
 } from '@/lib/product/productPageContent'
+import { buildPageMetadata } from '@/lib/seo/buildPageMetadata'
 
 export function buildProductMetadata(
   product: ProductDetailNode,
@@ -12,18 +12,11 @@ export function buildProductMetadata(
 ): Metadata {
   const seo = extractProductSeoContent(product)
   const description = productMetaDescription(seo)
-  const url = absoluteUrl(canonicalPath)
 
-  return {
-    title: `${seo.name} | ВСПОМНИ`,
+  return buildPageMetadata({
+    title: seo.name,
     description,
-    alternates: { canonical: url },
-    openGraph: {
-      title: seo.name,
-      description,
-      url,
-      type: 'website',
-      images: seo.imageUrls[0] ? [{ url: seo.imageUrls[0] }] : undefined,
-    },
-  }
+    canonicalPath,
+    ogImage: seo.imageUrls[0] ?? null,
+  })
 }

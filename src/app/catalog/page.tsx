@@ -1,40 +1,47 @@
 import type { Metadata } from 'next'
 import { getCatalogAllProducts } from '@/graphql/queries/product.service'
+import { loadAllCategories } from '@/lib/category/loadAllCategories'
+import PublicPageBreadcrumbs from '@/components/layout/PublicPageBreadcrumbs'
+import { breadcrumbCatalogPage } from '@/lib/seo/breadcrumbItems'
+import { buildPageMetadata } from '@/lib/seo/buildPageMetadata'
 import CatalogPageClient from './CatalogPageClient'
 
-const CATALOG_TITLE = 'Каталог ароматов и подарочной упаковки | ВСПОМНИ'
+const CATALOG_TITLE = 'Каталог ароматов и подарочной упаковки'
 const CATALOG_DESCRIPTION =
-  'Каталог бренда ВСПОМНИ сочетает ароматы и подарочные решения: диффузоры, ароматические саше, интерьерные спреи и фирменные подарочные пакеты. Соберите личный набор или готовый подарок.'
+  'Каталог бренда ВСПОМНИ: диффузоры, ароматические саше, интерьерные спреи и подарочные пакеты. Соберите личный набор или готовый подарок с доставкой по России.'
 
 const CATALOG_KEYWORDS = [
   'каталог ВСПОМНИ',
   'каталог ароматов ВСПОМНИ',
   'каталог товаров ВСПОМНИ',
-  'официальный каталог ВСПОМНИ',
-  'каталог интернет-магазина ВСПОМНИ',
-  'каталог продукции ВСПОМНИ',
-  'категории каталога ВСПОМНИ',
+  'интернет-магазин ароматов для дома',
 ]
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildPageMetadata({
   title: CATALOG_TITLE,
   description: CATALOG_DESCRIPTION,
+  canonicalPath: '/catalog',
   keywords: CATALOG_KEYWORDS,
-  alternates: {
-    canonical: '/catalog',
-  },
-  openGraph: {
-    title: CATALOG_TITLE,
-    description: CATALOG_DESCRIPTION,
-    url: '/catalog',
-    siteName: 'ВСПОМНИ',
-    locale: 'ru_RU',
-    type: 'website',
-  },
-}
+})
+
+export const revalidate = 60
 
 export default async function CatalogPage() {
-  const allProducts = await getCatalogAllProducts(500).catch(() => [])
+  const [allProducts, categories] = await Promise.all([
+    getCatalogAllProducts(500).catch(() => []),
+    loadAllCategories(),
+  ])
 
-  return <CatalogPageClient allProducts={allProducts} />
+  return (
+    <>
+      <PublicPageBreadcrumbs
+        items={breadcrumbCatalogPage()}
+        currentPath="/catalog"
+      />
+      <CatalogPageClient
+        allProducts={allProducts}
+        initialCategories={categories}
+      />
+    </>
+  )
 }

@@ -3,13 +3,18 @@
 import CatalogAllProductsSection from '@/components/catalog/CatalogAllProductsSection'
 import CatalogCategoryBanners from '@/components/catalog/CatalogCategoryBanners'
 import PageTransition from '@/components/layout/PageTransition'
+import type { Category } from '@/types/category'
 import type { ProductCardItem } from '@/types/product'
 
 type Props = {
   allProducts: ProductCardItem[]
+  initialCategories?: Category[]
 }
 
-export default function CatalogPageClient({ allProducts }: Props) {
+export default function CatalogPageClient({
+  allProducts,
+  initialCategories = [],
+}: Props) {
   return (
     <PageTransition className="px-0 -mt-63 sm:-mt-74 md:-mt-90">
       <section className="relative mb-23 z-20">
@@ -19,7 +24,7 @@ export default function CatalogPageClient({ allProducts }: Props) {
           </h1>
         </div>
       </section>
-      <CatalogCategoryBanners />
+      <CatalogCategoryBanners initialCategories={initialCategories} />
 
       <CatalogAllProductsSection products={allProducts} />
     </PageTransition>

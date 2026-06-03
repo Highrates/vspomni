@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { absoluteUrl } from '@/lib/siteUrl'
+import { buildPageMetadata } from '@/lib/seo/buildPageMetadata'
 
 export function buildCategoryMetadata(
   categoryName: string,
@@ -11,19 +11,11 @@ export function buildCategoryMetadata(
       ? `${categoryName} — ${productCount} ${productCountLabel(productCount)} в интернет-магазине ВСПОМНИ. Интерьерные ароматы для дома с доставкой по России.`
       : `${categoryName} — каталог интерьерных ароматов ВСПОМНИ.`
 
-  const url = absoluteUrl(canonicalPath)
-
-  return {
-    title: `${categoryName} | Каталог | ВСПОМНИ`,
+  return buildPageMetadata({
+    title: `${categoryName} — каталог`,
     description,
-    alternates: { canonical: url },
-    openGraph: {
-      title: `${categoryName} | ВСПОМНИ`,
-      description,
-      url,
-      type: 'website',
-    },
-  }
+    canonicalPath,
+  })
 }
 
 function productCountLabel(n: number): string {

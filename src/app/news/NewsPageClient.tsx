@@ -4,57 +4,49 @@ import BackButton from '@/components/ui/BackButton'
 import NewsCard from '@/components/news/NewsCard'
 import PopularScentsAlt from '@/components/features/PopularScentsAlt'
 import { useEffect, useState } from 'react'
-import { getAllArticles } from '@/graphql/queries/articles.service'
-import { formatArticleDate } from '@/lib/articles'
+import {
+  getAllArticles,
+  type ArticleNode,
+} from '@/graphql/queries/articles.service'
+import { mapArticlesToNewsList } from '@/lib/articles/newsList'
+import type { NewsListItem } from '@/lib/articles/newsList'
 
-const getImageUrl = (assignedAttributes: any[]) => {
-  const imageAttr = assignedAttributes?.find(
-    (attr) => attr.fileValue?.url,
+type Props = {
+  /** Публикации с сервера (SSR) — сразу в HTML для SEO */
+  initialArticles?: ArticleNode[]
+}
+
+export default function NewsPageClient({ initialArticles = [] }: Props) {
+  const [items, setItems] = useState<NewsListItem[]>(() =>
+    mapArticlesToNewsList(initialArticles),
   )
-  return imageAttr?.fileValue?.url || ''
-}
-
-const getShortText = (content: string, maxLength = 150) => {
-  try {
-    const parsed = JSON.parse(content)
-    const firstBlock = parsed.blocks?.[0]
-
-    if (firstBlock?.data?.text) {
-      const text = firstBlock.data.text
-        .replace(/<[^>]*>/g, '')
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .trim()
-
-      if (text.length > maxLength) {
-        return text.substring(0, maxLength) + '...'
-      }
-      return text
-    }
-  } catch (error) {
-    console.error('Error parsing content:', error)
-  }
-  return ''
-}
-
-export default function NewsPageClient() {
-  const [articles, setArticles] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(initialArticles.length === 0)
 
   useEffect(() => {
+    setItems(mapArticlesToNewsList(initialArticles))
+    setLoading(initialArticles.length === 0)
+  }, [initialArticles])
+
+  useEffect(() => {
+    if (initialArticles.length > 0) return
+
+    let cancelled = false
+
     getAllArticles(20)
       .then((fetchedArticles) => {
-        setArticles(fetchedArticles)
+        if (cancelled) return
+        setItems(mapArticlesToNewsList(fetchedArticles))
         setLoading(false)
       })
       .catch((error) => {
         console.error('Error fetching articles:', error)
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       })
-  }, [])
+
+    return () => {
+      cancelled = true
+    }
+  }, [initialArticles.length])
 
   return (
     <div className="px-3 sm:px-4 md:px-0 pt-2 sm:pt-3">
@@ -69,16 +61,20 @@ export default function NewsPageClient() {
         <div className="container flex items-center justify-center py-20">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
         </div>
+      ) : items.length === 0 ? (
+        <p className="container text-black/70 text-sm sm:text-base py-8">
+          Публикации скоро появятся.
+        </p>
       ) : (
         <div className="container grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
-          {articles.map((article) => (
+          {items.map((item) => (
             <NewsCard
-              key={article.id}
-              date={formatArticleDate(article.publishedAt)}
-              title={article.title}
-              shortText={getShortText(article.content)}
-              imageUrl={getImageUrl(article.assignedAttributes)}
-              articleUrl={`/article/${article.slug}`}
+              key={item.id}
+              date={item.date}
+              title={item.title}
+              shortText={item.shortText}
+              imageUrl={item.imageUrl}
+              articleUrl={item.articleUrl}
             />
           ))}
         </div>

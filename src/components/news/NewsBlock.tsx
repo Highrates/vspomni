@@ -56,11 +56,16 @@ export default function NewsBlock() {
         <h3 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none">
           Полезные материалы
         </h3>
-        <Link href="/news" className="text-base text-black font-medium flex">
-          <span className="text-md font-medium">Все</span>
+        <Link
+          href="/news"
+          className="text-base text-black font-medium flex items-center"
+          aria-label="Смотреть все новости и публикации"
+        >
+          <span className="text-md font-medium">Все публикации</span>
           <Image
             src="/to_right.svg"
-            alt="all news link"
+            alt=""
+            aria-hidden
             width={20}
             height={24}
             className="ml-1 h-auto"

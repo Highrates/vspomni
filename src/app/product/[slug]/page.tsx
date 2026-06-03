@@ -1,5 +1,10 @@
 import type { Metadata } from 'next'
-import Breadcrumbs from '@/components/layout/Breadcrumbs'
+import PublicPageBreadcrumbs from '@/components/layout/PublicPageBreadcrumbs'
+import {
+  BREADCRUMB_CATALOG,
+  BREADCRUMB_HOME,
+  breadcrumbProduct,
+} from '@/lib/seo/breadcrumbItems'
 import ProductPageClient from '@/components/product/ProductPageClient'
 import ProductPageNoscript from '@/components/product/ProductPageNoscript'
 import { getSingleProduct } from '@/graphql/queries/product.service'
@@ -52,12 +57,18 @@ export default async function ProductLegacyPage({ params }: PageProps) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       <ProductPageNoscript seo={seo} />
-      <div className="px-2 sm:px-4 pt-2 sm:pt-3 md:pt-4">
-        <Breadcrumbs
-          items={[{ name: 'Главная', href: '/' }, { name: product.name }]}
-          currentPath={canonicalPath}
-        />
-      </div>
+      <PublicPageBreadcrumbs
+        items={
+          product.category?.slug && product.category?.name
+            ? breadcrumbProduct(
+                product.category.name,
+                product.category.slug,
+                product.name,
+              )
+            : [BREADCRUMB_HOME, BREADCRUMB_CATALOG, { name: product.name }]
+        }
+        currentPath={canonicalPath}
+      />
       <ProductPageClient productSlug={slug} initialProduct={product} />
     </>
   )

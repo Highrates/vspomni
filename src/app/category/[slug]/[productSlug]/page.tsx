@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
-import Breadcrumbs from '@/components/layout/Breadcrumbs'
+import PublicPageBreadcrumbs from '@/components/layout/PublicPageBreadcrumbs'
+import { breadcrumbProduct } from '@/lib/seo/breadcrumbItems'
 import ProductPageClient from '@/components/product/ProductPageClient'
 import ProductPageNoscript from '@/components/product/ProductPageNoscript'
 import { getCategoryMetaBySlug } from '@/graphql/queries/category.service'
@@ -52,13 +53,6 @@ export default async function CategoryProductPage({ params }: PageProps) {
     slug.replace(/-/g, ' ') ||
     'Категория'
 
-  const items = [
-    { name: 'Главная', href: '/' },
-    { name: 'Каталог', href: '/catalog' },
-    { name: categoryLabel, href: `/category/${encodeURIComponent(slug)}` },
-    { name: product.name },
-  ]
-
   return (
     <>
       <script
@@ -66,9 +60,10 @@ export default async function CategoryProductPage({ params }: PageProps) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       <ProductPageNoscript seo={seo} />
-      <div className="px-2 sm:px-4 pt-2 sm:pt-3 md:pt-4">
-        <Breadcrumbs items={items} currentPath={canonicalPath} />
-      </div>
+      <PublicPageBreadcrumbs
+        items={breadcrumbProduct(categoryLabel, slug, product.name)}
+        currentPath={canonicalPath}
+      />
       <ProductPageClient
         productSlug={productSlug}
         expectedCategorySlug={slug}

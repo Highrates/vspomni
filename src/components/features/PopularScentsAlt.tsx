@@ -23,11 +23,13 @@ export default function PopularScentsAlt() {
         <Link
           href="/category/diffuzory"
           className="text-base text-black font-medium flex items-center -ml-5"
+          aria-label="Смотреть все диффузоры для дома"
         >
-          <span className="text-md font-medium">Все</span>
+          <span className="text-md font-medium">Все диффузоры</span>
           <Image
             src="/to_right.svg"
-            alt="all news link"
+            alt=""
+            aria-hidden
             width={20}
             height={24}
             className="ml-1 h-auto"

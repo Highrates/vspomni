@@ -8,32 +8,43 @@ import { getComingSoonCategories } from '@/graphql/queries/category.service'
 import { Category } from '@/types/category'
 import Link from 'next/link'
 
-export default function ComingSoon() {
-  const [categories, setCategories] = useState<Category[]>([])
-  const [loading, setLoading] = useState(true)
-  const [mounted, setMounted] = useState(false)
+type Props = {
+  /** Категории с сервера (SSR) — ссылки сразу в HTML */
+  initialCategories?: Category[]
+}
+
+export default function ComingSoon({ initialCategories = [] }: Props) {
+  const [categories, setCategories] = useState<Category[]>(initialCategories)
+  const [loading, setLoading] = useState(initialCategories.length === 0)
 
   useEffect(() => {
-    setMounted(true)
+    setCategories(initialCategories)
+    setLoading(initialCategories.length === 0)
+  }, [initialCategories])
+
+  useEffect(() => {
+    if (initialCategories.length > 0) return
+
+    let cancelled = false
+
     const fetchCategories = async () => {
       try {
         const data = await getComingSoonCategories()
-        if (data && data.length > 0) {
+        if (!cancelled && data.length > 0) {
           setCategories(data)
         }
       } catch (error) {
         console.error('Failed to fetch coming soon categories:', error)
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
     fetchCategories()
-  }, [])
-
-  if (!mounted) {
-    return null
-  }
+    return () => {
+      cancelled = true
+    }
+  }, [initialCategories.length])
 
   if (loading) {
     return (
@@ -63,7 +74,7 @@ export default function ComingSoon() {
           {categories.map((category, i) => (
             <Link
               key={category.id}
-              href={`/category/${category.slug}`}
+              href={`/category/${encodeURIComponent(category.slug)}`}
               className="block"
             >
               <motion.div

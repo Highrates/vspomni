@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useCategoriesStore } from '@/stores/useCategories'
 import { ProductCardItem } from '@/types/product'
+import type { Category } from '@/types/category'
 import { getProductsByCategorySlug } from '@/graphql/queries/product.service'
 import CatalogCategoryBanners from '@/components/catalog/CatalogCategoryBanners'
 import BackButton from '@/components/ui/BackButton'
@@ -14,6 +15,8 @@ type Props = {
   initialCategoryTitle: string
   /** Товары с сервера (SSR) — сразу в HTML для SEO */
   initialProducts?: ProductCardItem[]
+  /** Категории с сервера — баннеры других категорий в HTML */
+  initialCategories?: Category[]
   hideAromas?: boolean
 }
 
@@ -21,6 +24,7 @@ export default function CategoryPageClient({
   slug,
   initialCategoryTitle,
   initialProducts = [],
+  initialCategories = [],
   hideAromas: hideAromasProp = false,
 }: Props) {
   const { categories, fetchProductsByCategorySlug } = useCategoriesStore()
@@ -155,7 +159,10 @@ export default function CategoryPageClient({
         )}
       </section>
 
-      <CatalogCategoryBanners excludeSlug={slug} />
+      <CatalogCategoryBanners
+        excludeSlug={slug}
+        initialCategories={initialCategories}
+      />
     </PageTransition>
   )
 }

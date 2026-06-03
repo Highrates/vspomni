@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { buildPageMetadata } from '@/lib/seo/buildPageMetadata'
 import Hero from '@/components/home/Hero'
 import ProductGrid from '@/components/home/ProductGrid'
 import GiftPackagesBanner from '@/components/home/GiftPackagesBanner'
@@ -11,13 +12,18 @@ import NewsBlock from '@/components/news/NewsBlock'
 import FaqBlock from '@/components/home/FaqBlock'
 import HistoryLine from '@/components/home/HistoryLine'
 import CandlesSoonBanner from '@/components/home/CandlesSoonBanner'
+import {
+  pickComingSoonCategories,
+  pickGiftPackagesCategory,
+} from '@/lib/category/catalogCategories'
+import { loadAllCategories } from '@/lib/category/loadAllCategories'
 import { getCandlesSoonBanner } from '@/graphql/queries/candlesSoon.service'
 import { getChoiceProducts } from '@/graphql/queries/product.service'
 
 // Обновляем главную страницу по данным моделей раз в минуту
 export const revalidate = 60
 
-const HOME_TITLE = 'Ароматы для дома и интерьера | ВСПОМНИ'
+const HOME_TITLE = 'Ароматы для дома и интерьера'
 const HOME_DESCRIPTION =
   'Интерьерные ароматы для дома от бренда ВСПОМНИ: диффузоры, саше и декор — наполните пространство воспоминаниями и уютом.'
 
@@ -36,39 +42,33 @@ const HOME_KEYWORDS = [
   'премиум ароматы для дома',
 ]
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildPageMetadata({
   title: HOME_TITLE,
   description: HOME_DESCRIPTION,
+  canonicalPath: '/',
   keywords: HOME_KEYWORDS,
-  alternates: {
-    canonical: '/',
-  },
-  openGraph: {
-    title: HOME_TITLE,
-    description: HOME_DESCRIPTION,
-    url: '/',
-    siteName: 'ВСПОМНИ',
-    locale: 'ru_RU',
-    type: 'website',
-  },
-}
+})
 
 export default async function Home() {
-  const [candlesSoon, choiceProducts] = await Promise.all([
+  const [candlesSoon, choiceProducts, allCategories] = await Promise.all([
     getCandlesSoonBanner().catch(() => null),
     getChoiceProducts().catch(() => []),
+    loadAllCategories(),
   ])
+
+  const comingSoonCategories = pickComingSoonCategories(allCategories)
+  const giftPackagesCategory = pickGiftPackagesCategory(allCategories)
 
   return (
     <>
       <Hero />
       <StoryBlock />
       <PopularScentsAlt />
-      <ComingSoon />
+      <ComingSoon initialCategories={comingSoonCategories} />
       <Choice initialProducts={choiceProducts} />
       <HistoryLine />
       <ProductGrid />
-      <GiftPackagesBanner />
+      <GiftPackagesBanner initialCategory={giftPackagesCategory} />
       <CollectionNoseBlock />
       <CandlesSoonBanner
         imageUrl={candlesSoon?.imageUrl ?? null}

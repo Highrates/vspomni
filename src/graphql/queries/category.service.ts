@@ -1,6 +1,7 @@
 import { CHANNEL, graphqlRequest } from '../client';
 import { CategoryConnection, SingleCategoryConnection } from '@/graphql/types/category.types';
 import { Category} from "@/types/category"
+import { pickComingSoonCategories } from '@/lib/category/catalogCategories'
 
 export async function getAllCategory(first: number): Promise<Category[]> {
   const query = `
@@ -138,11 +139,7 @@ export async function getSingleCategory(
 export async function getComingSoonCategories(): Promise<Category[]> {
   try {
     const allCategories = await getAllCategory(20);
-
-    // Жёстко выбираем нужные категории по ID (в т.ч. категория 7)
-    const targetIds = ['Q2F0ZWdvcnk6Mw==', 'Q2F0ZWdvcnk6NA==', 'Q2F0ZWdvcnk6Nw=='];
-
-    return allCategories.filter((category) => targetIds.includes(category.id));
+    return pickComingSoonCategories(allCategories);
   } catch (error) {
     console.error('Error fetching coming soon categories:', error);
     return [];

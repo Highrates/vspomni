@@ -136,7 +136,7 @@ export default function Header({ variant = 'default' }: HeaderProps) {
             <span className="text-base sm:text-[18px] font-semibold tracking-wide inline-flex shrink-0">
               <Image
                 src={'/logo/logo-vspomni.svg'}
-                alt="Vspomni"
+                alt="ВСПОМНИ"
                 width={100}
                 height={20}
                 className={isOverlay && !scrolled ? 'brightness-0 invert' : ''}
@@ -145,11 +145,12 @@ export default function Header({ variant = 'default' }: HeaderProps) {
           ) : (
             <Link
               href="/"
+              aria-label="ВСПОМНИ — на главную"
               className="text-base sm:text-[18px] font-semibold tracking-wide inline-flex shrink-0"
             >
               <Image
                 src={'/logo/logo-vspomni.svg'}
-                alt="Vspomni"
+                alt="ВСПОМНИ — на главную"
                 width={100}
                 height={20}
                 className={isOverlay && !scrolled ? 'brightness-0 invert' : ''}
@@ -165,8 +166,12 @@ export default function Header({ variant = 'default' }: HeaderProps) {
             <nav
               className={`flex items-center gap-4 lg:gap-8 text-sm lg:text-[15px] font-medium ${isOverlay && !scrolled ? 'text-white' : 'text-black/80'}`}
             >
-              <Link href="/catalog" className="hover:opacity-80 transition whitespace-nowrap">Каталог</Link>
-              <Link href="/#vse-aromaty" className="hover:opacity-80 transition whitespace-nowrap">Ароматы</Link>
+          <Link href="/catalog" className="hover:opacity-80 transition whitespace-nowrap">
+            Каталог ароматов
+          </Link>
+          <Link href="/#vse-aromaty" className="hover:opacity-80 transition whitespace-nowrap">
+            Все ароматы
+          </Link>
               <Link
                 href="https://t.me/vspomni_zabota"
                 target="_blank"
@@ -312,8 +317,12 @@ export default function Header({ variant = 'default' }: HeaderProps) {
               }`}
             >
               <nav className="flex flex-col px-6 py-5 text-md font-medium gap-4">
-                <Link href="/catalog" onClick={() => setMenuOpen(false)}>Каталог</Link>
-                <Link href="/#vse-aromaty" onClick={() => setMenuOpen(false)}>Ароматы</Link>
+                <Link href="/catalog" onClick={() => setMenuOpen(false)}>
+                  Каталог ароматов
+                </Link>
+                <Link href="/#vse-aromaty" onClick={() => setMenuOpen(false)}>
+                  Все ароматы
+                </Link>
                 <Link
                   href="https://t.me/vspomni_zabota"
                   target="_blank"

@@ -1,32 +1,41 @@
-import Breadcrumbs from '@/components/layout/Breadcrumbs'
-import { getAromaBreadcrumbTitleBySlug } from '@/graphql/queries/allAromas.service'
+import type { Metadata } from 'next'
+import { notFound } from 'next/navigation'
+import PublicPageBreadcrumbs from '@/components/layout/PublicPageBreadcrumbs'
+import { getAromaDisplayTitle } from '@/graphql/queries/allAromas.service'
+import { breadcrumbAroma } from '@/lib/seo/breadcrumbItems'
+import { buildAromaMetadata, getAromaBySlug } from '@/lib/seo/aromaMetadata'
 import CatalogAromaPageClient from './CatalogAromaPageClient'
 
-export default async function CatalogAromaPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>
-}) {
-  const { slug } = await params
-  const aromaTitle =
-    (await getAromaBreadcrumbTitleBySlug(slug))?.trim() ||
-    slug.replace(/-/g, ' ')
+export const revalidate = 60
 
-  const items = [
-    { name: 'Главная', href: '/' },
-    { name: 'Каталог', href: '/catalog' },
-    { name: 'Ароматы', href: '/#vse-aromaty' },
-    { name: aromaTitle },
-  ]
+type PageProps = {
+  params: Promise<{ slug: string }>
+}
+
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
+  const { slug } = await params
+  return buildAromaMetadata(slug)
+}
+
+export default async function CatalogAromaPage({ params }: PageProps) {
+  const { slug } = await params
+  const aroma = await getAromaBySlug(slug)
+
+  if (!aroma) {
+    notFound()
+  }
+
+  const aromaTitle = getAromaDisplayTitle(aroma)
+  const path = `/catalog/aroma/${encodeURIComponent(slug)}`
 
   return (
     <>
-      <div className="px-2 sm:px-4 pt-2 sm:pt-3 md:pt-4">
-        <Breadcrumbs
-          items={items}
-          currentPath={`/catalog/aroma/${encodeURIComponent(slug)}`}
-        />
-      </div>
+      <PublicPageBreadcrumbs
+        items={breadcrumbAroma(aromaTitle)}
+        currentPath={path}
+      />
       <CatalogAromaPageClient slug={slug} />
     </>
   )

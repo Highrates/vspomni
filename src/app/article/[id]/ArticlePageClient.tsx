@@ -21,29 +21,47 @@ function ArticleBodyImage({ src, alt }: { src: string; alt: string }) {
   )
 }
 
-type Props = { slug: string }
+type Props = {
+  slug: string
+  /** Статья с сервера (SSR) — сразу в HTML для SEO */
+  initialArticle?: ArticleNode | null
+}
 
-export default function ArticlePageClient({ slug }: Props) {
-  const [article, setArticle] = useState<ArticleNode | null>(null)
-  const [loading, setLoading] = useState(true)
+export default function ArticlePageClient({
+  slug,
+  initialArticle = null,
+}: Props) {
+  const [article, setArticle] = useState<ArticleNode | null>(initialArticle)
+  const [loading, setLoading] = useState(!initialArticle)
 
   useEffect(() => {
+    if (initialArticle) {
+      setArticle(initialArticle)
+      setLoading(false)
+      return
+    }
+
+    let cancelled = false
+
     async function fetchArticle() {
       if (!slug) return
 
       try {
         setLoading(true)
         const data = await getSingleArticle(slug)
-        setArticle(data)
+        if (!cancelled) setArticle(data)
       } catch (error) {
         console.error('Error fetching article:', error)
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
     fetchArticle()
-  }, [slug])
+    return () => {
+      cancelled = true
+    }
+  }, [slug, initialArticle])
 
   if (loading) {
     return (

@@ -1,42 +1,45 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowUpRight } from 'lucide-react'
 import { useCategoriesStore } from '@/stores/useCategories'
+import { sortCatalogCategories } from '@/lib/category/catalogCategories'
 import type { Category } from '@/types/category'
 
-/** Как на странице каталога: саше выше подарочных пакетов */
-export function catalogCategorySortKey(c: Category): number {
-  const t = `${c.slug} ${c.name}`.toLowerCase()
-  if (t.includes('саш') || t.includes('sashe') || t.includes('sachet')) return 0
-  if (t.includes('пакет') || t.includes('paket')) return 2
-  return 1
-}
+export { catalogCategorySortKey } from '@/lib/category/catalogCategories'
 
 type Props = {
   /** Не показывать карточку текущей категории (страница /category/[slug]) */
   excludeSlug?: string
+  /** Категории с сервера (SSR) — баннеры сразу в HTML */
+  initialCategories?: Category[]
 }
 
-export default function CatalogCategoryBanners({ excludeSlug }: Props) {
-  const { categories, fetchCategories } = useCategoriesStore()
+export default function CatalogCategoryBanners({
+  excludeSlug,
+  initialCategories = [],
+}: Props) {
+  const { categories: storeCategories, fetchCategories } = useCategoriesStore()
+  const [categories, setCategories] = useState<Category[]>(initialCategories)
 
   useEffect(() => {
-    void fetchCategories()
-  }, [fetchCategories])
+    setCategories(initialCategories.length > 0 ? initialCategories : storeCategories)
+  }, [initialCategories, storeCategories])
 
-  const sortedCategories = useMemo(() => {
-    const list = excludeSlug
-      ? categories.filter((c) => c.slug !== excludeSlug)
-      : [...categories]
-    return list.sort(
-      (a, b) =>
-        catalogCategorySortKey(a) - catalogCategorySortKey(b) ||
-        a.name.localeCompare(b.name, 'ru'),
-    )
-  }, [categories, excludeSlug])
+  useEffect(() => {
+    if (initialCategories.length > 0) {
+      useCategoriesStore.setState({ categories: initialCategories })
+      return
+    }
+    void fetchCategories()
+  }, [fetchCategories, initialCategories])
+
+  const sortedCategories = useMemo(
+    () => sortCatalogCategories(categories, excludeSlug),
+    [categories, excludeSlug],
+  )
 
   if (sortedCategories.length === 0) return null
 

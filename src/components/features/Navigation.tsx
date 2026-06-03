@@ -4,10 +4,10 @@ export default function Navigation() {
   return (
     <nav className="hidden md:flex items-center gap-8 text-[16px] font-medium text-black/80">
       <Link href="/catalog" className="hover:text-black transition-colors">
-        Каталог
+        Каталог ароматов
       </Link>
       <Link href="/#vse-aromaty" className="hover:text-black transition-colors">
-        Ароматы
+        Все ароматы
       </Link>
       {/* Временно скрыты пункты "Партнеры" и "Блог" */}
       <Link
