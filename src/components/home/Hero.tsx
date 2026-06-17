@@ -30,6 +30,9 @@ interface HeroSlide {
   href?: string
 }
 
+/** Ссылка по клику на нижнюю плашку Hero («Попробуй новинку?» и т.п.) */
+const HERO_BOTTOM_BADGE_LINK = '/catalog/aroma/teplichka-u-babuli'
+
 /** Блок внизу слайдера (плашка): всегда этот контент — один источник для десктопа и мобилки */
 const defaultSlides: HeroSlide[] = [
   {
@@ -75,7 +78,7 @@ function apiSlidesToHero(
 const SWIPER_CLASS = 'hero-swiper w-full h-[70vh] sm:h-[80vh] md:h-[85vh] lg:h-[90vh]'
 
 function HeroBottomBadge({ slide }: { slide: HeroSlide }) {
-  const href = slide.href?.trim()
+  const href = slide.href?.trim() || HERO_BOTTOM_BADGE_LINK
   const motionClass =
     'absolute left-3 right-3 md:left-6 md:right-6 bottom-4 md:bottom-8 flex flex-row gap-4 md:gap-5 bg-white/30 backdrop-blur-md rounded-4xl p-3 md:p-2.5 shadow-[0_4px_20px_rgba(0,0,0,0.08)]'
   const inner = (
@@ -84,7 +87,7 @@ function HeroBottomBadge({ slide }: { slide: HeroSlide }) {
       initial={{ opacity: 0, y: 40 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }}
-      className={`${motionClass}${href ? ' cursor-pointer' : ''}`}
+      className={`${motionClass} cursor-pointer`}
     >
       <motion.div
         key={slide.id + '-img'}
@@ -122,8 +125,6 @@ function HeroBottomBadge({ slide }: { slide: HeroSlide }) {
       </motion.div>
     </motion.div>
   )
-
-  if (!href) return inner
 
   if (/^https?:\/\//i.test(href)) {
     return (

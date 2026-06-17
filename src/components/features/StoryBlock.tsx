@@ -5,8 +5,6 @@ import StoryViewer, { type StoryGroup } from './StoryViewer'
 import StoryCirclePreview from './StoryCirclePreview'
 import { getAllStories, StoryNode } from '@/graphql/queries/stories.service'
 
-const MAX_VISIBLE = 5
-
 function getCirclePreviewSources(story: StoryNode) {
   const imageUrl =
     story.coverUrl ||
@@ -46,8 +44,8 @@ export default function StoryBlock() {
     return (
       <section className="mt-4 sm:mt-5 md:mt-6 lg:mt-8 mb-4 sm:mb-5 md:mb-6 px-4 sm:px-6 md:px-8">
         <div className="w-full flex justify-center">
-          <div className="flex gap-3 sm:gap-[14px] md:gap-4 lg:gap-[18px]">
-            {[1, 2, 3, 4, 5].map((i) => (
+          <div className="flex gap-3 sm:gap-[14px] md:gap-4 lg:gap-[18px] overflow-hidden">
+            {[1, 2, 3, 4].map((i) => (
               <div key={i} className="flex flex-col items-center gap-2">
                 <div className="w-[70px] h-[70px] sm:w-[80px] sm:h-[80px] md:w-[88px] md:h-[88px] lg:w-[96px] lg:h-[96px] rounded-full bg-neutral-200 animate-pulse" />
                 <div className="w-[60px] h-3 rounded-full bg-neutral-200 animate-pulse" />
@@ -68,7 +66,6 @@ export default function StoryBlock() {
       (story) => story.isPublished && story.items && story.items.length > 0,
     )
     .sort((a, b) => a.order - b.order)
-    .slice(0, MAX_VISIBLE)
     .map((story) => ({
       id: story.id,
       title: story.title,
@@ -100,7 +97,7 @@ export default function StoryBlock() {
       <section className="mt-4 sm:mt-5 md:mt-6 lg:mt-8 mb-4 sm:mb-5 md:mb-6 px-4 sm:px-6 md:px-8">
         <div className="w-full flex justify-center">
           <div
-            className="flex flex-none flex-row items-start justify-center gap-3 sm:gap-[14px] md:gap-4 lg:gap-[18px]"
+            className="flex flex-none flex-row flex-wrap items-start justify-center gap-3 sm:gap-[14px] md:gap-4 lg:gap-[18px]"
             style={{ maxWidth: '100%' }}
           >
             {storyGroups.map((group, index) => {
