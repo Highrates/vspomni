@@ -19,7 +19,10 @@ export async function loadProductPageBySlug(
   if (!isValidSlug(productSlug)) return null
 
   const product = await getSingleProduct(productSlug)
-  if (!product?.slug || !isValidSlug(product.slug)) return null
+  if (!product) return null
+
+  const resolvedSlug = product.slug?.trim() || productSlug
+  if (!isValidSlug(resolvedSlug)) return null
 
   const saleorCategorySlug = product.category?.slug?.trim() || null
 
@@ -28,7 +31,7 @@ export async function loadProductPageBySlug(
     if (!isValidSlug(expectedCategorySlug)) return null
     const canonicalPath = categoryProductPath(
       expectedCategorySlug,
-      productSlug,
+      resolvedSlug,
     )
     if (!canonicalPath) return null
     return {
@@ -40,14 +43,14 @@ export async function loadProductPageBySlug(
 
   const redirectSlug = await getProductCategorySlugForRedirect(productSlug)
   if (redirectSlug) {
-    const redirectPath = categoryProductPath(redirectSlug, product.slug)
+    const redirectPath = categoryProductPath(redirectSlug, resolvedSlug)
     if (redirectPath) redirect(redirectPath)
   }
 
   const categorySlug = saleorCategorySlug || null
   const canonicalPath = categorySlug
-    ? categoryProductPath(categorySlug, product.slug)
-    : `/product/${encodeURIComponent(product.slug)}`
+    ? categoryProductPath(categorySlug, resolvedSlug)
+    : `/product/${encodeURIComponent(resolvedSlug)}`
 
   if (!canonicalPath) return null
 

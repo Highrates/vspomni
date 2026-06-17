@@ -30,6 +30,7 @@ export async function getSingleProduct(
     query getSingleProduct($slug: String!, $channel: String!) {
       product(slug: $slug, channel: $channel) {
         id
+        slug
         rating
         name
         description
