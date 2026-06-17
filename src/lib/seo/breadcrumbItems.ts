@@ -6,7 +6,7 @@ export const BREADCRUMB_HOME: BreadcrumbItemInput = {
 }
 
 export const BREADCRUMB_CATALOG: BreadcrumbItemInput = {
-  name: 'Каталог ароматов',
+  name: 'Каталог',
   href: '/catalog',
 }
 

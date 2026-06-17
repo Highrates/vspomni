@@ -7,6 +7,8 @@ type Props = {
   /** Путь текущей страницы для последнего ListItem.item в JSON-LD */
   currentPath: string
   className?: string
+  /** Светлый текст для страниц с тёмным фоном (каталог, профиль) */
+  tone?: 'default' | 'light'
 }
 
 /**
@@ -17,10 +19,12 @@ export default function Breadcrumbs({
   items,
   currentPath,
   className = '',
+  tone = 'default',
 }: Props) {
   if (!items.length) return null
 
   const jsonLd = breadcrumbJsonLdObject(items, currentPath)
+  const isLight = tone === 'light'
 
   return (
     <>
@@ -32,10 +36,14 @@ export default function Breadcrumbs({
       />
       <nav
         aria-label="Хлебные крошки"
-        className={`w-full min-w-0 mb-3 sm:mb-4 ${className}`}
+        className={`w-full min-w-0 mb-2 sm:mb-3 ${className} ${
+          isLight ? 'drop-shadow-md' : ''
+        }`}
       >
         <ol
-          className="flex flex-nowrap md:flex-wrap items-center gap-x-2 gap-y-1 overflow-x-auto overflow-y-hidden max-w-full pb-0.5 text-[13px] sm:text-sm text-black/70 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+          className={`flex flex-nowrap md:flex-wrap items-center gap-x-2 gap-y-1 overflow-x-auto overflow-y-hidden max-w-full pb-0.5 text-[13px] sm:text-sm [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${
+            isLight ? 'text-white/80' : 'text-black/70'
+          }`}
         >
           {items.map((item, index) => {
             const isLast = index === items.length - 1
@@ -45,18 +53,29 @@ export default function Breadcrumbs({
                 className="flex shrink-0 items-center gap-x-2"
               >
                 {index > 0 && (
-                  <span className="text-black/40 select-none" aria-hidden>
+                  <span
+                    className={`select-none ${isLight ? 'text-white/40' : 'text-black/40'}`}
+                    aria-hidden
+                  >
                     /
                   </span>
                 )}
                 {isLast || !item.href ? (
-                  <span className="font-medium text-black whitespace-nowrap">
+                  <span
+                    className={`font-medium whitespace-nowrap ${
+                      isLight ? 'text-white' : 'text-black'
+                    }`}
+                  >
                     {item.name}
                   </span>
                 ) : (
                   <Link
                     href={item.href}
-                    className="hover:text-black transition-colors whitespace-nowrap shrink-0"
+                    className={`transition-colors whitespace-nowrap shrink-0 ${
+                      isLight
+                        ? 'text-white/80 hover:text-white'
+                        : 'hover:text-black'
+                    }`}
                   >
                     {item.name}
                   </Link>

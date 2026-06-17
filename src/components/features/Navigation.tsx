@@ -4,7 +4,7 @@ export default function Navigation() {
   return (
     <nav className="hidden md:flex items-center gap-8 text-[16px] font-medium text-black/80">
       <Link href="/catalog" className="hover:text-black transition-colors">
-        Каталог ароматов
+        Каталог
       </Link>
       <Link href="/#vse-aromaty" className="hover:text-black transition-colors">
         Все ароматы

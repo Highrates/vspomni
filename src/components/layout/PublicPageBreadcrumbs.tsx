@@ -7,6 +7,7 @@ type Props = {
   /** full-width container как на каталоге */
   variant?: 'default' | 'container' | 'article'
   className?: string
+  tone?: 'default' | 'light'
 }
 
 const variantClass: Record<NonNullable<Props['variant']>, string> = {
@@ -20,10 +21,11 @@ export default function PublicPageBreadcrumbs({
   currentPath,
   variant = 'default',
   className = '',
+  tone = 'default',
 }: Props) {
   return (
     <div className={`${variantClass[variant]} ${className}`.trim()}>
-      <Breadcrumbs items={items} currentPath={currentPath} />
+      <Breadcrumbs items={items} currentPath={currentPath} tone={tone} />
     </div>
   )
 }

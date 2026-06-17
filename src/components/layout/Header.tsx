@@ -167,7 +167,7 @@ export default function Header({ variant = 'default' }: HeaderProps) {
               className={`flex items-center gap-4 lg:gap-8 text-sm lg:text-[15px] font-medium ${isOverlay && !scrolled ? 'text-white' : 'text-black/80'}`}
             >
           <Link href="/catalog" className="hover:opacity-80 transition whitespace-nowrap">
-            Каталог ароматов
+            Каталог
           </Link>
           <Link href="/#vse-aromaty" className="hover:opacity-80 transition whitespace-nowrap">
             Все ароматы
@@ -318,7 +318,7 @@ export default function Header({ variant = 'default' }: HeaderProps) {
             >
               <nav className="flex flex-col px-6 py-5 text-md font-medium gap-4">
                 <Link href="/catalog" onClick={() => setMenuOpen(false)}>
-                  Каталог ароматов
+                  Каталог
                 </Link>
                 <Link href="/#vse-aromaty" onClick={() => setMenuOpen(false)}>
                   Все ароматы

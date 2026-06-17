@@ -682,11 +682,7 @@ export async function getPopularProducts(): Promise<any> {
 }
 
 /** Все товары канала (каталог). Saleor: не больше 100 записей за запрос */
-export async function getCatalogAllProducts(
-  maxProducts: number = 500,
-): Promise<ProductCardItem[]> {
-  const pageSize = 100
-  const nodeFragment = `
+const CATALOG_PRODUCT_NODE_FRAGMENT = `
             id
             name
             description
@@ -748,24 +744,81 @@ export async function getCatalogAllProducts(
                 name
               }
             }
-  `
+`
 
-  const query = `
-    query getCatalogAllProducts($channel: String!, $first: Int!, $after: String) {
-      products(first: $first, channel: $channel, after: $after) {
+const CATALOG_PRODUCTS_QUERY = `
+    query getCatalogProducts($channel: String!, $first: Int!, $after: String) {
+      products(
+        first: $first
+        channel: $channel
+        after: $after
+        filter: { isPublished: true }
+      ) {
         pageInfo {
           hasNextPage
           endCursor
         }
         edges {
           node {
-            ${nodeFragment}
+            ${CATALOG_PRODUCT_NODE_FRAGMENT}
           }
         }
       }
     }
   `
 
+export type CatalogProductsPage = {
+  products: ProductCardItem[]
+  hasNextPage: boolean
+  endCursor: string | null
+}
+
+async function mapCatalogNodesToProductCards(
+  nodes: any[],
+): Promise<ProductCardItem[]> {
+  const variantIds = nodes
+    .map((node: any) => node.productVariants?.edges?.[0]?.node?.id as string)
+    .filter(Boolean)
+  const discounts = await getCatalogDiscounts(variantIds)
+  return filterValidProductCards(
+    nodes.map((node: any) => mapNodeToProductCard(node, discounts)),
+  )
+}
+
+/** Одна страница товаров каталога (для /catalog и «Показать ещё») */
+export async function getCatalogProductsPage(
+  pageSize: number,
+  after?: string | null,
+): Promise<CatalogProductsPage> {
+  const data = await graphqlRequest<{
+    products: {
+      pageInfo: { hasNextPage: boolean; endCursor: string | null }
+      edges: { node: any }[]
+    }
+  }>(CATALOG_PRODUCTS_QUERY, {
+    channel: CHANNEL,
+    first: pageSize,
+    after: after ?? null,
+  })
+
+  const nodes = (data.products?.edges ?? [])
+    .map((edge) => edge?.node)
+    .filter(Boolean)
+
+  const products = await mapCatalogNodesToProductCards(nodes)
+  const pageInfo = data.products?.pageInfo
+
+  return {
+    products,
+    hasNextPage: pageInfo?.hasNextPage ?? false,
+    endCursor: pageInfo?.endCursor ?? null,
+  }
+}
+
+export async function getCatalogAllProducts(
+  maxProducts: number = 500,
+): Promise<ProductCardItem[]> {
+  const pageSize = 100
   const allNodes: any[] = []
   let after: string | undefined
   let safety = 0
@@ -774,18 +827,17 @@ export async function getCatalogAllProducts(
   while (allNodes.length < maxProducts && safety < maxPages) {
     safety += 1
     const first = Math.min(pageSize, maxProducts - allNodes.length)
-    const variables: Record<string, unknown> = {
-      channel: CHANNEL,
-      first,
-      after: after ?? null,
-    }
 
     const data = await graphqlRequest<{
       products: {
         pageInfo: { hasNextPage: boolean; endCursor: string | null }
         edges: { node: any }[]
       }
-    }>(query, variables)
+    }>(CATALOG_PRODUCTS_QUERY, {
+      channel: CHANNEL,
+      first,
+      after: after ?? null,
+    })
 
     const edges = data.products?.edges ?? []
     for (const e of edges) {
@@ -798,13 +850,7 @@ export async function getCatalogAllProducts(
     if (!after) break
   }
 
-  const variantIds = allNodes
-    .map((node: any) => node.productVariants?.edges?.[0]?.node?.id as string)
-    .filter(Boolean)
-  const discounts = await getCatalogDiscounts(variantIds)
-  return filterValidProductCards(
-    allNodes.map((node: any) => mapNodeToProductCard(node, discounts)),
-  )
+  return mapCatalogNodesToProductCards(allNodes)
 }
 
 /**
