@@ -53,12 +53,15 @@ export interface DeliveryCourierMapProps {
   onSelect: (result: CourierMapResult) => void
   initialCoords?: { lon: number; lat: number } | null
   hintCity?: string
+  /** Скрыть встроенный блок выбранного адреса (если показывается снаружи) */
+  hideSelectedPreview?: boolean
 }
 
 export default function DeliveryCourierMap({
   onSelect,
   initialCoords,
   hintCity = 'Москва',
+  hideSelectedPreview = false,
 }: DeliveryCourierMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<any>(null)
@@ -318,7 +321,7 @@ export default function DeliveryCourierMap({
         )}
       </div>
 
-      {lastResult && (
+      {lastResult && !hideSelectedPreview && (
         <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-3">
           <div className="flex items-start gap-2">
             <MapPin className="h-5 w-5 shrink-0 text-blue-600" />

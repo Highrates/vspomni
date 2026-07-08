@@ -97,8 +97,14 @@
 
 .choice-swiper .swiper-button-next:hover,
 .choice-swiper .swiper-button-prev:hover {
-    background: #000;
-    color: #fff;
+    background: #fff;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+    transform: scale(1.06);
+}
+
+.choice-swiper .swiper-button-next:hover::after,
+.choice-swiper .swiper-button-prev:hover::after {
+    background-color: #000 !important;
 }
 
 .choice-swiper .swiper-pagination-bullet {

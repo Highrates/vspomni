@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { motion } from 'framer-motion'
+import { Check } from 'lucide-react'
 import { toast } from 'react-toastify'
 import { CustomButton as Button } from '../common/CustomButton'
 import { AddressInfo } from '@/graphql/types/auth.types'
@@ -50,6 +51,12 @@ interface FormErrors {
   [key: string]: string
 }
 
+type SelectedPvzUi = {
+  id: string
+  name: string
+  address: string
+}
+
 /** Одна сущность для профиля и checkout: `ProfileIndex`, `OrderDelivery`. */
 export default function AddressModal({
   visible,
@@ -95,6 +102,10 @@ export default function AddressModal({
     lon: number
     lat: number
   } | null>(null)
+  const [selectedPvz, setSelectedPvz] = useState<SelectedPvzUi | null>(null)
+  const [selectedCourierAddress, setSelectedCourierAddress] = useState<
+    string | null
+  >(null)
 
   useEffect(() => {
     if (visible) {
@@ -126,10 +137,18 @@ export default function AddressModal({
           } else {
             setCourierCoords(null)
           }
+          setSelectedCourierAddress(addressToEdit.streetAddress1 || null)
+          setSelectedPvz(null)
           setYandexPvzCoords(null)
           setYandexPvzId(null)
         } else if (yPvz) {
           setYandexPvzId(meta?.yandexPvzId?.trim() || null)
+          setSelectedPvz({
+            id: meta?.yandexPvzId?.trim() || addressToEdit.id,
+            name: addressToEdit.companyName || 'ПВЗ Яндекса',
+            address: addressToEdit.streetAddress1 || '',
+          })
+          setSelectedCourierAddress(null)
           if (
             meta?.lon != null &&
             meta?.lat != null &&
@@ -143,6 +162,8 @@ export default function AddressModal({
         } else {
           setYandexPvzCoords(null)
           setYandexPvzId(null)
+          setSelectedPvz(null)
+          setSelectedCourierAddress(null)
         }
 
         // Safe extraction of country code (handles if backend returns object or string)
@@ -168,6 +189,8 @@ export default function AddressModal({
       } else {
         setYandexDropoff('pvz')
         setCourierCoords(null)
+        setSelectedPvz(null)
+        setSelectedCourierAddress(null)
         setYandexPvzCoords(null)
         setYandexPvzId(null)
         // Pre-fill for new address using User Profile data
@@ -238,6 +261,17 @@ export default function AddressModal({
     ) {
       newErrors.countryArea = 'Обязательное поле'
     }
+    if (yandexDropoff === 'pvz') {
+      if (!yandexPvzId?.trim() && !formData.streetAddress1.trim()) {
+        newErrors.delivery = 'Выберите пункт выдачи'
+      }
+    } else if (
+      !courierCoords ||
+      !formData.streetAddress1.trim()
+    ) {
+      newErrors.delivery = 'Укажите адрес доставки на карте'
+    }
+
     if (!formData.city.trim()) newErrors.city = 'Заполните город'
     if (formData.country !== 'RU' && !formData.cityArea.trim()) {
       newErrors.cityArea = 'Обязательное поле'
@@ -392,6 +426,19 @@ export default function AddressModal({
 
     const cargoId = yandexPointIdForCargoOffers(pvz)
     setYandexPvzId(cargoId || null)
+    setSelectedPvz({
+      id: pvz.id,
+      name: pvz.name || 'ПВЗ Яндекса',
+      address:
+        pvz.address?.full_address ||
+        [pvz.address?.street, pvz.address?.house].filter(Boolean).join(', ') ||
+        '',
+    })
+    setSelectedCourierAddress(null)
+
+    if (errors.delivery) {
+      setErrors((prev) => ({ ...prev, delivery: '' }))
+    }
 
     if (
       pvz.position &&
@@ -409,6 +456,11 @@ export default function AddressModal({
 
   const handleCourierMapChoose = (r: CourierMapResult) => {
     setCourierCoords({ lon: r.lon, lat: r.lat })
+    setSelectedPvz(null)
+    setSelectedCourierAddress(r.addressLine || null)
+    if (errors.delivery) {
+      setErrors((prev) => ({ ...prev, delivery: '' }))
+    }
     setFormData((prev) => ({
       ...prev,
       country: 'RU',
@@ -493,6 +545,7 @@ export default function AddressModal({
             value={formData.phone}
             onChange={(value) => handleInputChange('phone', value)}
             error={errors.phone}
+            label="Телефон который привязан к приложению Яндекс"
             placeholder="+7 (900) 000-00-00"
             showFormatHint={false}
           />
@@ -514,6 +567,7 @@ export default function AddressModal({
                 onClick={() => {
                   setYandexDropoff('pvz')
                   setCourierCoords(null)
+                  setSelectedCourierAddress(null)
                 }}
                 className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${
                   yandexDropoff === 'pvz'
@@ -529,6 +583,7 @@ export default function AddressModal({
                   setYandexDropoff('courier')
                   setYandexPvzId(null)
                   setYandexPvzCoords(null)
+                  setSelectedPvz(null)
                 }}
                 className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${
                   yandexDropoff === 'courier'
@@ -540,11 +595,47 @@ export default function AddressModal({
               </button>
             </div>
 
+            {yandexDropoff === 'pvz' && selectedPvz && (
+              <div className="rounded-xl border border-green-600/30 bg-green-50 p-3">
+                <div className="flex items-start gap-2">
+                  <Check className="h-5 w-5 shrink-0 text-green-600 mt-0.5" />
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-green-700">
+                      Выбран пункт выдачи
+                    </div>
+                    <div className="font-semibold text-green-900 mt-0.5">
+                      {selectedPvz.name}
+                    </div>
+                    <div className="text-sm text-green-800/80 mt-1">
+                      {selectedPvz.address}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {yandexDropoff === 'courier' && selectedCourierAddress && (
+              <div className="rounded-xl border border-blue-600/30 bg-blue-50 p-3">
+                <div className="flex items-start gap-2">
+                  <Check className="h-5 w-5 shrink-0 text-blue-600 mt-0.5" />
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                      Выбран адрес доставки
+                    </div>
+                    <div className="text-sm text-blue-900 mt-1">
+                      {selectedCourierAddress}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="mt-2 border border-black/10 rounded-xl p-3 bg-white max-h-[520px] overflow-y-auto min-h-[200px]">
               {yandexDropoff === 'pvz' && (
                 <YandexPvzList
                   onChoose={handleYandexPvzChoose}
                   defaultCity={formData.city?.trim() || 'Москва'}
+                  selectedPointId={selectedPvz?.id ?? null}
                 />
               )}
               {yandexDropoff === 'courier' && (
@@ -553,157 +644,14 @@ export default function AddressModal({
                   onSelect={handleCourierMapChoose}
                   initialCoords={courierCoords}
                   hintCity={formData.city?.trim() || 'Москва'}
+                  hideSelectedPreview
                 />
               )}
             </div>
-          </div>
-
-          <div className="flex flex-col">
-            <label className="text-sm font-medium mb-2">
-              Регион
-              {formData.country === 'RU' && (
-                <span className="font-normal text-black/50"> — для РФ можно оставить пустым</span>
-              )}
-            </label>
-            <input
-              type="text"
-              value={formData.countryArea}
-              onChange={(e) => handleInputChange('countryArea', e.target.value)}
-              placeholder="Область, край"
-              className={`h-12 px-4 rounded-xl border text-base outline-none transition ${errors.countryArea
-                ? 'border-red-500'
-                : 'border-black/10 focus:border-black/30'
-                }`}
-            />
-            {errors.countryArea && (
-              <span className="text-red-500 text-sm mt-1">
-                {errors.countryArea}
-              </span>
+            {errors.delivery && (
+              <span className="text-red-500 text-sm">{errors.delivery}</span>
             )}
           </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col">
-              <label className="text-sm font-medium mb-2">Город *</label>
-              <input
-                type="text"
-                value={formData.city}
-                onChange={(e) => handleInputChange('city', e.target.value)}
-                className={`h-12 px-4 rounded-xl border text-base outline-none transition ${errors.city
-                  ? 'border-red-500'
-                  : 'border-black/10 focus:border-black/30'
-                  }`}
-              />
-              {errors.city && (
-                <span className="text-red-500 text-sm mt-1">{errors.city}</span>
-              )}
-            </div>
-
-            <div className="flex flex-col">
-              <label className="text-sm font-medium mb-2">
-                Район
-                {formData.country === 'RU' && (
-                  <span className="font-normal text-black/50"> — необязательно</span>
-                )}
-              </label>
-              <input
-                type="text"
-                value={formData.cityArea}
-                onChange={(e) => handleInputChange('cityArea', e.target.value)}
-                className={`h-12 px-4 rounded-xl border text-base outline-none transition ${errors.cityArea
-                  ? 'border-red-500'
-                  : 'border-black/10 focus:border-black/30'
-                  }`}
-              />
-              {errors.cityArea && (
-                <span className="text-red-500 text-sm mt-1">
-                  {errors.cityArea}
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-col">
-            <label className="text-sm font-medium mb-2">Адрес улицы *</label>
-            <input
-              type="text"
-              value={formData.streetAddress1}
-              onChange={(e) =>
-                handleInputChange('streetAddress1', e.target.value)
-              }
-              className={`h-12 px-4 rounded-xl border text-base outline-none transition ${errors.streetAddress1
-                ? 'border-red-500'
-                : 'border-black/10 focus:border-black/30'
-                }`}
-            />
-            {errors.streetAddress1 && (
-              <span className="text-red-500 text-sm mt-1">
-                {errors.streetAddress1}
-              </span>
-            )}
-          </div>
-
-          <div className="flex flex-col">
-            <label className="text-sm font-medium mb-2">
-              Дополнительный адрес (комментарий)
-            </label>
-            <input
-              type="text"
-              value={formData.streetAddress2}
-              onChange={(e) =>
-                handleInputChange('streetAddress2', e.target.value)
-              }
-              placeholder="Например: Квартира 5, подъезд 2"
-              className="h-12 px-4 rounded-xl border border-black/10 text-base outline-none transition focus:border-black/30"
-            />
-          </div>
-
-          <div className="flex flex-col">
-            <label className="text-sm font-medium mb-2">
-              Почтовый индекс *
-            </label>
-            <input
-              type="text"
-              value={formData.postalCode}
-              onChange={(e) => handleInputChange('postalCode', e.target.value)}
-              placeholder={
-                formData.country === 'UZ'
-                  ? '100000'
-                  : formData.country === 'RU'
-                    ? '101000'
-                    : formData.country === 'US'
-                      ? '12345'
-                      : 'Почтовый индекс'
-              }
-              className={`h-12 px-4 rounded-xl border text-base outline-none transition ${errors.postalCode
-                ? 'border-red-500'
-                : 'border-black/10 focus:border-black/30'
-                }`}
-            />
-            {errors.postalCode && (
-              <span className="text-red-500 text-sm mt-1">
-                {errors.postalCode}
-              </span>
-            )}
-          </div>
-
-          {
-            !isEditMode && (
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formData.isDefaultShippingAddress}
-                  onChange={(e) =>
-                    handleInputChange('isDefaultShippingAddress', e.target.checked)
-                  }
-                  className="w-5 h-5 rounded border-black/20 text-blue-600 focus:ring-2 focus:ring-blue-500"
-                />
-                <span className="text-sm font-medium">
-                  Установить как адрес доставки по умолчанию
-                </span>
-              </label>
-            )
-          }
         </div >
 
         <div className="max-sm:p-4 p-8 border-t border-black/10 shrink-0">

@@ -35,14 +35,13 @@ export default function Choice({ initialProducts = [] }: ChoiceProps) {
     useState<ComponentType<{ products: StarChoiceItem[] }> | null>(null)
 
   const list =
-    initialProducts.length > 0 ? initialProducts : products
+    products.length > 0 ? products : initialProducts
 
   useEffect(() => {
     if (initialProducts.length > 0) {
       setProducts(initialProducts)
-    } else {
-      fetchProducts()
     }
+    void fetchProducts()
   }, [initialProducts, fetchProducts, setProducts])
 
   useEffect(() => {

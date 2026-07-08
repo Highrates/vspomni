@@ -8,7 +8,7 @@ import {
 } from '@/lib/seo/breadcrumbItems'
 import ProductPageClient from '@/components/product/ProductPageClient'
 import ProductPageNoscript from '@/components/product/ProductPageNoscript'
-import { getSingleProduct } from '@/graphql/queries/product.service'
+import { getSingleProduct, getChoiceProducts } from '@/graphql/queries/product.service'
 import { loadProductPageBySlug } from '@/lib/product/productPageLoader'
 import { categoryProductPath, isValidSlug } from '@/lib/productPaths'
 import { extractProductSeoContent } from '@/lib/product/productPageContent'
@@ -57,6 +57,7 @@ export default async function ProductLegacyPage({ params }: PageProps) {
   }
 
   const { product, canonicalPath } = loaded
+  const choiceProducts = await getChoiceProducts().catch(() => [])
   const seo = extractProductSeoContent(product)
   const jsonLd = productJsonLdObject(seo, canonicalPath)
 
@@ -79,7 +80,11 @@ export default async function ProductLegacyPage({ params }: PageProps) {
         }
         currentPath={canonicalPath}
       />
-      <ProductPageClient productSlug={slug} initialProduct={product} />
+      <ProductPageClient
+        productSlug={slug}
+        initialProduct={product}
+        initialChoiceProducts={choiceProducts}
+      />
     </>
   )
 }

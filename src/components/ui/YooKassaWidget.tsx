@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Loader2, CreditCard, ExternalLink } from 'lucide-react'
 
-// Типы для виджета ЮKassa
 declare global {
   interface Window {
     YooMoneyCheckoutWidget: any
@@ -22,7 +21,7 @@ export interface YooKassaPaymentResult {
 
 interface YooKassaWidgetProps {
   confirmationToken: string
-  returnUrl?: string
+  paymentId?: string | null
   onSuccess?: (result: YooKassaPaymentResult) => void
   onError?: (error: any) => void
   onClose?: () => void
@@ -35,7 +34,7 @@ interface YooKassaWidgetProps {
 
 export default function YooKassaWidget({
   confirmationToken,
-  returnUrl = typeof window !== 'undefined' ? window.location.origin + '/checkout/success' : '',
+  paymentId = null,
   onSuccess,
   onError,
   onClose,
@@ -44,30 +43,77 @@ export default function YooKassaWidget({
 }: YooKassaWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const widgetRef = useRef<any>(null)
+  const paymentHandledRef = useRef(false)
+  const onSuccessRef = useRef(onSuccess)
+  const onErrorRef = useRef(onError)
+  const onCloseRef = useRef(onClose)
+  const paymentIdRef = useRef(paymentId)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [isRendered, setIsRendered] = useState(false)
 
-  // Обработчик успешной оплаты
-  const handleSuccess = useCallback((result: YooKassaPaymentResult) => {
-    console.log('YooKassa Widget success:', result)
-    setIsRendered(false)
-    if (onSuccess) {
-      onSuccess(result)
+  onSuccessRef.current = onSuccess
+  onErrorRef.current = onError
+  onCloseRef.current = onClose
+  paymentIdRef.current = paymentId
+
+  const finishWithSuccess = useCallback((result: YooKassaPaymentResult = {}) => {
+    if (paymentHandledRef.current) return
+    paymentHandledRef.current = true
+    onSuccessRef.current?.({
+      paymentId: result.paymentId || paymentIdRef.current || undefined,
+      status: result.status || 'succeeded',
+      paid: true,
+      amount: result.amount,
+    })
+  }, [])
+
+  const verifyPaymentStatus = useCallback(async () => {
+    const id = paymentIdRef.current
+    if (!id) return false
+
+    try {
+      const response = await fetch(
+        `/api/yookassa/payment-status?paymentId=${encodeURIComponent(id)}`,
+      )
+      if (!response.ok) return false
+      const data = await response.json()
+      if (data.status === 'succeeded' || data.paid) {
+        finishWithSuccess({
+          paymentId: id,
+          status: data.status,
+          paid: true,
+          amount: data.amount,
+        })
+        return true
+      }
+    } catch (err) {
+      console.error('YooKassa payment status check failed:', err)
     }
-  }, [onSuccess])
 
-  // Обработчик ошибки
+    return false
+  }, [finishWithSuccess])
+
+  const verifyPaymentStatusWithRetry = useCallback(
+    async (maxAttempts = 5, delayMs = 2000) => {
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        if (paymentHandledRef.current) return true
+        const handled = await verifyPaymentStatus()
+        if (handled) return true
+        if (attempt < maxAttempts - 1) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs))
+        }
+      }
+      return false
+    },
+    [verifyPaymentStatus],
+  )
+
   const handleError = useCallback((err: any) => {
     console.error('YooKassa Widget error:', err)
-    setError(err.message || 'Ошибка при обработке платежа')
-    setIsRendered(false)
-    if (onError) {
-      onError(err)
-    }
-  }, [onError])
+    setError(err?.message || 'Ошибка при обработке платежа')
+    onErrorRef.current?.(err)
+  }, [])
 
-  // Загрузка и инициализация виджета
   useEffect(() => {
     if (!confirmationToken) {
       setError('Не указан токен подтверждения')
@@ -75,14 +121,14 @@ export default function YooKassaWidget({
       return
     }
 
+    paymentHandledRef.current = false
+
     const loadWidget = async () => {
       setLoading(true)
       setError(null)
 
       try {
-        // Проверяем, загружен ли уже скрипт
         if (!window.YooMoneyCheckoutWidget) {
-          // Загружаем скрипт виджета
           const existingScript = document.getElementById('YooMoneyCheckoutWidget')
           if (!existingScript) {
             const script = document.createElement('script')
@@ -93,16 +139,15 @@ export default function YooKassaWidget({
 
             await new Promise<void>((resolve, reject) => {
               script.onload = () => resolve()
-              script.onerror = () => reject(new Error('Не удалось загрузить виджет ЮKassa'))
+              script.onerror = () =>
+                reject(new Error('Не удалось загрузить виджет ЮKassa'))
               document.head.appendChild(script)
             })
           }
 
-          // Ждём инициализации виджета (проверяем несколько раз)
           let attempts = 0
-          const maxAttempts = 20
-          while (!window.YooMoneyCheckoutWidget && attempts < maxAttempts) {
-            await new Promise(resolve => setTimeout(resolve, 100))
+          while (!window.YooMoneyCheckoutWidget && attempts < 20) {
+            await new Promise((resolve) => setTimeout(resolve, 100))
             attempts++
           }
 
@@ -110,44 +155,38 @@ export default function YooKassaWidget({
             throw new Error('Виджет ЮKassa не загрузился')
           }
 
-          // Проверяем, что это конструктор
           if (typeof window.YooMoneyCheckoutWidget !== 'function') {
             throw new Error('YooMoneyCheckoutWidget не является конструктором')
           }
         }
 
-        // Проверяем что контейнер существует (если не модальный режим)
         if (!modal) {
-          // Ждём пока контейнер появится в DOM
           let containerAttempts = 0
-          const maxContainerAttempts = 10
-          while (!containerRef.current && containerAttempts < maxContainerAttempts) {
-            await new Promise(resolve => setTimeout(resolve, 100))
+          while (!containerRef.current && containerAttempts < 10) {
+            await new Promise((resolve) => setTimeout(resolve, 100))
             containerAttempts++
           }
-          
+
           if (!containerRef.current) {
             throw new Error('Контейнер не найден')
           }
         }
 
-        // Очищаем предыдущий виджет если есть
         if (widgetRef.current) {
           try {
             widgetRef.current.destroy?.()
-          } catch (e) {
+          } catch {
             // ignore
           }
         }
 
-        // Конфигурация виджета
+        // return_url намеренно не передаём: с ним ЮKassa не шлёт success/complete/fail,
+        // а редирект в embedded-режиме остаётся внутри iframe виджета.
         const config: any = {
           confirmation_token: confirmationToken,
-          return_url: returnUrl,
           error_callback: handleError,
         }
 
-        // Добавляем кастомизацию если указана
         if (customization || modal) {
           config.customization = {
             modal: modal || customization?.modal || false,
@@ -155,34 +194,36 @@ export default function YooKassaWidget({
           }
         }
 
-        console.log('YooKassa Widget config:', config)
-
-        // Проверяем, что YooMoneyCheckoutWidget доступен и является конструктором
-        if (!window.YooMoneyCheckoutWidget || typeof window.YooMoneyCheckoutWidget !== 'function') {
-          throw new Error('YooMoneyCheckoutWidget не доступен или не является конструктором')
-        }
-
-        // Создаём виджет
         widgetRef.current = new window.YooMoneyCheckoutWidget(config)
 
-        // Рендерим виджет
-        const renderTarget = modal ? undefined : (containerRef.current?.id || 'yookassa-widget-container')
-        
-        await widgetRef.current.render(renderTarget)
-        
-        setIsRendered(true)
-        setLoading(false)
-
-        // Обработчик успешной оплаты
-        widgetRef.current.on('success', handleSuccess)
-
-        // Обработчик закрытия модального окна
-        widgetRef.current.on('modal_close', () => {
-          if (onClose) {
-            onClose()
-          }
+        widgetRef.current.on('success', (result: YooKassaPaymentResult) => {
+          console.log('YooKassa Widget success event:', result)
+          finishWithSuccess(result)
         })
 
+        widgetRef.current.on('complete', () => {
+          console.log('YooKassa Widget complete event')
+          void verifyPaymentStatusWithRetry()
+        })
+
+        widgetRef.current.on('fail', (result: YooKassaPaymentResult) => {
+          console.warn('YooKassa Widget fail event:', result)
+        })
+
+        widgetRef.current.on('modal_close', () => {
+          if (paymentHandledRef.current) return
+          void verifyPaymentStatusWithRetry().then((handled) => {
+            if (!handled) onCloseRef.current?.()
+          })
+        })
+
+        const renderTarget = modal
+          ? undefined
+          : containerRef.current?.id || 'yookassa-widget-container'
+
+        await widgetRef.current.render(renderTarget)
+
+        setLoading(false)
       } catch (err: any) {
         console.error('YooKassa Widget error:', err)
         setError(err.message || 'Ошибка загрузки виджета')
@@ -190,31 +231,34 @@ export default function YooKassaWidget({
       }
     }
 
-    // Генерируем уникальный ID для контейнера если нужно
     const containerId = `yookassa-widget-${Date.now()}`
     if (containerRef.current && !containerRef.current.id && !modal) {
       containerRef.current.id = containerId
     }
 
-    // Небольшая задержка чтобы убедиться что контейнер отрендерился
     const timer = setTimeout(() => {
-      loadWidget()
+      void loadWidget()
     }, 100)
 
-    // Cleanup функция
     return () => {
       clearTimeout(timer)
       if (widgetRef.current) {
         try {
           widgetRef.current.destroy?.()
-        } catch (e) {
+        } catch {
           // ignore
         }
       }
     }
-  }, [confirmationToken, returnUrl, modal, customization, handleSuccess, handleError, onClose])
+  }, [
+    confirmationToken,
+    modal,
+    customization,
+    handleError,
+    finishWithSuccess,
+    verifyPaymentStatusWithRetry,
+  ])
 
-  // Если виджет не загружается - показываем альтернативную ссылку
   if (error) {
     return (
       <div className="border border-black/10 rounded-xl p-4 bg-gray-50">
@@ -223,9 +267,7 @@ export default function YooKassaWidget({
           <div className="text-sm text-black/60">
             Не удалось загрузить виджет ЮKassa
           </div>
-          <div className="text-xs text-black/40">
-            {error}
-          </div>
+          <div className="text-xs text-black/40">{error}</div>
           <a
             href="https://yookassa.ru"
             target="_blank"
@@ -240,32 +282,25 @@ export default function YooKassaWidget({
     )
   }
 
-  // Если модальный режим, не показываем контейнер
   if (modal) {
     return null
   }
 
   return (
-    <div className="space-y-4">
-      {/* Контейнер виджета */}
-      <div 
-        ref={containerRef}
-        className="border border-black/10 rounded-xl overflow-hidden bg-white min-h-[400px] relative"
-      >
-        {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-10">
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="w-8 h-8 animate-spin text-green-600" />
-              <span className="text-sm text-black/60">Загрузка формы оплаты ЮKassa...</span>
-            </div>
+    <div
+      ref={containerRef}
+      className="border border-black/10 rounded-xl overflow-hidden bg-white min-h-[400px] relative"
+    >
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-10">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+            <span className="text-sm text-black/60">
+              Загрузка формы оплаты ЮKassa...
+            </span>
           </div>
-        )}
-        {isRendered && !loading && (
-          <div className="text-xs text-black/40 p-2 text-center">
-            Форма оплаты загружена
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

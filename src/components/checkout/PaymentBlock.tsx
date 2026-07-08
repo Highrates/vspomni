@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useUserStore } from '@/stores/useUser'
 import { useCartStore } from "@/stores/useCart"
 import YooKassaWidget from '@/components/ui/YooKassaWidget'
@@ -14,8 +14,54 @@ export default function PaymentBlock() {
   const [showYooKassaWidget, setShowYooKassaWidget] = useState(false)
   const [isCreatingPayment, setIsCreatingPayment] = useState(false)
   const [checkoutId, setCheckoutId] = useState<string | null>(null)
+  const [paymentId, setPaymentId] = useState<string | null>(null)
+  const [paymentCompleted, setPaymentCompleted] = useState(false)
+  const paymentCompletedRef = useRef(false)
   const { user } = useUserStore()
   const { items, totalPrice, appliedPromoCode } = useCartStore()
+
+  const redirectToSuccess = useCallback(() => {
+    window.location.assign('/checkout/success')
+  }, [])
+
+  const handleYooKassaSuccess = useCallback(async () => {
+    if (paymentCompletedRef.current) return
+    paymentCompletedRef.current = true
+    setPaymentCompleted(true)
+
+    const pendingCheckoutId = localStorage.getItem('pendingCheckoutId')
+    const activeCheckoutId = pendingCheckoutId || checkoutId
+
+    if (!activeCheckoutId) {
+      redirectToSuccess()
+      return
+    }
+
+    try {
+      const { completeCheckout } = await import('@/graphql/queries/cart.service')
+      const { clearCart } = useCartStore.getState()
+      const paymentAmountStr = localStorage.getItem('pendingPaymentAmount')
+      const paymentAmount = paymentAmountStr ? parseFloat(paymentAmountStr) : undefined
+      const storedPaymentId = localStorage.getItem('pendingPaymentId') || paymentId || undefined
+
+      await completeCheckout(
+        activeCheckoutId,
+        user.email,
+        paymentAmount,
+        storedPaymentId,
+      )
+
+      localStorage.removeItem('pendingCheckoutId')
+      localStorage.removeItem('pendingPaymentId')
+      localStorage.removeItem('pendingPaymentAmount')
+      clearCart()
+    } catch (error) {
+      console.error('Error completing checkout after payment:', error)
+      // Оставляем pendingCheckoutId — страница success повторит попытку
+    }
+
+    redirectToSuccess()
+  }, [checkoutId, paymentId, redirectToSuccess, user.email])
 
   const handleCreateDraftOrder = async () => {
     try {
@@ -330,6 +376,9 @@ export default function PaymentBlock() {
         console.log('Current checkoutId state:', checkoutId)
 
         setConfirmationToken(result.confirmationToken)
+        if (result.paymentId) {
+          setPaymentId(result.paymentId)
+        }
         setShowYooKassaWidget(true)
       } else {
         throw new Error('No confirmation token received')
@@ -350,75 +399,39 @@ export default function PaymentBlock() {
     }
   }
 
-  const handleYooKassaSuccess = async (result: any) => {
-    console.log('Payment successful (callback):', result)
-    console.log('Current checkoutId:', checkoutId)
-    console.log('Current user email:', user.email)
-
-    // Если checkoutId есть в localStorage, значит мы уже обрабатываем на странице success
-    // Не дублируем вызов completeCheckout здесь
-    const pendingCheckoutId = localStorage.getItem('pendingCheckoutId')
-    if (pendingCheckoutId && pendingCheckoutId === checkoutId) {
-      console.log('Checkout completion will be handled on success page')
-      // Просто редиректим, обработка будет на странице success
-      window.location.href = '/checkout/success'
-      return
-    }
-
-    // Завершаем checkout после успешной оплаты (fallback, если не сработал редирект)
-    if (checkoutId) {
-      try {
-        console.log('Starting checkout completion in callback...')
-        const { completeCheckout } = await import('@/graphql/queries/cart.service')
-        const { clearCart } = useCartStore.getState()
-
-        // Передаем email пользователя для связывания checkout с пользователем
-        console.log('Calling completeCheckout with:', { checkoutId, email: user.email })
-        const orderResult = await completeCheckout(checkoutId, user.email)
-        console.log('Checkout completed in callback, order created:', orderResult.order)
-
-        if (orderResult.order) {
-          console.log('Order details:', {
-            id: orderResult.order.id,
-            number: orderResult.order.number,
-            status: orderResult.order.status,
-            statusDisplay: orderResult.order.statusDisplay,
-          })
-        } else {
-          console.warn('No order returned from completeCheckout')
-        }
-
-        // Очищаем checkoutId из localStorage
-        localStorage.removeItem('pendingCheckoutId')
-
-        // Очищаем корзину после успешного заказа
-        clearCart()
-
-        // Редирект на страницу успеха
-        window.location.href = '/checkout/success'
-      } catch (error: any) {
-        console.error('Error completing checkout in callback:', error)
-        console.error('Error details:', {
-          message: error.message,
-          stack: error.stack,
-          checkoutId,
-          userEmail: user.email,
-        })
-        // Не показываем ошибку пользователю, так как оплата уже прошла
-        // Просто редиректим на success, там будет повторная попытка
-        window.location.href = '/checkout/success'
-      }
-    } else {
-      console.warn('No checkoutId available, cannot complete checkout')
-      // Если нет checkoutId, просто редиректим
-      window.location.href = '/checkout/success'
-    }
-  }
-
   const handleYooKassaError = (error: any) => {
     console.error('Payment error:', error)
-    // Обработка ошибки оплаты
+    toast.error('Ошибка при оплате. Попробуйте ещё раз.')
   }
+
+  const checkPaymentStatus = useCallback(async () => {
+    if (!paymentId || paymentCompletedRef.current) return false
+    try {
+      const response = await fetch(
+        `/api/yookassa/payment-status?paymentId=${encodeURIComponent(paymentId)}`,
+      )
+      if (!response.ok) return false
+      const data = await response.json()
+      if (data.status === 'succeeded' || data.paid) {
+        await handleYooKassaSuccess()
+        return true
+      }
+    } catch {
+      // ignore polling errors
+    }
+    return false
+  }, [paymentId, handleYooKassaSuccess])
+
+  useEffect(() => {
+    if (!paymentId || paymentCompleted) return
+
+    const interval = window.setInterval(() => {
+      if (paymentCompletedRef.current) return
+      void checkPaymentStatus()
+    }, 4000)
+
+    return () => window.clearInterval(interval)
+  }, [paymentId, paymentCompleted, checkPaymentStatus])
 
   return (
     <section className="select-none">
@@ -429,7 +442,7 @@ export default function PaymentBlock() {
         <div className="mb-4 sm:mb-5 md:mb-6">
           <YooKassaWidget
             confirmationToken={confirmationToken}
-            returnUrl={`${typeof window !== 'undefined' ? window.location.origin : ''}/checkout/success`}
+            paymentId={paymentId}
             onSuccess={handleYooKassaSuccess}
             onError={handleYooKassaError}
             onClose={() => setShowYooKassaWidget(false)}
@@ -437,6 +450,17 @@ export default function PaymentBlock() {
         </div>
       )}
 
+      {paymentId && !paymentCompleted && (
+        <button
+          type="button"
+          onClick={() => void checkPaymentStatus()}
+          className="w-full rounded-full border border-black/15 px-4 py-2.5 text-sm font-medium text-black/70 hover:bg-black/5 transition mb-4 sm:mb-5 md:mb-6"
+        >
+          Оплата прошла? Перейти к подтверждению заказа
+        </button>
+      )}
+
+      {!showYooKassaWidget && !paymentId && (
       <button
         type="button"
         className="w-full h-12 sm:h-13 md:h-14 rounded-full bg-black text-white text-base sm:text-[17px] md:text-[18px] font-semibold hover:bg-[#3A7FE2] transition disabled:bg-gray-400"
@@ -454,6 +478,7 @@ export default function PaymentBlock() {
       >
         {isCreatingPayment ? 'Создание платежа...' : 'Оплатить'}
       </button>
+      )}
     </section>
   )
 }

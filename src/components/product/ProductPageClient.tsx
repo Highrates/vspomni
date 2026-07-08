@@ -23,7 +23,7 @@ import {
   NOTE_LABELS,
 } from '@/lib/product/productPageContent'
 import { ProductDetailNode } from '@/graphql/types/product.types'
-import { ProductCardItem } from '@/types/product'
+import { ProductCardItem, StarChoiceItem } from '@/types/product'
 import { useMobile } from '@/lib/hooks'
 import { Swiper, SwiperSlide } from 'swiper/react'
 import { Pagination } from 'swiper/modules'
@@ -36,12 +36,15 @@ type ProductPageClientProps = {
   expectedCategorySlug?: string
   /** Данные с сервера (SSR) — сразу в HTML для SEO и без скелетона */
   initialProduct?: ProductDetailNode | null
+  /** Карточки «Выбор ⭐» с сервера */
+  initialChoiceProducts?: StarChoiceItem[]
 }
 
 export default function ProductPageClient({
   productSlug,
   expectedCategorySlug,
   initialProduct = null,
+  initialChoiceProducts = [],
 }: ProductPageClientProps) {
   const initialUi =
     initialProduct && initialProduct.slug === productSlug
@@ -668,7 +671,7 @@ export default function ProductPageClient({
       <GiftPackagesUpsellSection
         hideWhenCategorySlug={product?.category?.slug}
       />
-      <Choice />
+      <Choice initialProducts={initialChoiceProducts} />
       <PopularScentsAlt />
     </PageTransition>
   )

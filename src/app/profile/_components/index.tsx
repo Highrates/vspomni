@@ -520,7 +520,7 @@ export default function ProfileIndex() {
 
                 <section className="mt-8 sm:mt-12 md:mt-16">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
-                    <h2 className="text-xl sm:text-2xl font-semibold">Доставка</h2>
+                    <h2 className="text-xl sm:text-2xl font-semibold">Адреса</h2>
                     <button
                       onClick={() => setAddressModalVisible(true)}
                       className="border font-medium text-sm sm:text-md border-black cursor-pointer text-black px-3 sm:px-4 rounded-full transition hover:bg-black hover:text-white h-9 sm:h-10 w-full sm:w-fit"

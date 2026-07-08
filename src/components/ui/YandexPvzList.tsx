@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { Search, MapPin, Loader2, ChevronDown } from 'lucide-react'
+import { Search, MapPin, Loader2, ChevronDown, Check } from 'lucide-react'
 import type { YandexPickupPoint } from '@/types/yandexDelivery'
 import YandexPvzMap from './YandexPvzMap'
 import { useYandexPvzStore } from '@/stores/useYandexPvz'
@@ -13,9 +13,14 @@ import {
 export interface YandexPvzListProps {
   onChoose: (point: YandexPickupPoint) => void
   defaultCity?: string
+  selectedPointId?: string | null
 }
 
-export default function YandexPvzList({ onChoose, defaultCity = 'Москва' }: YandexPvzListProps) {
+export default function YandexPvzList({
+  onChoose,
+  defaultCity = 'Москва',
+  selectedPointId = null,
+}: YandexPvzListProps) {
   const { points, loading, error, fetchPickupPointsForCity } = useYandexPvzStore()
   const cities = useMemo(() => orderedYandexPvzCityNames(), [])
   const prevDefaultCity = useRef(defaultCity)
@@ -183,7 +188,11 @@ export default function YandexPvzList({ onChoose, defaultCity = 'Москва' }
 
       {pickedCity && (
         <>
-          <YandexPvzMap points={pvzInCity} onSelect={onChoose} />
+          <YandexPvzMap
+            points={pvzInCity}
+            onSelect={onChoose}
+            selectedPointId={selectedPointId}
+          />
           <div className="flex flex-col">
             <label className="text-sm font-medium mb-2 flex items-center gap-2">
               <Search className="w-4 h-4" />
@@ -204,17 +213,42 @@ export default function YandexPvzList({ onChoose, defaultCity = 'Москва' }
                 В этом городе пункты не найдены или измените поиск.
               </div>
             ) : (
-              filteredPvz.map((pvz) => (
+              filteredPvz.map((pvz) => {
+                const isSelected =
+                  selectedPointId != null && pvz.id === selectedPointId
+                return (
                 <button
                   key={pvz.id}
                   type="button"
                   onClick={() => handlePvzSelect(pvz)}
-                  className="text-left p-4 border border-black/10 rounded-xl hover:border-black/30 hover:bg-gray-50/50 transition group"
+                  className={`text-left p-4 border rounded-xl transition group ${
+                    isSelected
+                      ? 'border-green-600 bg-green-50 ring-1 ring-green-600/30'
+                      : 'border-black/10 hover:border-black/30 hover:bg-gray-50/50'
+                  }`}
                 >
-                  <div className="font-semibold mb-1 group-hover:text-black/80">
-                    {pvz.name || 'ПВЗ Яндекса'}
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <div
+                      className={`font-semibold ${
+                        isSelected
+                          ? 'text-green-900'
+                          : 'group-hover:text-black/80'
+                      }`}
+                    >
+                      {pvz.name || 'ПВЗ Яндекса'}
+                    </div>
+                    {isSelected && (
+                      <span className="inline-flex items-center gap-1 shrink-0 text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                        <Check className="w-3.5 h-3.5" />
+                        Выбран
+                      </span>
+                    )}
                   </div>
-                  <div className="text-sm text-black/60 flex items-start gap-1.5">
+                  <div
+                    className={`text-sm flex items-start gap-1.5 ${
+                      isSelected ? 'text-green-800/80' : 'text-black/60'
+                    }`}
+                  >
                     <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                     {pvz.address?.full_address ||
                       [pvz.address?.street, pvz.address?.house].filter(Boolean).join(', ') ||
@@ -224,7 +258,7 @@ export default function YandexPvzList({ onChoose, defaultCity = 'Москва' }
                     <div className="text-xs text-black/40 mt-1">{pvz.instruction}</div>
                   )}
                 </button>
-              ))
+              )})
             )}
           </div>
         </>

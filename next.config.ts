@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next'
+import { buildCategorySlugRedirectRules } from './src/lib/seo/categorySlugRedirects'
 
 const nextConfig: NextConfig = {
   env: {
@@ -8,6 +9,7 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
+      ...buildCategorySlugRedirectRules(),
       { source: '/wb', destination: 'https://vspomni.mobz.click/wildberries', permanent: false },
       { source: '/ozon', destination: 'https://vspomni.mobz.click/ozon', permanent: false },
       { source: '/goldapple', destination: 'https://vspomni.mobz.click/goldapple', permanent: false },

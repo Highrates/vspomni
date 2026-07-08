@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 import PublicPageBreadcrumbs from '@/components/layout/PublicPageBreadcrumbs'
 import { breadcrumbCatalog } from '@/lib/seo/breadcrumbItems'
 import CategoryPageNoscript from '@/components/catalog/CategoryPageNoscript'
@@ -6,6 +7,7 @@ import { loadCategoryPage } from '@/lib/category/categoryPageLoader'
 import { loadAllCategories } from '@/lib/category/loadAllCategories'
 import { buildCategoryMetadata } from '@/lib/seo/categoryMetadata'
 import { categoryItemListJsonLd } from '@/lib/seo/categoryJsonLd'
+import { categorySlugRedirectPath } from '@/lib/seo/categorySlugRedirects'
 import CategoryPageClient from './CategoryPageClient'
 
 export const revalidate = 60
@@ -18,6 +20,10 @@ export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
   const { slug } = await params
+  const redirectPath = categorySlugRedirectPath(slug)
+  if (redirectPath) {
+    return { title: 'Категория | ВСПОМНИ' }
+  }
   const loaded = await loadCategoryPage(slug)
   if (!loaded) {
     return { title: 'Категория | ВСПОМНИ' }
@@ -31,6 +37,9 @@ export async function generateMetadata({
 
 export default async function CategoryPage({ params }: PageProps) {
   const { slug } = await params
+  const redirectPath = categorySlugRedirectPath(slug)
+  if (redirectPath) redirect(redirectPath)
+
   const [loaded, allCategories] = await Promise.all([
     loadCategoryPage(slug),
     loadAllCategories(),

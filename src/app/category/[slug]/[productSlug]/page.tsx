@@ -1,16 +1,17 @@
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import PublicPageBreadcrumbs from '@/components/layout/PublicPageBreadcrumbs'
 import { breadcrumbProduct } from '@/lib/seo/breadcrumbItems'
 import ProductPageClient from '@/components/product/ProductPageClient'
 import ProductPageNoscript from '@/components/product/ProductPageNoscript'
 import { getCategoryMetaBySlug } from '@/graphql/queries/category.service'
-import { getSingleProduct } from '@/graphql/queries/product.service'
+import { getSingleProduct, getChoiceProducts } from '@/graphql/queries/product.service'
 import { categoryProductPath, isValidSlug } from '@/lib/productPaths'
 import { loadProductPageBySlug } from '@/lib/product/productPageLoader'
 import { extractProductSeoContent } from '@/lib/product/productPageContent'
 import { buildProductMetadata } from '@/lib/seo/productMetadata'
 import { productJsonLdObject } from '@/lib/seo/productJsonLd'
+import { categorySlugRedirectPath } from '@/lib/seo/categorySlugRedirects'
 
 export const revalidate = 60
 
@@ -43,6 +44,9 @@ export default async function CategoryProductPage({ params }: PageProps) {
     notFound()
   }
 
+  const redirectPath = categorySlugRedirectPath(slug, productSlug)
+  if (redirectPath) redirect(redirectPath)
+
   const loaded = await loadProductPageBySlug(productSlug, slug)
 
   if (!loaded) {
@@ -50,10 +54,12 @@ export default async function CategoryProductPage({ params }: PageProps) {
   }
 
   const { product, canonicalPath } = loaded
+  const [choiceProducts, catMeta] = await Promise.all([
+    getChoiceProducts().catch(() => []),
+    getCategoryMetaBySlug(slug),
+  ])
   const seo = extractProductSeoContent(product)
   const jsonLd = productJsonLdObject(seo, canonicalPath)
-
-  const [catMeta] = await Promise.all([getCategoryMetaBySlug(slug)])
 
   const categoryLabel =
     catMeta?.name?.trim() ||
@@ -76,6 +82,7 @@ export default async function CategoryProductPage({ params }: PageProps) {
         productSlug={productSlug}
         expectedCategorySlug={slug}
         initialProduct={product}
+        initialChoiceProducts={choiceProducts}
       />
     </>
   )

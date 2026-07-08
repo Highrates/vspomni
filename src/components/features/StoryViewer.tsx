@@ -152,6 +152,14 @@ export default function StoryViewer({
     }
   }, [isMuted, currentSlide?.type, playCurrentVideo])
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
   const handlePrev = useCallback(() => {
     if (!group) return
     if (index > 0) {
@@ -295,8 +303,10 @@ export default function StoryViewer({
         />
 
         <button
+          type="button"
           onClick={onClose}
-          className="absolute top-6 right-6 text-white text-xl font-semibold hover:opacity-80 transition"
+          aria-label="Закрыть"
+          className="absolute top-5 right-5 sm:top-6 sm:right-6 z-20 flex h-11 w-11 items-center justify-center rounded-full text-white text-3xl font-light leading-none hover:bg-white/10 transition"
         >
           ✕
         </button>

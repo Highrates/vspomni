@@ -209,7 +209,7 @@ export default function OrderDelivery() {
       <section className="select-none">
         <div className="mb-6 sm:mb-8 md:mb-10">
           <h2 className="text-2xl sm:text-3xl md:text-[32px] leading-tight font-semibold mb-4 sm:mb-5 md:mb-6">
-            Доставка
+            Доставка Яндексом
           </h2>
           <p className="text-black/40 text-sm sm:text-base">Загрузка...</p>
         </div>
@@ -222,7 +222,7 @@ export default function OrderDelivery() {
       <section className="select-none">
         <div className="mb-10">
           <h2 className="text-[32px] leading-tight font-semibold mb-6">
-            Доставка
+            Доставка Яндексом
           </h2>
 
           {addresses.length === 0 ? (

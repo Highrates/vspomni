@@ -647,6 +647,7 @@ export async function completeCheckout(checkoutId: string, userEmail?: string, p
         checkoutId: checkoutId,
         paymentId: paymentId,
         paymentAmount: paymentAmount,
+        userEmail: userEmail,
       }),
     });
 

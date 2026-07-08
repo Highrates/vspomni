@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { toast } from 'react-toastify'
 import PhoneInput from '@/components/ui/PhoneInput'
+import YandexIdLoginButton from '@/components/login/YandexIdLoginButton'
 import { isValidRuPhone } from '@/lib/ruPhone'
 
 type TPropss = {
@@ -103,7 +104,7 @@ const RegisterForm = ({ onVerify, onLogin }: TPropss) => {
           />
         </div>
         <h2 className="text-2xl font-semibold mb-2">Регистрация</h2>
-        <p className="text-gray-500">
+        <p className="text-gray-500 mb-6">
           Уже есть аккаунт?{' '}
           <button
             onClick={onLogin}
@@ -112,6 +113,7 @@ const RegisterForm = ({ onVerify, onLogin }: TPropss) => {
             Войти
           </button>
         </p>
+        <YandexIdLoginButton />
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">

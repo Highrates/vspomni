@@ -16,7 +16,7 @@ import type {
   ProductEdge,
 } from '../types/product.types'
 import { formatDate } from '@/lib/functions'
-import type { ProductCardItem } from '@/types/product'
+import type { ProductCardItem, StarChoiceItem } from '@/types/product'
 import { isValidSlug } from '@/lib/productPaths'
 import { variantShippingFromSaleorVariant } from '@/lib/saleorVariantShipping'
 
@@ -853,145 +853,200 @@ export async function getCatalogAllProducts(
   return mapCatalogNodesToProductCards(allNodes)
 }
 
-/**
- * QUERY: Fetches bestseller products from a collection.
- * SERVICE NAME: collection (Bestsellers)
- */
-export async function getChoiceProducts(): Promise<any> {
-  /* Не запрашиваем assignedAttributes: на проде тип multiselect-images даёт KeyError в резолвере Saleor. */
-  const query = `
-    query getGreedProducts($channel: String!) {
-  products(
-    first: 100, 
-    channel: $channel, 
-    where: { collection: {eq :"Q29sbGVjdGlvbjox" } }
+/** Коллекция «Выбор ⭐» в Saleor Dashboard */
+export const CHOICE_COLLECTION_SLUG = 'vybor'
+
+const CHOICE_PRODUCTS_QUERY = `
+  query getChoiceProductsPage(
+    $channel: String!
+    $collectionId: ID!
+    $first: Int!
+    $after: String
+  ) {
+    products(
+      first: $first
+      after: $after
+      channel: $channel
+      where: { collection: { eq: $collectionId } }
     ) {
-    edges {
-      node {
-        id
-        name
-        slug
-        category {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      edges {
+        node {
+          id
+          name
           slug
-        }
-        thumbnail {
-          url
-          alt
-        }
-        media {
-          url
-        }
-        productVariants(first: 12) {
-          edges {
-            node {
-              id
-              name
-              sku
-              weight {
-                value
-              }
-              metadata {
-                key
-                value
-              }
-              pricing {
-                price {
-                  gross {
-                    currency
-                    amount
+          category {
+            slug
+          }
+          thumbnail {
+            url
+            alt
+          }
+          media {
+            url
+          }
+          productVariants(first: 12) {
+            edges {
+              node {
+                id
+                name
+                sku
+                weight {
+                  value
+                }
+                metadata {
+                  key
+                  value
+                }
+                pricing {
+                  price {
+                    gross {
+                      currency
+                      amount
+                    }
                   }
                 }
               }
             }
           }
-        }
-        attributes {
-          attribute {
-            name
-            slug
-          }
-          values {
-            name
-            file {
-              url
+          attributes {
+            attribute {
+              name
+              slug
             }
-          }  
+            values {
+              name
+              file {
+                url
+              }
+            }
+          }
         }
       }
     }
   }
-}
-  `
+`
 
-  const variables = {
+async function resolveChoiceCollectionId(): Promise<string> {
+  const query = `
+    query getChoiceCollectionId($channel: String!, $slug: String!) {
+      collection(channel: $channel, slug: $slug) {
+        id
+      }
+    }
+  `
+  const data = await graphqlRequest<{ collection: { id: string } | null }>(query, {
     channel: CHANNEL,
+    slug: CHOICE_COLLECTION_SLUG,
+  })
+  const collectionId = data.collection?.id
+  if (!collectionId) {
+    throw new Error(`Collection "${CHOICE_COLLECTION_SLUG}" not found`)
+  }
+  return collectionId
+}
+
+function mapChoiceProductNode(n: any): StarChoiceItem | null {
+  if (!n) return null
+
+  const variantNode = n.productVariants?.edges?.[0]?.node
+  const thumbUrl = n.thumbnail?.url
+  if (!variantNode || !thumbUrl) return null
+
+  const photoAttr = n.attributes?.find(
+    (i: any) =>
+      i.attribute?.slug === 'vybor-foto' ||
+      i.attribute?.slug === 'vybor-photo' ||
+      i.attribute?.name?.toLowerCase().includes('фото') ||
+      i.attribute?.name?.toLowerCase().includes('photo'),
+  )
+  const choicePhotoUrl = photoAttr?.values?.[0]?.file?.url
+  const mediaUrl =
+    (Array.isArray(n.media) && n.media[0]?.url) ||
+    n.media?.edges?.[0]?.node?.url
+  const imageUrl =
+    (choicePhotoUrl && String(choicePhotoUrl).trim()) ||
+    mediaUrl ||
+    thumbUrl ||
+    '/images/choice-1.jpg'
+
+  const nameAttr = n.attributes?.find(
+    (i: any) =>
+      i.attribute?.slug === 'vybor-imya' ||
+      i.attribute?.slug === 'vybor-name' ||
+      i.attribute?.name?.toLowerCase().includes('имя') ||
+      i.attribute?.name?.toLowerCase().includes('name'),
+  )
+  const star = nameAttr?.values?.[0]?.name || ''
+
+  const dateAttr = n.attributes?.find(
+    (i: any) =>
+      i.attribute?.slug === 'vybor-data' ||
+      i.attribute?.slug === 'vybor-date' ||
+      i.attribute?.name?.toLowerCase().includes('дата') ||
+      i.attribute?.name?.toLowerCase().includes('date'),
+  )
+  const dateRaw = dateAttr?.values?.[0]?.name || ''
+
+  const amount = variantNode.pricing?.price?.gross?.amount
+  if (amount == null) return null
+
+  return {
+    id: variantNode.id,
+    name: n.name,
+    slug: n.slug,
+    categorySlug: n.category?.slug?.trim() || undefined,
+    thumbnail: thumbUrl,
+    image: imageUrl,
+    price: parseFloat(String(amount)),
+    oldPrice: 0,
+    size: variantNode.name ?? '',
+    star,
+    date: formatDate(dateRaw),
+  }
+}
+
+/**
+ * Товары коллекции «Выбор ⭐» (slug: vybor) — все карточки из дашборда.
+ */
+export async function getChoiceProducts(): Promise<StarChoiceItem[]> {
+  const collectionId = await resolveChoiceCollectionId()
+  const allNodes: any[] = []
+  let after: string | undefined
+  let safety = 0
+  const pageSize = 100
+
+  while (safety < 20) {
+    safety += 1
+    const data = await graphqlRequest<{
+      products: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null }
+        edges: { node: any }[]
+      }
+    }>(CHOICE_PRODUCTS_QUERY, {
+      channel: CHANNEL,
+      collectionId,
+      first: pageSize,
+      after: after ?? null,
+    })
+
+    const edges = data.products?.edges ?? []
+    for (const edge of edges) {
+      if (edge?.node) allNodes.push(edge.node)
+    }
+
+    const pageInfo = data.products?.pageInfo
+    if (!pageInfo?.hasNextPage || !edges.length) break
+    after = pageInfo.endCursor ?? undefined
+    if (!after) break
   }
 
-  const data = await graphqlRequest<BestSellersResponse>(query, variables)
-  const edges = data.products?.edges ?? []
-  const result = edges
-    .map((edge: any) => {
-      const n = edge?.node
-      if (!n) return null
-      const variantNode = n.productVariants?.edges?.[0]?.node
-      const thumbUrl = n.thumbnail?.url
-      if (!variantNode || !thumbUrl) return null
-
-      const photoAttr = n.attributes?.find(
-        (i: any) =>
-          i.attribute?.slug === 'vybor-foto' ||
-          i.attribute?.slug === 'vybor-photo' ||
-          i.attribute?.name?.toLowerCase().includes('фото') ||
-          i.attribute?.name?.toLowerCase().includes('photo'),
-      )
-      const choicePhotoUrl = photoAttr?.values?.[0]?.file?.url
-      const mediaUrl =
-        (Array.isArray(n.media) && n.media[0]?.url) ||
-        n.media?.edges?.[0]?.node?.url
-      const imageUrl =
-        (choicePhotoUrl && String(choicePhotoUrl).trim()) ||
-        mediaUrl ||
-        thumbUrl ||
-        '/images/choice-1.jpg'
-
-      const nameAttr = n.attributes?.find(
-        (i: any) =>
-          i.attribute?.slug === 'vybor-imya' ||
-          i.attribute?.slug === 'vybor-name' ||
-          i.attribute?.name?.toLowerCase().includes('имя') ||
-          i.attribute?.name?.toLowerCase().includes('name'),
-      )
-      const star = nameAttr?.values?.[0]?.name || ''
-
-      const dateAttr = n.attributes?.find(
-        (i: any) =>
-          i.attribute?.slug === 'vybor-data' ||
-          i.attribute?.slug === 'vybor-date' ||
-          i.attribute?.name?.toLowerCase().includes('дата') ||
-          i.attribute?.name?.toLowerCase().includes('date'),
-      )
-      const dateRaw = dateAttr?.values?.[0]?.name || ''
-
-      const amount = variantNode.pricing?.price?.gross?.amount
-      if (amount == null) return null
-
-      return {
-        id: variantNode.id,
-        name: n.name,
-        slug: n.slug,
-        categorySlug: n.category?.slug?.trim() || undefined,
-        thumbnail: thumbUrl,
-        image: imageUrl,
-        price: parseFloat(String(amount)),
-        oldPrice: 0,
-        size: variantNode.name ?? '',
-        star,
-        date: formatDate(dateRaw),
-      }
-    })
-    .filter(Boolean)
-
-  return result
+  return allNodes
+    .map((node) => mapChoiceProductNode(node))
+    .filter((item): item is StarChoiceItem => item != null)
 }
 
 /** Товары коллекции по ID (коллекция 5 — «Ваши носовые сосочки будут в восторге») */

@@ -4,6 +4,7 @@ import {
   getProductCategorySlugForRedirect,
 } from '@/graphql/queries/product.service'
 import type { ProductDetailNode } from '@/graphql/types/product.types'
+import { categorySlugRedirectPath } from '@/lib/seo/categorySlugRedirects'
 import { categoryProductPath, isValidSlug } from '@/lib/productPaths'
 
 export type LoadedProductPage = {
@@ -29,6 +30,13 @@ export async function loadProductPageBySlug(
   // /category/{cat}/{slug} — canonical и JSON-LD всегда на текущий URL (не на «основную» категорию Saleor)
   if (expectedCategorySlug) {
     if (!isValidSlug(expectedCategorySlug)) return null
+
+    const legacyRedirect = categorySlugRedirectPath(
+      expectedCategorySlug,
+      resolvedSlug,
+    )
+    if (legacyRedirect) redirect(legacyRedirect)
+
     const canonicalPath = categoryProductPath(
       expectedCategorySlug,
       resolvedSlug,
