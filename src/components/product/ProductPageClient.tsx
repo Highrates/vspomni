@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import PopularScentsAlt from '@/components/features/PopularScentsAlt'
 import Choice from '@/components/home/Choice'
+import CollectionNoseBlock from '@/components/home/CollectionNoseBlock'
 import GiftPackagesUpsellSection from '@/components/home/GiftPackagesUpsellSection'
 import BackButton from '@/components/ui/BackButton'
 import { useEffect, useState, useRef } from 'react'
@@ -673,6 +674,7 @@ export default function ProductPageClient({
       />
       <Choice initialProducts={initialChoiceProducts} />
       <PopularScentsAlt />
+      <CollectionNoseBlock />
     </PageTransition>
   )
 }
