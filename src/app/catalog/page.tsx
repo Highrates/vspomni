@@ -7,7 +7,6 @@ import ProductGrid from '@/components/home/ProductGrid'
 import PublicPageBreadcrumbs from '@/components/layout/PublicPageBreadcrumbs'
 import {
   CATALOG_DESCRIPTION,
-  CATALOG_KEYWORDS,
   CATALOG_PAGE_SIZE,
   CATALOG_TITLE,
 } from '@/lib/catalog/catalogPageContent'
@@ -22,7 +21,7 @@ export const metadata: Metadata = buildPageMetadata({
   title: CATALOG_TITLE,
   description: CATALOG_DESCRIPTION,
   canonicalPath: '/catalog',
-  keywords: CATALOG_KEYWORDS,
+  ogImage: '/images/catalogTop.png',
 })
 
 export const revalidate = 60

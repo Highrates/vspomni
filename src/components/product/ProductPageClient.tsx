@@ -23,6 +23,7 @@ import {
   NOTE_ATTRIBUTE_SLUGS,
   NOTE_LABELS,
 } from '@/lib/product/productPageContent'
+import { normalizeAromaLabel } from '@/lib/normalizeAromaLabel'
 import { ProductDetailNode } from '@/graphql/types/product.types'
 import { ProductCardItem, StarChoiceItem } from '@/types/product'
 import { useMobile } from '@/lib/hooks'
@@ -239,7 +240,11 @@ export default function ProductPageClient({
                         <div className="relative w-full h-full">
                           <Image
                             src={mediaItem.url}
-                            alt={mediaItem.alt || `Product image ${index + 1}`}
+                            alt={
+                              index === 0
+                                ? mediaItem.alt || product?.name || 'Фото товара'
+                                : ''
+                            }
                             fill
                             className="object-cover duration-300"
                             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 700px"
@@ -328,9 +333,10 @@ export default function ProductPageClient({
                       >
                         <Image
                           src={mediaItem.url}
-                          alt={`Thumbnail ${index + 1}`}
+                          alt=""
                           width={124}
                           height={122}
+                          sizes="124px"
                           className="w-full h-full object-cover"
                         />
                       </button>
@@ -388,7 +394,7 @@ export default function ProductPageClient({
                           key={aroma.slug || aroma.name || index}
                           className="px-2 sm:px-3 py-1 sm:py-1.5 border border-textgrey rounded-full text-xs sm:text-sm md:text-base select-none"
                         >
-                          {aroma.name || aroma.value || ''}
+                          {normalizeAromaLabel(aroma.name || aroma.value || '')}
                         </span>
                       ))}
                   </div>
@@ -470,9 +476,10 @@ export default function ProductPageClient({
                                 <Image
                                   src={val.file.url}
                                   alt={val.name || ''}
-                                  fill
+                                  width={84}
+                                  height={84}
                                   sizes="84px"
-                                  className="object-cover"
+                                  className="w-full h-full object-cover"
                                 />
                               ) : (
                                 <img
@@ -518,9 +525,10 @@ export default function ProductPageClient({
                                 <Image
                                   src={val.file.url}
                                   alt={val.name || ''}
-                                  fill
+                                  width={84}
+                                  height={84}
                                   sizes="84px"
-                                  className="object-cover"
+                                  className="w-full h-full object-cover"
                                 />
                               ) : (
                                 <img
@@ -567,9 +575,10 @@ export default function ProductPageClient({
                               <Image
                                 src={val.file.url}
                                 alt={val.name || ''}
-                                fill
+                                width={84}
+                                height={84}
                                 sizes="84px"
-                                className="object-cover"
+                                className="w-full h-full object-cover"
                               />
                             ) : (
                               <img

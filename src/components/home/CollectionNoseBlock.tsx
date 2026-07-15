@@ -33,9 +33,9 @@ export default function CollectionNoseBlock() {
   if (loading) {
     return (
       <section className="mt-4 sm:mt-6 md:mt-8 lg:mt-10 mb-4 sm:mb-6 md:mb-8 lg:mb-10 px-2 py-2">
-        <h3 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none mb-4 sm:mb-6">
+        <h2 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none mb-4 sm:mb-6">
           {TITLE}
-        </h3>
+        </h2>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
           {[1, 2, 3, 4].map((i) => (
             <div
@@ -52,9 +52,9 @@ export default function CollectionNoseBlock() {
 
   return (
     <section className="mt-4 sm:mt-6 md:mt-8 lg:mt-10 mb-4 sm:mb-6 md:mb-8 lg:mb-10 px-2 py-2">
-      <h3 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none mb-4 sm:mb-5 md:mb-6">
+      <h2 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none mb-4 sm:mb-5 md:mb-6">
         {TITLE}
-      </h3>
+      </h2>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5 p-2 -m-2">
         {products.map((product, index) => (
           <ProductCard

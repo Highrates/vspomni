@@ -16,6 +16,7 @@ import type {
   ProductEdge,
 } from '../types/product.types'
 import { formatDate } from '@/lib/functions'
+import { normalizeAromaLabel } from '@/lib/normalizeAromaLabel'
 import type { ProductCardItem, StarChoiceItem } from '@/types/product'
 import { isValidSlug } from '@/lib/productPaths'
 import { variantShippingFromSaleorVariant } from '@/lib/saleorVariantShipping'
@@ -319,7 +320,9 @@ function mapNodeToProductCard(
     (attr: any) => attr.attribute?.slug === 'aromaty-v-kartochke-tovara'
   )
   const aromaValues = aromaAttribute?.values || []
-  const aromas = aromaValues.map((val: any) => val.name || val.value || '').filter(Boolean)
+  const aromas = aromaValues
+    .map((val: any) => normalizeAromaLabel(val.name || val.value || ''))
+    .filter(Boolean)
 
   // Формируем group из aromas (для обратной совместимости)
   const group = aromas.map((aroma: string, index: number) => {

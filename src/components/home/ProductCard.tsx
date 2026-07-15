@@ -65,7 +65,7 @@ export default function ProductCard({ product, isNew = false, hideAromas = false
                 <div className="relative w-full h-full">
                   <Image
                     src={src}
-                    alt={product.name}
+                    alt={index === 0 ? product.name : ''}
                     fill
                     sizes="(max-width: 640px) 50vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, (max-width: 1600px) 25vw, 369px"
                     className="rounded-[12px] sm:rounded-[16px] object-cover"

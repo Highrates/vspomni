@@ -127,7 +127,7 @@ export default function Footer() {
       <div className="w-full border-t border-bordergrey py-4 md:py-3.5">
         <div className="flex flex-col md:flex-row items-start justify-start gap-2 md:gap-4">
           <div className="text-left text-xs md:text-sm text-black select-none">
-            © 2025 ВСПОМНИ. Все права защищены.
+            © {new Date().getFullYear()} ВСПОМНИ. Все права защищены.
           </div>
           <div className="flex flex-row flex-wrap items-center text-xs md:text-sm gap-2">
             <Link href="/" className="text-textgrey hover:text-black">

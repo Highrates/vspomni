@@ -42,28 +42,39 @@ const RegisterForm = ({ onVerify, onLogin }: TPropss) => {
 
         // Параллельно дергаем кастомный REST-эндпоинт Saleor для отправки кода подтверждения
         if (result?.requiresConfirmation) {
+          const baseUrl = process.env.NEXT_PUBLIC_SALEOR_API_URL ?? ''
+          let codeSent = false
           try {
-            const baseUrl = process.env.NEXT_PUBLIC_SALEOR_API_URL ?? ''
-            await fetch(
-              `${baseUrl}/auth/request-email-code/`,
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, firstName, phone }),
-              },
-            )
+            const resp = await fetch(`${baseUrl}/auth/request-email-code/`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, firstName, phone }),
+            })
+            const data = await resp.json().catch(() => ({}))
+            if (!resp.ok || !data.ok) {
+              throw new Error(
+                data.error || 'Не удалось отправить код подтверждения. Попробуйте позже.',
+              )
+            }
+            codeSent = true
             toast.success('Регистрация прошла успешно! Введите код из письма.')
           } catch (err) {
             console.error('send-registration-email error:', err)
-            // не ломаем регистрацию, если письмо не ушло
-            toast.error('Не удалось отправить код подтверждения. Попробуйте позже.')
+            const message =
+              err instanceof Error
+                ? err.message
+                : 'Не удалось отправить код подтверждения. Попробуйте позже.'
+            toast.error(message)
           }
 
-          // Сохраняем телефон в localStorage для использования при подтверждении
+          if (!codeSent) {
+            return
+          }
+
           if (phone) {
             localStorage.setItem('registration_phone', phone)
           }
-          
+
           onVerify(email)
         } else {
           toast.success('Регистрация прошла успешно!')

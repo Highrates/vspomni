@@ -109,7 +109,7 @@ function HeroBottomBadge({ slide }: { slide: HeroSlide }) {
         transition={{ duration: 0.5, delay: 0.35 }}
         className="flex flex-col justify-center text-black text-left flex-1 min-w-0"
       >
-        <h2 className="text-[11px] sm:text-[16px] md:text-[20px] font-semibold mb-0.5 sm:mb-2 leading-tight">
+        <p className="text-[11px] sm:text-[16px] md:text-[20px] font-semibold mb-0.5 sm:mb-2 leading-tight">
           {slide.title.split('.')[0]}
           {slide.title.split('.')[1] ? (
             <>
@@ -118,7 +118,7 @@ function HeroBottomBadge({ slide }: { slide: HeroSlide }) {
               {slide.title.split('.')[1]}
             </>
           ) : null}
-        </h2>
+        </p>
         <p className="text-[9px] sm:text-[13px] md:text-[15px] text-black/80 leading-snug line-clamp-3">
           {slide.text}
         </p>

@@ -18,6 +18,9 @@ const nextConfig: NextConfig = {
     ]
   },
   images: {
+    // Не раздувать srcset до 3840 для карточек/иконок
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
+    imageSizes: [16, 32, 48, 64, 84, 96, 128, 256, 384],
     remotePatterns: [
       {
         protocol: "https",

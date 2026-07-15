@@ -12,7 +12,6 @@ export const metadata: Metadata = buildPageMetadata({
   description:
     'Новости бренда ВСПОМНИ: анонсы коллекций, события, полезные материалы об интерьерных ароматах и подарочных наборах.',
   canonicalPath: '/news',
-  keywords: ['новости ВСПОМНИ', 'блог ВСПОМНИ', 'публикации ВСПОМНИ'],
 })
 
 export const revalidate = 60

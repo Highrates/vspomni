@@ -17,9 +17,9 @@ export default function PopularScentsAlt() {
   return (
     <section className="mb-4 mt-4 sm:mb-6 sm:mt-6 md:mb-8 md:mt-8 lg:mb-10 lg:mt-10 px-4 sm:px-6 md:px-8 py-2">
       <div className="flex items-center justify-between mb-4 sm:mb-5 md:mb-6 gap-3">
-        <h3 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none">
+        <h2 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none">
           Диффузоры для дома
-        </h3>
+        </h2>
         <Link
           href="/category/diffuzory"
           className="text-base text-black font-medium flex items-center -ml-5"

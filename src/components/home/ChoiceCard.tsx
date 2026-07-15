@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import AddCartBtn from '../ui/addCartBtn'
 import Link from 'next/link'
 import { StarChoiceItem } from '@/types/product'
@@ -7,23 +8,21 @@ export interface ChoiceCardProps {
   product: StarChoiceItem
 }
 
-export default function ChoiceCard({product}: ChoiceCardProps) {
-  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
-    const target = e.currentTarget
-    if (!target.dataset.fallback) {
-      target.src = '/images/choice-1.jpg'
-      target.dataset.fallback = 'true'
-    }
-  }
+const FALLBACK_IMAGE = '/images/choice-1.jpg'
+
+export default function ChoiceCard({ product }: ChoiceCardProps) {
+  const mainSrc = product.image || FALLBACK_IMAGE
+  const thumbSrc = product.thumbnail || product.image || FALLBACK_IMAGE
 
   return (
     <div className="relative w-full rounded-[20px] overflow-hidden">
       <div className="relative w-full aspect-[498/685] bg-gray-100">
-        <img
-          src={product.image}
+        <Image
+          src={mainSrc}
           alt={product.name}
-          className="w-full h-full object-cover"
-          onError={handleImageError}
+          fill
+          sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 498px"
+          className="object-cover"
         />
 
         {/* Имя и дата над плашкой */}
@@ -33,17 +32,16 @@ export default function ChoiceCard({product}: ChoiceCardProps) {
 
         {/* Плашка с товаром */}
         <div className="absolute left-[8px] right-[8px] bottom-[8px] flex items-center gap-[10px] p-[8px] bg-white rounded-[12px]">
-          {/* Миниатюра товара */}
-          <div className="w-[57px] h-[52px] rounded-[4px] overflow-hidden bg-gray-50 shrink-0">
-            <img
-              src={product.thumbnail}
+          <div className="relative w-[57px] h-[52px] rounded-[4px] overflow-hidden bg-gray-50 shrink-0">
+            <Image
+              src={thumbSrc}
               alt={product.star}
-              className="w-full h-full object-cover"
-              onError={handleImageError}
+              fill
+              sizes="57px"
+              className="object-cover"
             />
           </div>
 
-          {/* Название и цена */}
           <div className="flex flex-col flex-1 min-w-0 justify-between h-[52px]">
             {(() => {
               const href = productDetailPath(product)
@@ -79,7 +77,6 @@ export default function ChoiceCard({product}: ChoiceCardProps) {
             </div>
           </div>
 
-          {/* Кнопка корзины */}
           <div className="shrink-0">
             <AddCartBtn
               product={{

@@ -1,5 +1,6 @@
 import type { ProductDetailNode } from '@/graphql/types/product.types'
 import type { ProductCardItem } from '@/types/product'
+import { normalizeAromaLabel } from '@/lib/normalizeAromaLabel'
 import { variantShippingFromSaleorVariant } from '@/lib/saleorVariantShipping'
 
 export function buildProductCartFormat(
@@ -27,7 +28,7 @@ export function buildProductCartFormat(
   )
   const aromaValues = aromaAttribute?.values || []
   const aromas = aromaValues
-    .map((val) => val.name || val.value || '')
+    .map((val) => normalizeAromaLabel(val.name || val.value || ''))
     .filter(Boolean)
 
   const group = aromas.map((aroma: string, index: number) => {

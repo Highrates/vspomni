@@ -31,9 +31,9 @@ export default function ProductGrid() {
       style={{ scrollMarginTop: '80px' }}
     >
       <div className="flex items-center justify-between mb-4 sm:mb-5 md:mb-6">
-        <h3 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none">
+        <h2 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none">
           Все ароматы Вспомни.
-        </h3>
+        </h2>
       </div>
       {/* Сетка как на десктопе: 3 колонки, на lg — 5 */}
       <div className="grid grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-5 md:gap-6 p-2 -m-2">

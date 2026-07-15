@@ -1,4 +1,5 @@
 import { decodeUnicode } from '@/lib/functions'
+import { normalizeAromaLabel } from '@/lib/normalizeAromaLabel'
 import type { ProductDetailNode } from '@/graphql/types/product.types'
 
 export const NOTE_ATTRIBUTE_SLUGS = {
@@ -87,11 +88,10 @@ export function extractProductSeoContent(
 ): ProductSeoContent {
   const attributes = product.attributes
   const firstVariant = product.productVariants?.edges?.[0]?.node
-  const qty = firstVariant?.quantityAvailable
 
   const aromas =
     getAttributeBySlug(attributes, 'aromaty-v-kartochke-tovara')?.values
-      ?.map((v) => (v.name || v.value || '').trim())
+      ?.map((v) => normalizeAromaLabel((v.name || v.value || '').trim()))
       .filter(Boolean) ?? []
 
   const notes = (
@@ -118,8 +118,8 @@ export function extractProductSeoContent(
     aromas,
     price: firstVariant?.pricing?.price?.gross?.amount ?? null,
     currency: firstVariant?.pricing?.price?.gross?.currency ?? 'RUB',
-    inStock:
-      qty == null ? Boolean(product.isAvailableForPurchase) : qty > 0,
+    // Как в чекауте: availability по isAvailableForPurchase, не по quantityAvailable.
+    inStock: Boolean(product.isAvailableForPurchase),
     sku: firstVariant?.sku ?? null,
     imageUrls,
     categoryName: product.category?.name?.trim() || null,
