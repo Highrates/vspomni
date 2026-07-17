@@ -164,12 +164,14 @@ export async function POST(request: NextRequest) {
       },
     })
 
-  } catch (error: any) {
-    console.error('Saleor checkout creation error:', error)
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : 'Unexpected checkout error'
+    console.error('Saleor checkout creation error:', message)
     return createResponse(
-      { 
-        error: 'Internal server error',
-        message: error.message,
+      {
+        error: message,
+        message,
       },
       500
     )

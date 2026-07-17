@@ -65,6 +65,90 @@ async function yookassaRequest(
   return fetch(url, fetchOptions)
 }
 
+function parseJsonSafe(response: Response): Promise<Record<string, unknown>> {
+  return response.text().then((text) => {
+    if (!text) return {}
+    try {
+      return JSON.parse(text) as Record<string, unknown>
+    } catch {
+      throw new Error(`Invalid JSON response from YooKassa (${response.status})`)
+    }
+  })
+}
+
+function buildReceiptItems(
+  items: Array<{ name?: string; quantity?: number; price?: number }>,
+  amount: number,
+  shippingAmount: number,
+  currency: string,
+) {
+  const normalizedItems = items
+    .map((item) => ({
+      name: String(item.name || 'Товар').substring(0, 128),
+      quantity: Math.max(1, Number(item.quantity) || 1),
+      price: Number(item.price),
+    }))
+    .filter((item) => Number.isFinite(item.price) && item.price > 0)
+
+  if (normalizedItems.length === 0) {
+    throw new Error('No valid items for receipt')
+  }
+
+  const shipping = Math.max(0, Number(shippingAmount) || 0)
+  const productsTarget = Math.max(0.01, Number((amount - shipping).toFixed(2)))
+  const sumItems = normalizedItems.reduce(
+    (sum, item) => sum + item.price * item.quantity,
+    0,
+  )
+  const ratio = sumItems > 0 ? productsTarget / sumItems : 1
+
+  let runningTotal = 0
+  const formattedItems = normalizedItems.map((item, index) => {
+    const isLast = index === normalizedItems.length - 1
+    let discountedPrice = Math.round(item.price * ratio * 100) / 100
+
+    if (isLast) {
+      discountedPrice = Math.round(
+        ((productsTarget - runningTotal) / item.quantity) * 100,
+      ) / 100
+    }
+
+    if (discountedPrice <= 0) discountedPrice = 0.01
+
+    if (!isLast) {
+      runningTotal += Number((discountedPrice * item.quantity).toFixed(2))
+    }
+
+    return {
+      description: item.name,
+      quantity: item.quantity,
+      amount: {
+        value: discountedPrice.toFixed(2),
+        currency,
+      },
+      vat_code: 4,
+      payment_mode: 'full_payment',
+      payment_subject: 'commodity',
+    }
+  })
+
+  if (shipping > 0) {
+    formattedItems.push({
+      description: 'Доставка',
+      quantity: 1,
+      amount: {
+        value: shipping.toFixed(2),
+        currency,
+      },
+      vat_code: 4,
+      payment_mode: 'full_payment',
+      payment_subject: 'service',
+    })
+  }
+
+  return formattedItems
+}
+
 // ============================================
 // POST Handler - Создание платежа
 // ============================================
@@ -86,11 +170,14 @@ export async function POST(request: NextRequest) {
       returnUrl,
       userEmail,
       items = [], // Список товаров из корзины
+      shippingAmount = 0,
       metadata = {},
     } = body
 
+    const normalizedAmount = Number(amount)
+
     // Валидация обязательных полей
-    if (!amount || !description) {
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0 || !description) {
       return createResponse(
         { error: 'Amount and description are required' },
         400
@@ -103,60 +190,29 @@ export async function POST(request: NextRequest) {
         ? `${window.location.origin}/checkout/success`
         : `${request.headers.get('origin') || 'http://localhost:3000'}/checkout/success`)
 
-    // Подготовка чека для 54-ФЗ
     let receipt = null
     if (userEmail && items.length > 0) {
-      // Сумма чека должна строго совпадать с amount. 
-      // Если есть промокод, totalPrice может быть больше amount.
-      // Распределяем скидку пропорционально.
-      const sumItems = items.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0)
-      const ratio = amount / sumItems
-
-      let runningTotal = 0
-      const formattedItems = items.map((item: any, index: number) => {
-        const isLast = index === items.length - 1
-
-        // Вычисляем новую цену товара с учётом скидки
-        let discountedPrice = Math.round(item.price * ratio * 100) / 100
-
-        // Корректировка последнего товара для точного совпадения суммы
-        if (isLast) {
-          // Оставшаяся сумма делится на количество последнего товара
-          discountedPrice = Math.round(((amount - runningTotal) / item.quantity) * 100) / 100
-        }
-
-        // Защита от нулевой цены (минимум 0.01)
-        if (discountedPrice <= 0) discountedPrice = 0.01
-
-        if (!isLast) {
-          runningTotal += Number((discountedPrice * item.quantity).toFixed(2))
-        }
-
-        return {
-          description: item.name.substring(0, 128),
-          quantity: item.quantity,
-          amount: {
-            value: discountedPrice.toFixed(2),
-            currency: currency,
+      try {
+        receipt = {
+          customer: {
+            email: userEmail,
           },
-          vat_code: 4, // Без НДС
-          payment_mode: 'full_payment',
-          payment_subject: 'commodity',
+          items: buildReceiptItems(items, normalizedAmount, shippingAmount, currency),
         }
-      })
-
-      receipt = {
-        customer: {
-          email: userEmail,
-        },
-        items: formattedItems,
+      } catch (receiptError: unknown) {
+        const message =
+          receiptError instanceof Error
+            ? receiptError.message
+            : 'Failed to build payment receipt'
+        console.error('YooKassa receipt build error:', message)
+        return createResponse({ error: message }, 400)
       }
     }
 
     // Данные для создания платежа
     const paymentData: any = {
       amount: {
-        value: amount.toFixed(2), // Сумма в формате "100.00"
+        value: normalizedAmount.toFixed(2),
         currency: currency,
       },
       confirmation: {
@@ -187,23 +243,24 @@ export async function POST(request: NextRequest) {
       body: paymentData,
     })
 
-    const result = await response.json()
+    const result = await parseJsonSafe(response)
 
     if (!response.ok) {
       console.error('YooKassa API error:', result)
-      const desc = (result.description || result.code || '') as string
+      const desc = String(result.description || result.code || '')
       const isAuthError = /shopId|secret key|secret_key|Invalid credentials|authorization/i.test(desc)
       const userError = isAuthError
         ? 'Ошибка настройки оплаты (shopId или секретный ключ). Проверьте YOOKASSA_SHOP_ID и YOOKASSA_SECRET_KEY в настройках сервера и перевыпустите ключ в личном кабинете ЮKassa.'
-        : (result.description || 'Не удалось создать платёж')
+        : (desc || 'Не удалось создать платёж')
       return createResponse(
-        { error: userError, details: result },
+        { error: userError, message: userError, details: result },
         response.status
       )
     }
 
     // Возвращаем confirmation_token для виджета
-    const confirmationToken = result.confirmation?.confirmation_token
+    const confirmation = result.confirmation as { confirmation_token?: string } | undefined
+    const confirmationToken = confirmation?.confirmation_token
 
     if (!confirmationToken) {
       console.error('YooKassa: No confirmation_token in response:', result)
@@ -226,12 +283,14 @@ export async function POST(request: NextRequest) {
       amount: result.amount,
     })
 
-  } catch (error: any) {
-    console.error('YooKassa POST error:', error)
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : 'Unexpected payment error'
+    console.error('YooKassa POST error:', message)
     return createResponse(
       {
-        error: 'Internal server error',
-        message: error.message,
+        error: message,
+        message,
       },
       500
     )

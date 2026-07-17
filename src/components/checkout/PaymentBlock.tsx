@@ -18,7 +18,7 @@ export default function PaymentBlock() {
   const [paymentCompleted, setPaymentCompleted] = useState(false)
   const paymentCompletedRef = useRef(false)
   const { user } = useUserStore()
-  const { items, totalPrice, appliedPromoCode } = useCartStore()
+  const { items, totalPrice, appliedPromoCode, shippingPrice } = useCartStore()
 
   const redirectToSuccess = useCallback(() => {
     window.location.assign('/checkout/success')
@@ -207,7 +207,8 @@ export default function PaymentBlock() {
           }
 
           throw new Error(
-            checkoutResult.message || checkoutResult.error ||
+            checkoutResult.message ||
+            checkoutResult.error ||
             'Ошибка создания заказа. Пожалуйста, попробуйте позже.'
           )
         }
@@ -322,9 +323,23 @@ export default function PaymentBlock() {
     try {
       // Вычисляем общую сумму заказа: приоритетно берём сумму из checkout (amountOverride),
       // чтобы она совпадала с тем, что знает Saleor
-      const totalAmount = amountOverride ?? totalPrice
+      const totalAmount = Number(amountOverride ?? totalPrice)
+      if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+        throw new Error('Некорректная сумма заказа. Обновите страницу и попробуйте снова.')
+      }
 
-      // Описание заказа
+      const paymentItems = items
+        .filter((item: any) => item?.product?.name && Number(item.product.price) > 0)
+        .map((item: any) => ({
+          name: String(item.product.name),
+          quantity: Number(item.quantity) || 1,
+          price: Number(item.product.price),
+          sku: item.variantId || item.id,
+        }))
+
+      if (paymentItems.length === 0) {
+        throw new Error('Не удалось подготовить товары к оплате. Обновите корзину и попробуйте снова.')
+      }
       const shortId = orderOrCheckoutId.length > 8
         ? orderOrCheckoutId.substring(orderOrCheckoutId.length - 8)
         : orderOrCheckoutId
@@ -342,12 +357,8 @@ export default function PaymentBlock() {
           description: description,
           orderId: orderOrCheckoutId,
           userEmail: user.email,
-          items: items.map((item: any) => ({
-            name: item.product.name,
-            quantity: item.quantity,
-            price: item.price,
-            sku: item.variantId || item.id,
-          })),
+          shippingAmount: Number(shippingPrice) || 0,
+          items: paymentItems,
           returnUrl: `${window.location.origin}/checkout/success`,
           metadata: {
             userId: user.email,
@@ -360,7 +371,11 @@ export default function PaymentBlock() {
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to create payment')
+        throw new Error(
+          result.message ||
+          result.error ||
+          'Failed to create payment',
+        )
       }
 
       if (result.confirmationToken) {
