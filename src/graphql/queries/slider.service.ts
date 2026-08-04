@@ -254,11 +254,14 @@ export interface HeroBottomBanner {
   image: string
   title: string
   description: string
-  /** Путь (/product/slug) или полный URL из атрибута «ссылка на товар» */
+  /**
+   * Куда ведёт плашка: товар, аромат или категория
+   * (из атрибутов «Ссылка на товар / аромат / категорию»).
+   */
   href: string
 }
 
-/** Совпадение по slug или name: в дашборде «Него-слайдер нижний банер заголовок/описание» */
+/** Совпадение по slug или name: в дашборде «Hero-слайдер нижний банер заголовок/описание» */
 function matchBottomBannerAttr(
   slug: string,
   name: string,
@@ -277,25 +280,72 @@ function matchBottomBannerAttr(
   return false
 }
 
-/** Атрибут вроде ssylka-na-tovar: ссылка на товар (reference или текст/URL) */
-function isProductLinkAttribute(slug: string, name: string): boolean {
+type HeroLinkKind = 'banner' | 'product' | 'aroma' | 'category'
+
+/**
+ * Атрибуты ссылок плашки Hero.
+ * «Ссылка нижнего банера» — универсальная (товар / категория / аромат / URL).
+ */
+function matchHeroLinkAttribute(
+  slug: string,
+  name: string,
+): HeroLinkKind | null {
   const s = (slug || '').toLowerCase()
   const n = (name || '').toLowerCase()
-  return (
+
+  // Универсальная «Ссылка нижнего банера» — раньше узких, чтобы не перепутать
+  if (
+    s === 'ssylka-nizhnego-banera' ||
+    s === 'ssylka-nizhnego-banner' ||
+    (s.includes('ssylka') &&
+      (s.includes('nizhnego') || s.includes('nizhni'))) ||
+    (n.includes('ссылка') &&
+      n.includes('нижн') &&
+      (n.includes('банер') || n.includes('баннер')))
+  ) {
+    return 'banner'
+  }
+
+  if (
     s === 'ssylka-na-tovar' ||
-    (s.includes('ssylka') && s.includes('tovar')) ||
-    (s.includes('ssylka') && s.includes('product')) ||
+    (s.includes('ssylka') && (s.includes('tovar') || s.includes('product'))) ||
     (n.includes('ссылка') && n.includes('товар'))
-  )
+  ) {
+    return 'product'
+  }
+
+  if (
+    s === 'ssylka-na-aromat' ||
+    (s.includes('ssylka') && (s.includes('aromat') || s.includes('aroma'))) ||
+    (n.includes('ссылка') && n.includes('аромат'))
+  ) {
+    return 'aroma'
+  }
+
+  if (
+    s === 'ssylka-na-kategoriiu' ||
+    s === 'ssylka-na-kategoriyu' ||
+    s === 'ssylka-na-category' ||
+    (s.includes('ssylka') &&
+      (s.includes('kategor') || s.includes('category'))) ||
+    (n.includes('ссылка') && n.includes('категор'))
+  ) {
+    return 'category'
+  }
+
+  return null
 }
 
-/** Текст из CMS: абсолютный URL, путь с / или slug товара */
-function normalizeProductLinkHref(raw: string): string {
+/** Текст из CMS → путь: URL, /path, либо fallback-префикс + slug */
+function normalizeCmsLinkHref(
+  raw: string,
+  fallbackPrefix: '/product' | '/catalog/aroma' | '/category',
+): string {
   const t = raw.trim()
   if (!t) return ''
   if (/^https?:\/\//i.test(t)) return t
   if (t.startsWith('/')) return t
-  return `/product/${t}`
+  return `${fallbackPrefix}/${encodeURIComponent(t)}`
 }
 
 /** Достать строку из value атрибута (plain text или rich text JSON) */
@@ -367,12 +417,26 @@ export async function getHeroBottomBanners(): Promise<HeroBottomBanner[]> {
               ... on AssignedSingleProductReferenceAttribute {
                 linkProduct: value {
                   slug
+                  category { slug }
                 }
               }
               ... on AssignedMultiProductReferenceAttribute {
                 linkProducts: value(limit: 1) {
                   slug
+                  category { slug }
                 }
+              }
+              ... on AssignedSinglePageReferenceAttribute {
+                linkPage: value { slug }
+              }
+              ... on AssignedMultiPageReferenceAttribute {
+                linkPages: value(limit: 1) { slug }
+              }
+              ... on AssignedSingleCategoryReferenceAttribute {
+                linkCategory: value { slug }
+              }
+              ... on AssignedMultiCategoryReferenceAttribute {
+                linkCategories: value(limit: 1) { slug }
               }
             }
           }
@@ -389,59 +453,124 @@ export async function getHeroBottomBanners(): Promise<HeroBottomBanner[]> {
     .filter((e) => e.node.isPublished !== false)
     .map((e) => e.node)
 
+  type AttrLinkExt = {
+    linkProduct?: { slug?: string; category?: { slug?: string } | null } | null
+    linkProducts?: { slug?: string; category?: { slug?: string } | null }[]
+    linkPage?: { slug?: string } | null
+    linkPages?: { slug?: string }[]
+    linkCategory?: { slug?: string } | null
+    linkCategories?: { slug?: string }[]
+    textValuePlain?: string
+    textValueRich?: unknown
+  }
+
+  function resolveHeroLinkHref(kind: HeroLinkKind, ext: AttrLinkExt): string {
+    const fromProduct = () => {
+      const p = ext.linkProduct ?? ext.linkProducts?.[0]
+      if (!p?.slug) return ''
+      const cat = p.category?.slug?.trim()
+      if (cat) {
+        return `/category/${encodeURIComponent(cat)}/${encodeURIComponent(p.slug)}`
+      }
+      return `/product/${encodeURIComponent(p.slug)}`
+    }
+    const fromAroma = () => {
+      const page = ext.linkPage ?? ext.linkPages?.[0]
+      if (!page?.slug) return ''
+      return `/catalog/aroma/${encodeURIComponent(page.slug)}`
+    }
+    const fromCategory = () => {
+      const cat = ext.linkCategory ?? ext.linkCategories?.[0]
+      if (!cat?.slug) return ''
+      return `/category/${encodeURIComponent(cat.slug)}`
+    }
+    const fromText = (
+      fallback: '/product' | '/catalog/aroma' | '/category',
+    ) => {
+      const raw = getTextFromAttributeValue(
+        ext.textValuePlain ?? ext.textValueRich,
+      )
+      return raw ? normalizeCmsLinkHref(raw, fallback) : ''
+    }
+
+    if (kind === 'banner') {
+      // Универсальная «Ссылка нижнего банера»: товар → категория → аромат → текст/URL
+      return (
+        fromProduct() ||
+        fromCategory() ||
+        fromAroma() ||
+        fromText('/category') ||
+        ''
+      )
+    }
+    if (kind === 'product') return fromProduct() || fromText('/product')
+    if (kind === 'aroma') return fromAroma() || fromText('/catalog/aroma')
+    return fromCategory() || fromText('/category')
+  }
+
   const withIndex = published.map((node) => {
     const num = parseInt(node.title?.match(/(\d+)/)?.[1] || '0', 10)
     const attrs = (node.assignedAttributes || []).reduce(
       (acc, a) => {
         const slug = a.attribute?.slug ?? ''
         const name = a.attribute?.name ?? ''
-        if (isProductLinkAttribute(slug, name)) {
-          const ext = a as {
-            linkProduct?: { slug?: string } | null
-            linkProducts?: { slug?: string }[]
-            textValuePlain?: string
-            textValueRich?: unknown
+        const linkKind = matchHeroLinkAttribute(slug, name)
+        if (linkKind) {
+          const href = resolveHeroLinkHref(linkKind, a as AttrLinkExt)
+          if (href) {
+            // Приоритет: «ссылка нижнего банера» > товар > аромат > категория
+            if (linkKind === 'banner') acc.hrefBanner = href
+            else if (linkKind === 'product') acc.hrefProduct = href
+            else if (linkKind === 'aroma') acc.hrefAroma = href
+            else acc.hrefCategory = href
           }
-          let href = ''
-          if (ext.linkProduct?.slug) {
-            href = `/product/${ext.linkProduct.slug}`
-          } else if (ext.linkProducts?.[0]?.slug) {
-            href = `/product/${ext.linkProducts[0].slug}`
-          } else {
-            const raw = ext.textValuePlain ?? ext.textValueRich
-            const v = getTextFromAttributeValue(raw)
-            if (v) href = normalizeProductLinkHref(v)
-          }
-          if (href) acc.href = href
         } else if (matchBottomBannerAttr(slug, name, 'image') && a.fileValue?.url) {
           acc.image = toAbsoluteMediaUrl(a.fileValue.url) || a.fileValue.url
         } else if (matchBottomBannerAttr(slug, name, 'title')) {
-          const raw = (a as { textValuePlain?: string; textValueRich?: unknown }).textValuePlain ?? (a as { textValuePlain?: string; textValueRich?: unknown }).textValueRich
+          const raw =
+            (a as AttrLinkExt).textValuePlain ?? (a as AttrLinkExt).textValueRich
           const v = getTextFromAttributeValue(raw)
           if (v) acc.title = v
         } else if (matchBottomBannerAttr(slug, name, 'description')) {
-          const raw = (a as { textValuePlain?: string; textValueRich?: unknown }).textValuePlain ?? (a as { textValuePlain?: string; textValueRich?: unknown }).textValueRich
+          const raw =
+            (a as AttrLinkExt).textValuePlain ?? (a as AttrLinkExt).textValueRich
           const v = getTextFromAttributeValue(raw)
           if (v) acc.description = v
         }
         return acc
       },
-      { image: '', title: '', description: '', href: '' } as {
+      {
+        image: '',
+        title: '',
+        description: '',
+        hrefBanner: '',
+        hrefProduct: '',
+        hrefAroma: '',
+        hrefCategory: '',
+      } as {
         image: string
         title: string
         description: string
-        href: string
-      }
+        hrefBanner: string
+        hrefProduct: string
+        hrefAroma: string
+        hrefCategory: string
+      },
     )
-    // Заголовок и описание из атрибутов; если пусто — из полей страницы (title, content)
     const pageTitle = (node.title ?? '').trim()
     const pageContent = getTextFromAttributeValue(node.content)
+    const href =
+      attrs.hrefBanner ||
+      attrs.hrefProduct ||
+      attrs.hrefAroma ||
+      attrs.hrefCategory ||
+      ''
     return {
       num,
       image: attrs.image,
       title: attrs.title || pageTitle,
       description: attrs.description || pageContent,
-      href: attrs.href,
+      href,
     }
   })
 

@@ -22,7 +22,7 @@ export default function HistoryLine() {
               className="w-[32px] h-[32px] sm:w-[40px] sm:h-[40px] md:w-[49px] md:h-[49px] flex-shrink-0"
             />
             <h6 className="text-[16px] sm:text-[28px] md:text-[32px] lg:text-[48px] font-semibold select-none text-white leading-[1.2] lg:leading-[52px]">
-              История создания бренда с 1 дня
+              История создания бренда с первого дня
             </h6>
             <div className="hidden sm:flex w-[40px] h-[40px] md:w-[49px] md:h-[49px] rounded-full bg-white/50 backdrop-blur-[10px] items-center justify-center flex-shrink-0">
               <ArrowUpRight className="w-[16px] h-[16px] md:w-[20px] md:h-[20px] text-black" strokeWidth={1.5} />

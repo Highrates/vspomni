@@ -26,7 +26,7 @@ interface HeroSlide {
   badgeImage: string
   title: string
   text: string
-  /** С плашки: атрибут ssylka-na-tovar и т.п. */
+  /** С плашки: товар / аромат / категория */
   href?: string
 }
 
