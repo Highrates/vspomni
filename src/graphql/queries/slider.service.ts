@@ -20,6 +20,16 @@ export interface SliderAssignedAttribute {
     url: string
   }
   textValue?: string
+  textValuePlain?: string
+  textValueRich?: unknown
+  linkProduct?: { slug?: string; category?: { slug?: string } | null } | null
+  linkProducts?: { slug?: string; category?: { slug?: string } | null }[]
+  linkPage?: { slug?: string } | null
+  linkPages?: { slug?: string }[]
+  linkCategory?: { slug?: string } | null
+  linkCategories?: { slug?: string }[]
+  linkCollection?: { slug?: string; name?: string } | null
+  linkCollections?: { slug?: string; name?: string }[]
 }
 
 export interface SliderPageNode {
@@ -62,6 +72,8 @@ export interface SliderItem {
   image: string
   title?: string
   text?: string
+  /** Ссылка большого баннера из атрибута «ссылка для N слайдера» */
+  href?: string
 }
 
 /** Тип страницы Hero-слайдер (общий для десктопа и мобилки; различаем по slug страницы) */
@@ -106,17 +118,7 @@ export async function getSlider(): Promise<SliderItem[]> {
       pages(first: $first, where: { pageType: { eq: $pageTypeId } }) {
         edges {
           node {
-            id
-            slug
-            title
-            publishedAt
-            isPublished
-            content
-            assignedAttributes {
-              attribute { id slug name }
-              ... on AssignedFileAttribute { fileValue: value { url } }
-              ... on AssignedTextAttribute { textValue: value }
-            }
+            ${SLIDER_PAGE_ATTRS_QUERY}
           }
         }
       }
@@ -145,46 +147,191 @@ const SLIDER_PAGE_ATTRS_QUERY = `
       fileValue: value { url }
     }
     ... on AssignedTextAttribute {
-      textValue: value
+      textValueRich: value
+    }
+    ... on AssignedPlainTextAttribute {
+      textValuePlain: value
+    }
+    ... on AssignedSingleProductReferenceAttribute {
+      linkProduct: value {
+        slug
+        category { slug }
+      }
+    }
+    ... on AssignedMultiProductReferenceAttribute {
+      linkProducts: value(limit: 1) {
+        slug
+        category { slug }
+      }
+    }
+    ... on AssignedSinglePageReferenceAttribute {
+      linkPage: value { slug }
+    }
+    ... on AssignedMultiPageReferenceAttribute {
+      linkPages: value(limit: 1) { slug }
+    }
+    ... on AssignedSingleCategoryReferenceAttribute {
+      linkCategory: value { slug }
+    }
+    ... on AssignedMultiCategoryReferenceAttribute {
+      linkCategories: value(limit: 1) { slug }
+    }
+    ... on AssignedSingleCollectionReferenceAttribute {
+      linkCollection: value { slug name }
+    }
+    ... on AssignedMultiCollectionReferenceAttribute {
+      linkCollections: value(limit: 1) { slug name }
     }
   }
 `
 
+/** Коллекция Saleor → путь на сайте */
+function hrefFromCollection(slug?: string | null, name?: string | null): string {
+  const s = (slug || '').toLowerCase()
+  const n = (name || '').toLowerCase()
+  if (s.includes('populiar') || n.includes('диффузор')) return '/category/diffuzory'
+  if (n.includes('парфюм') || s.includes('parfum')) {
+    return '/category/iarkaia-i-stilnaia-upakovka'
+  }
+  if (n.includes('саше') || s.includes('sashe') || s.includes('sache')) {
+    return '/category/aromasashe'
+  }
+  if (n.includes('пакет') || s.includes('paket')) {
+    return '/category/podarochnye-pakety'
+  }
+  return '/catalog'
+}
+
+function resolveSliderLinkHref(attr: SliderAssignedAttribute): string {
+  const product = attr.linkProduct ?? attr.linkProducts?.[0]
+  if (product?.slug) {
+    const cat = product.category?.slug?.trim()
+    if (cat) {
+      return `/category/${encodeURIComponent(cat)}/${encodeURIComponent(product.slug)}`
+    }
+    return `/product/${encodeURIComponent(product.slug)}`
+  }
+
+  const category = attr.linkCategory ?? attr.linkCategories?.[0]
+  if (category?.slug) {
+    return `/category/${encodeURIComponent(category.slug)}`
+  }
+
+  const page = attr.linkPage ?? attr.linkPages?.[0]
+  if (page?.slug) {
+    return `/catalog/aroma/${encodeURIComponent(page.slug)}`
+  }
+
+  const collection = attr.linkCollection ?? attr.linkCollections?.[0]
+  if (collection?.slug || collection?.name) {
+    return hrefFromCollection(collection.slug, collection.name)
+  }
+
+  const raw =
+    (typeof attr.textValuePlain === 'string' && attr.textValuePlain.trim()) ||
+    (typeof attr.textValue === 'string' && attr.textValue.trim()) ||
+    ''
+  if (!raw) return ''
+  if (/^https?:\/\//i.test(raw)) return raw
+  if (raw.startsWith('/')) return raw
+  return `/${encodeURIComponent(raw)}`
+}
+
+/** Номер из slug/name: kartinka-3 / ssilka-1 / «ссылка для 2 слайдера» */
+function attrIndexFromSlugOrName(slug: string, name: string): number | null {
+  const s = (slug || '').toLowerCase()
+  const n = (name || '').toLowerCase()
+  const fromSlug = s.match(/(\d+)/)
+  if (fromSlug) return parseInt(fromSlug[1], 10)
+  const fromName = n.match(/(\d+)/)
+  if (fromName) return parseInt(fromName[1], 10)
+  return null
+}
+
+function isSliderImageAttr(slug: string, name: string): boolean {
+  const s = (slug || '').toLowerCase()
+  const n = (name || '').toLowerCase()
+  return (
+    s.includes('kartinka') ||
+    s.includes('image') ||
+    s.includes('картинка') ||
+    s.includes('photo') ||
+    s.includes('фото') ||
+    n.includes('картинка') ||
+    n.includes('image')
+  )
+}
+
+/** Атрибут «ссылка для N слайдера» / ssilka-N (не нижний банер) */
+function isSliderLinkAttr(slug: string, name: string): boolean {
+  const s = (slug || '').toLowerCase()
+  const n = (name || '').toLowerCase()
+  if (s.includes('nizhnego') || s.includes('nizhni') || n.includes('нижн')) {
+    return false
+  }
+  if (
+    s.startsWith('ssilka-') ||
+    s.startsWith('ssylka-') ||
+    s.includes('ssilka') ||
+    (s.includes('ssylka') && s.match(/\d+/))
+  ) {
+    return true
+  }
+  return n.includes('ссылка') && (n.includes('слайд') || n.includes('slider'))
+}
+
 function parseSliderItemsFromPage(node: SliderPageNode): SliderItem[] {
-  const sliders: SliderItem[] = []
-  const imageAttributes = (node.assignedAttributes || [])
+  const attrs = node.assignedAttributes || []
+
+  const imageAttrs = attrs
     .filter((attr) => {
-      const slug = (attr.attribute?.slug || '').toLowerCase()
-      const name = (attr.attribute?.name || '').toLowerCase()
-      return (
-        slug.includes('kartinka') ||
-        slug.includes('image') ||
-        slug.includes('картинка') ||
-        slug.includes('photo') ||
-        slug.includes('фото') ||
-        name.includes('картинка') ||
-        name.includes('image')
-      )
+      const slug = attr.attribute?.slug || ''
+      const name = attr.attribute?.name || ''
+      return isSliderImageAttr(slug, name) && Boolean(attr.fileValue?.url)
     })
     .sort((a, b) => {
-      const aSlug = (a.attribute?.slug || '').toLowerCase()
-      const bSlug = (b.attribute?.slug || '').toLowerCase()
-      const aNum = parseInt(aSlug.match(/\d+/)?.[0] || '0')
-      const bNum = parseInt(bSlug.match(/\d+/)?.[0] || '0')
+      const aNum =
+        attrIndexFromSlugOrName(
+          a.attribute?.slug || '',
+          a.attribute?.name || '',
+        ) ?? 0
+      const bNum =
+        attrIndexFromSlugOrName(
+          b.attribute?.slug || '',
+          b.attribute?.name || '',
+        ) ?? 0
       return aNum - bNum
     })
 
-  imageAttributes.forEach((attr, index) => {
+  const hrefByIndex = new Map<number, string>()
+  for (const attr of attrs) {
+    const slug = attr.attribute?.slug || ''
+    const name = attr.attribute?.name || ''
+    if (!isSliderLinkAttr(slug, name)) continue
+    const idx = attrIndexFromSlugOrName(slug, name)
+    if (idx == null) continue
+    const href = resolveSliderLinkHref(attr)
+    if (href) hrefByIndex.set(idx, href)
+  }
+
+  const sliders: SliderItem[] = []
+  imageAttrs.forEach((attr, index) => {
     const raw = attr.fileValue?.url
     const imageUrl = toAbsoluteMediaUrl(raw) || raw
-    if (imageUrl) {
-      sliders.push({
-        id: `${node.id}-${index}`,
-        image: imageUrl,
-        title: node.title,
-        text: node.content || '',
-      })
-    }
+    if (!imageUrl) return
+    const imgIndex =
+      attrIndexFromSlugOrName(
+        attr.attribute?.slug || '',
+        attr.attribute?.name || '',
+      ) ?? index + 1
+    const href = hrefByIndex.get(imgIndex) || ''
+    sliders.push({
+      id: `${node.id}-${imgIndex}`,
+      image: imageUrl,
+      title: node.title,
+      text: node.content || '',
+      ...(href ? { href } : {}),
+    })
   })
   return sliders
 }

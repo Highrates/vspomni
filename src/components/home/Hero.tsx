@@ -8,7 +8,7 @@ import 'swiper/css/navigation'
 import 'swiper/css/effect-fade'
 
 import { motion } from 'framer-motion'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import {
   getSlider,
@@ -26,8 +26,10 @@ interface HeroSlide {
   badgeImage: string
   title: string
   text: string
-  /** С плашки: товар / аромат / категория */
+  /** Ссылка нижней плашки */
   href?: string
+  /** Ссылка большого баннера (картинка слайда) */
+  slideHref?: string
 }
 
 /** Ссылка по клику на нижнюю плашку Hero («Попробуй новинку?» и т.п.) */
@@ -62,7 +64,8 @@ function apiSlidesToHero(
   return apiSlides.map((slide, i) => {
     const def = defaultSlides[i % defaultSlides.length]
     const banner = bottomBanners[i]
-    const href = banner?.href?.trim()
+    const badgeHref = banner?.href?.trim()
+    const slideHref = slide.href?.trim()
     return {
       id: slide.id,
       image: slide.image || def.image,
@@ -70,7 +73,8 @@ function apiSlidesToHero(
       badgeImage: banner?.image || def.badgeImage,
       title: (banner?.title && banner.title.trim()) ? banner.title : def.title,
       text: (banner?.description && banner.description.trim()) ? banner.description : def.text,
-      ...(href ? { href } : {}),
+      ...(badgeHref ? { href: badgeHref } : {}),
+      ...(slideHref ? { slideHref } : {}),
     }
   })
 }
@@ -151,6 +155,37 @@ function HeroBottomBadge({ slide }: { slide: HeroSlide }) {
   )
 }
 
+function HeroSlideLink({
+  href,
+  className,
+  ariaLabel,
+  children,
+}: {
+  href: string
+  className?: string
+  ariaLabel: string
+  children: ReactNode
+}) {
+  if (/^https?:\/\//i.test(href)) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={className}
+        aria-label={ariaLabel}
+      >
+        {children}
+      </a>
+    )
+  }
+  return (
+    <Link href={href} className={className} aria-label={ariaLabel}>
+      {children}
+    </Link>
+  )
+}
+
 function HeroSwiper({
   slides,
   paginationEnabled,
@@ -187,25 +222,41 @@ function HeroSwiper({
       preventClicksPropagation={false}
       className={className}
     >
-      {slides.map((slide) => (
-        <SwiperSlide key={slide.id}>
-          <div className="relative w-full h-full min-h-full overflow-hidden rounded-[12px] sm:rounded-md md:rounded-[20px] lg:rounded-lg">
-            <img
-              src={slide.image || fallbackImg}
-              alt={slide.title}
-              className={imgClass}
-              style={imagePosition === 'top' ? { objectPosition: 'top' } : undefined}
-            />
-            {/* Блок внизу — всегда из defaultSlides (badgeImage, title, text) */}
-            <div className="absolute inset-0 flex">
-              <div className="relative lg:flex-1 w-full h-full items-center">
-                <HeroBottomBadge slide={slide} />
+      {slides.map((slide) => {
+        const slideHref = slide.slideHref?.trim()
+        const imageEl = (
+          <img
+            src={slide.image || fallbackImg}
+            alt={slide.title}
+            className={imgClass}
+            style={imagePosition === 'top' ? { objectPosition: 'top' } : undefined}
+          />
+        )
+        return (
+          <SwiperSlide key={slide.id}>
+            <div className="relative w-full h-full min-h-full overflow-hidden rounded-[12px] sm:rounded-md md:rounded-[20px] lg:rounded-lg">
+              {slideHref ? (
+                <HeroSlideLink
+                  href={slideHref}
+                  className="absolute inset-0 z-0 block cursor-pointer"
+                  ariaLabel={`${slide.title}: перейти`}
+                >
+                  {imageEl}
+                </HeroSlideLink>
+              ) : (
+                imageEl
+              )}
+              {/* Нижняя плашка поверх большого баннера */}
+              <div className="absolute inset-0 z-10 flex pointer-events-none">
+                <div className="relative lg:flex-1 w-full h-full items-center pointer-events-auto">
+                  <HeroBottomBadge slide={slide} />
+                </div>
+                <div className="flex-1 pointer-events-none" />
               </div>
-              <div className="flex-1"></div>
             </div>
-          </div>
-        </SwiperSlide>
-      ))}
+          </SwiperSlide>
+        )
+      })}
     </Swiper>
   )
 }

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Onest } from 'next/font/google'
 import './globals.css'
+import YandexMetrika from '@/components/analytics/YandexMetrika'
 import ClientChrome from '@/components/layout/ClientChrome'
 
 const onest = Onest({
@@ -31,6 +32,7 @@ export default function RootLayout({
   return (
     <html lang="ru" className={onest.variable}>
       <body className="bg-white text-black">
+        <YandexMetrika />
         <ClientChrome>{children}</ClientChrome>
       </body>
     </html>

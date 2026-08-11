@@ -72,6 +72,7 @@ export default function OrderSummary() {
         totalItems={totalItems}
         shipping={shippingPrice}
         shippingLoading={shippingLoading}
+        shippingCarrier={shippingCarrier ?? null}
         discountType={discountType}
       />
     </section>
