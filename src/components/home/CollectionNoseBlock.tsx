@@ -6,11 +6,8 @@ import { ProductCardItem } from '@/types/product'
 import { getProductsByCollectionId } from '@/graphql/queries/product.service'
 import { interleaveProductsByCategoryAndAroma } from '@/lib/product/interleaveProducts'
 
-const COLLECTION_NOSE_ID = 'Q29sbGVjdGlvbjo1' // Ваши носовые сосочки будут в восторге
-const TITLE = 'Ваши носовые сосочки будут в восторге'
-/** Берём запас, чтобы хватило разных категорий/ароматов после чередования */
-const FETCH_LIMIT = 48
-const DISPLAY_LIMIT = 12
+const COLLECTION_NOSE_ID = 'Q29sbGVjdGlvbjo1' // Ваши вкусовые сосочки будут в восторге
+const TITLE = 'Ваши вкусовые сосочки будут в восторге'
 
 export default function CollectionNoseBlock() {
   const [products, setProducts] = useState<ProductCardItem[]>([])
@@ -21,13 +18,11 @@ export default function CollectionNoseBlock() {
     setMounted(true)
     const fetchProducts = async () => {
       try {
-        const data = await getProductsByCollectionId(
-          COLLECTION_NOSE_ID,
-          FETCH_LIMIT,
-        )
+        // Вся коллекция из дашборда (без усечения до 12)
+        const data = await getProductsByCollectionId(COLLECTION_NOSE_ID)
         if (data && data.length > 0) {
           setProducts(
-            interleaveProductsByCategoryAndAroma(data, DISPLAY_LIMIT),
+            interleaveProductsByCategoryAndAroma(data, data.length),
           )
         }
       } catch (error) {

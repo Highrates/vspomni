@@ -1052,56 +1052,109 @@ export async function getChoiceProducts(): Promise<StarChoiceItem[]> {
     .filter((item): item is StarChoiceItem => item != null)
 }
 
-/** Товары коллекции по ID (коллекция 5 — «Ваши носовые сосочки будут в восторге») */
+/** Товары коллекции по ID (коллекция 5 — «Ваши вкусовые сосочки будут в восторге») */
 const COLLECTION_NOSE_ID = 'Q29sbGVjdGlvbjo1'
 
-export async function getProductsByCollectionId(
-  collectionId: string = COLLECTION_NOSE_ID,
-  first: number = 12,
-): Promise<ProductCardItem[]> {
-  const query = `
-    query getProductsByCollection($channel: String!, $collectionId: ID!, $first: Int!) {
-      products(first: $first, channel: $channel, where: { collection: { eq: $collectionId } }) {
-        edges {
-          node {
-            id
-            name
-            description
-            slug
-            rating
-            thumbnail { url alt }
-            media { id alt url }
-            collections { id name slug }
-            category { slug }
-            productVariants(first: 12) {
-              edges {
-                node {
-                  id
-                  name
-                  sku
-                  pricing {
-                    price { gross { currency amount } }
-                    priceUndiscounted { gross { currency amount } }
-                  }
+const PRODUCTS_BY_COLLECTION_QUERY = `
+  query getProductsByCollection(
+    $channel: String!
+    $collectionId: ID!
+    $first: Int!
+    $after: String
+  ) {
+    products(
+      first: $first
+      after: $after
+      channel: $channel
+      where: { collection: { eq: $collectionId } }
+    ) {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      edges {
+        node {
+          id
+          name
+          description
+          slug
+          rating
+          thumbnail { url alt }
+          media { id alt url }
+          collections { id name slug }
+          category { slug }
+          productVariants(first: 12) {
+            edges {
+              node {
+                id
+                name
+                sku
+                pricing {
+                  price { gross { currency amount } }
+                  priceUndiscounted { gross { currency amount } }
                 }
               }
             }
-            attributes {
-              attribute { id slug name }
-              values { name slug value }
-            }
+          }
+          attributes {
+            attribute { id slug name }
+            values { name slug value }
           }
         }
       }
     }
-  `
-  const variables = { channel: CHANNEL, collectionId, first }
-  const data = await graphqlRequest<BestSellersResponse>(query, variables)
-  const nodes = data.products.edges.map((edge: any) => edge.node)
-  const variantIds = nodes.map((node: any) => node.productVariants.edges[0]?.node.id).filter(Boolean)
+  }
+`
+
+/**
+ * Все товары коллекции (с пагинацией).
+ * @param first — устаревший лимит; если не передан, тянем всю коллекцию.
+ */
+export async function getProductsByCollectionId(
+  collectionId: string = COLLECTION_NOSE_ID,
+  first?: number,
+): Promise<ProductCardItem[]> {
+  const allNodes: any[] = []
+  let after: string | undefined
+  let safety = 0
+  const pageSize = 100
+  const hardCap = typeof first === 'number' && first > 0 ? first : Number.POSITIVE_INFINITY
+
+  while (safety < 20 && allNodes.length < hardCap) {
+    safety += 1
+    const data = await graphqlRequest<{
+      products: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null }
+        edges: { node: any }[]
+      }
+    }>(PRODUCTS_BY_COLLECTION_QUERY, {
+      channel: CHANNEL,
+      collectionId,
+      first: Math.min(pageSize, Number.isFinite(hardCap) ? hardCap - allNodes.length : pageSize),
+      after: after ?? null,
+    })
+
+    const edges = data.products?.edges ?? []
+    for (const edge of edges) {
+      if (edge?.node) allNodes.push(edge.node)
+      if (allNodes.length >= hardCap) break
+    }
+
+    const pageInfo = data.products?.pageInfo
+    if (!pageInfo?.hasNextPage || !edges.length || allNodes.length >= hardCap) break
+    after = pageInfo.endCursor ?? undefined
+    if (!after) break
+  }
+
+  const nodes = Number.isFinite(hardCap) ? allNodes.slice(0, hardCap) : allNodes
+  const variantIds = nodes
+    .map((node: any) => node.productVariants?.edges?.[0]?.node?.id)
+    .filter(Boolean)
   const discounts = await getCatalogDiscounts(variantIds)
   return filterValidProductCards(
-    nodes.map((node: any) => mapNodeToProductCard(node, discounts)),
+    nodes
+      .filter((node: any) => node.productVariants?.edges?.[0]?.node)
+      .map((node: any) => mapNodeToProductCard(node, discounts)),
   )
 }
 
