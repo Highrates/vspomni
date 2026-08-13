@@ -1,11 +1,13 @@
 /**
  * 301-редиректы при смене slug категории в Saleor.
- * После правки идентификатора в админке добавьте сюда пару oldSlug → newSlug.
+ * После правки идентификатора в админке добавьте сюда пару oldSlug → newSlug
+ * (тот, что реально лежит в Saleor сейчас — destination).
  *
- * Saleor: Категории → «Парфюм для дома» → Идентификатор → parfium-dlia-doma
+ * «Парфюм для дома»: в CMS slug всё ещё iarkaia-i-stilnaia-upakovka.
+ * Ранее ошибочно редиректили на parfium-dlia-doma (категории нет → пустая страница).
  */
 export const CATEGORY_SLUG_REDIRECTS: Record<string, string> = {
-  'iarkaia-i-stilnaia-upakovka': 'parfium-dlia-doma',
+  'parfium-dlia-doma': 'iarkaia-i-stilnaia-upakovka',
 }
 
 export function resolveCategorySlugRedirect(slug: string): string | null {

@@ -31,7 +31,12 @@ export const loadCategoryPage = cache(async (
     fetchCategoryProductsSafe(slug),
   ])
 
-  const name = meta?.name?.trim() || slug.replace(/-/g, ' ') || 'Категория'
+  // Нет категории в Saleor — не подставляем латиницу из slug
+  if (!meta?.name?.trim()) {
+    return null
+  }
+
+  const name = meta.name.trim()
   const nameLower = name.toLowerCase()
 
   const hideAromas =
