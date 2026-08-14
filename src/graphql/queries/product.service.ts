@@ -1372,14 +1372,21 @@ export async function getProductsByCategorySlug(categorySlug: string): Promise<a
 
   const data = await graphqlRequest<ProductsByCategorySlugResponse>(query, variables)
 
+  // Категории нет в Saleor (неверный/устаревший slug) — не падаем на SSR
+  if (!data?.category?.products?.edges) {
+    return []
+  }
+
   const nodes = data.category.products.edges.map((edge: any) => edge.node)
-  const variantIds = nodes.map(
-    (node: any) => node.productVariants.edges[0].node.id as string,
-  )
+  const variantIds = nodes
+    .map((node: any) => node.productVariants?.edges?.[0]?.node?.id as string | undefined)
+    .filter(Boolean) as string[]
   const discounts = await getCatalogDiscounts(variantIds)
 
-  const result = nodes.map((node: any) =>
-    mapNodeToProductCard(node, discounts, { categorySlug }),
-  )
+  const result = nodes
+    .filter((node: any) => node.productVariants?.edges?.[0]?.node)
+    .map((node: any) =>
+      mapNodeToProductCard(node, discounts, { categorySlug }),
+    )
   return filterValidProductCards(result)
 }
