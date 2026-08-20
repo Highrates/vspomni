@@ -1,16 +1,19 @@
+/** Чтение env в runtime (process.env['KEY']), чтобы не зашивалось при build. */
+function readEnv(key: string): string | undefined {
+  const v = process.env[key]
+  return typeof v === 'string' && v.trim() ? v.trim() : undefined
+}
+
 /**
  * Авторизация Ozon Seller API (https://api-seller.ozon.ru).
  * Поддерживает Client-Id + Api-Key или OAuth-токен частного приложения.
  */
 
-const OZON_API_BASE = (process.env.OZON_API_URL || 'https://api-seller.ozon.ru').replace(
-  /\/$/,
-  '',
-)
+const OZON_API_BASE = (readEnv('OZON_API_URL') || 'https://api-seller.ozon.ru').replace(/\/$/, '')
 const OZON_OAUTH_TOKEN_URL =
-  process.env.OZON_OAUTH_TOKEN_URL || `${OZON_API_BASE}/v1/oauth/token`
+  readEnv('OZON_OAUTH_TOKEN_URL') || `${OZON_API_BASE}/v1/oauth/token`
 const OZON_OAUTH_AUTHORIZE_URL =
-  process.env.OZON_OAUTH_AUTHORIZE_URL ||
+  readEnv('OZON_OAUTH_AUTHORIZE_URL') ||
   'https://seller.ozon.ru/app/appstore/oauth/authorize'
 
 const DEFAULT_OAUTH_SCOPE = [
@@ -28,34 +31,28 @@ let tokenExpiry = 0
 export type OzonAuthHeaders = Record<string, string>
 
 function getAppCredentials() {
-  const clientId = process.env.OZON_CLIENT_ID?.trim()
-  const clientSecret = process.env.OZON_CLIENT_SECRET?.trim()
-  return { clientId, clientSecret }
+  return {
+    clientId: readEnv('OZON_CLIENT_ID'),
+    clientSecret: readEnv('OZON_CLIENT_SECRET'),
+  }
 }
 
 function getSellerId(): string | undefined {
-  return (
-    process.env.OZON_SELLER_ID?.trim() ||
-    process.env.OZON_CLIENT_ID_NUM?.trim() ||
-    undefined
-  )
+  return readEnv('OZON_SELLER_ID') || readEnv('OZON_CLIENT_ID_NUM')
 }
 
 function getApiKey(): string | undefined {
-  return process.env.OZON_API_KEY?.trim()
+  return readEnv('OZON_API_KEY')
 }
 
 function getRefreshToken(): string | undefined {
-  return (
-    process.env.OZON_REFRESH_TOKEN?.trim() ||
-    process.env.OZON_OAUTH_REFRESH_TOKEN?.trim()
-  )
+  return readEnv('OZON_REFRESH_TOKEN') || readEnv('OZON_OAUTH_REFRESH_TOKEN')
 }
 
 function getRedirectUri(): string {
-  const env = process.env.OZON_OAUTH_REDIRECT_URI?.trim()
+  const env = readEnv('OZON_OAUTH_REDIRECT_URI')
   if (env) return env
-  const site = process.env.NEXT_PUBLIC_SALEOR_API_URL?.trim() || 'https://vspomni.store'
+  const site = readEnv('NEXT_PUBLIC_SALEOR_API_URL') || 'https://vspomni.store'
   return `${site.replace(/\/$/, '')}/api/ozon-delivery/oauth/callback`
 }
 
@@ -73,7 +70,7 @@ export function buildOzonAuthorizeUrl(state?: string): string {
   url.searchParams.set('access_type', 'offline')
   url.searchParams.set('client_id', clientId)
   url.searchParams.set('redirect_uri', getRedirectUri())
-  url.searchParams.set('scope', process.env.OZON_OAUTH_SCOPE?.trim() || DEFAULT_OAUTH_SCOPE)
+  url.searchParams.set('scope', readEnv('OZON_OAUTH_SCOPE') || DEFAULT_OAUTH_SCOPE)
   url.searchParams.set('state', state || crypto.randomUUID())
   return url.toString()
 }
@@ -128,12 +125,24 @@ export async function exchangeOzonAuthCode(code: string): Promise<TokenResponse>
   })
 }
 
+function missingCredentialsError(): string {
+  const sellerId = getSellerId()
+  const apiKey = getApiKey()
+  if (apiKey && !sellerId) {
+    return 'Ozon: задан OZON_API_KEY, но нет OZON_SELLER_ID=3814167 в .env'
+  }
+  if (sellerId && !apiKey) {
+    return 'Ozon: задан OZON_SELLER_ID, но нет OZON_API_KEY в .env (seller.ozon.ru → API ключи)'
+  }
+  return (
+    'Ozon: добавьте OZON_SELLER_ID=3814167 и OZON_API_KEY в .env, затем npm run build && pm2 restart vspomni-front --update-env'
+  )
+}
+
 async function refreshOzonAccessToken(): Promise<string> {
   const refreshToken = getRefreshToken()
   if (!refreshToken) {
-    throw new Error(
-      'Ozon OAuth не настроен: добавьте OZON_REFRESH_TOKEN в .env или пройдите авторизацию по ссылке /api/ozon-delivery?action=auth-url',
-    )
+    throw new Error(missingCredentialsError())
   }
 
   const data = await exchangeToken({
@@ -157,13 +166,17 @@ export async function getOzonAuthHeaders(): Promise<OzonAuthHeaders> {
     }
   }
 
-  const staticToken = process.env.OZON_ACCESS_TOKEN?.trim()
+  const staticToken = readEnv('OZON_ACCESS_TOKEN')
   if (staticToken) {
     return { Authorization: `Bearer ${staticToken}` }
   }
 
   if (cachedAccessToken && Date.now() < tokenExpiry - 60_000) {
     return { Authorization: `Bearer ${cachedAccessToken}` }
+  }
+
+  if (!getRefreshToken() && !readEnv('OZON_ACCESS_TOKEN')) {
+    throw new Error(missingCredentialsError())
   }
 
   const token = await refreshOzonAccessToken()
@@ -178,6 +191,6 @@ export function describeOzonAuthSetup(): string {
     return `Seller API: Client-Id=${sellerId} + Api-Key`
   }
   if (refresh) return 'Seller API: OAuth (refresh token)'
-  if (process.env.OZON_ACCESS_TOKEN?.trim()) return 'Seller API: OAuth (access token)'
+  if (readEnv('OZON_ACCESS_TOKEN')) return 'Seller API: OAuth (access token)'
   return 'не настроено — нужны OZON_SELLER_ID+OZON_API_KEY или OAuth'
 }
