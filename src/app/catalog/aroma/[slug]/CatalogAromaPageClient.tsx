@@ -17,15 +17,31 @@ import ProductCard from '@/components/home/ProductCard'
 import PageTransition from '@/components/layout/PageTransition'
 import { renderEditorJsContent } from '@/components/content/renderEditorJsContent'
 
-type Props = { slug: string }
+type Props = {
+  slug: string
+  /** SSR: сразу в HTML для краулеров и без скелетона */
+  initialAroma?: AllAromasItem | null
+  initialProducts?: ProductCardItem[]
+}
 
-export default function CatalogAromaPageClient({ slug }: Props) {
-  const [aroma, setAroma] = useState<AllAromasItem | null>(null)
-  const [products, setProducts] = useState<ProductCardItem[]>([])
-  const [loading, setLoading] = useState(true)
+export default function CatalogAromaPageClient({
+  slug,
+  initialAroma = null,
+  initialProducts = [],
+}: Props) {
+  const hasInitial = Boolean(initialAroma && initialAroma.slug === slug)
+  const [aroma, setAroma] = useState<AllAromasItem | null>(
+    hasInitial ? initialAroma : null,
+  )
+  const [products, setProducts] = useState<ProductCardItem[]>(
+    hasInitial ? initialProducts : [],
+  )
+  const [loading, setLoading] = useState(!hasInitial)
   const [notFound, setNotFound] = useState(false)
 
   useEffect(() => {
+    if (hasInitial) return
+
     let cancelled = false
     setLoading(true)
     setNotFound(false)
@@ -54,7 +70,7 @@ export default function CatalogAromaPageClient({ slug }: Props) {
     return () => {
       cancelled = true
     }
-  }, [slug])
+  }, [slug, hasInitial])
 
   const sectionClass =
     'mb-4 mt-4 sm:mb-6 sm:mt-6 md:mb-8 md:mt-8 lg:mb-10 lg:mt-10 px-2 py-2'

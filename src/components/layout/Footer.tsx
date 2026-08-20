@@ -99,7 +99,7 @@ export default function Footer() {
 
         <div className="text-left flex flex-col gap-3 md:gap-4 items-start min-w-0 shrink-0">
           <Link
-            href="https://t.me/vspomni_zabota"
+            href="https://t.me/vspomni_corp"
             target="_blank"
             rel="noopener noreferrer"
             className={footerNavLinkClass}
@@ -110,7 +110,7 @@ export default function Footer() {
             Корпоративные подарки
           </Link>
           <Link
-            href="https://t.me/kuskov5"
+            href="https://t.me/vspomni_corp"
             target="_blank"
             rel="noopener noreferrer"
             className={footerNavLinkClass}

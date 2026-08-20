@@ -23,6 +23,7 @@ import {
   NOTE_ATTRIBUTE_SLUGS,
   NOTE_LABELS,
 } from '@/lib/product/productPageContent'
+import { isSelectedVariantInStock } from '@/lib/product/stock'
 import { normalizeAromaLabel } from '@/lib/normalizeAromaLabel'
 import { ProductDetailNode } from '@/graphql/types/product.types'
 import { ProductCardItem, StarChoiceItem } from '@/types/product'
@@ -444,6 +445,7 @@ export default function ProductPageClient({
                     )?.node.name || null
                   }
                   variantId={selectedVariantId}
+                  inStock={isSelectedVariantInStock(product, selectedVariantId)}
                 />
               </div>
             </div>

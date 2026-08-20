@@ -2,6 +2,7 @@ import type { ProductDetailNode } from '@/graphql/types/product.types'
 import type { ProductCardItem } from '@/types/product'
 import { normalizeAromaLabel } from '@/lib/normalizeAromaLabel'
 import { variantShippingFromSaleorVariant } from '@/lib/saleorVariantShipping'
+import { isProductInStock } from '@/lib/product/stock'
 
 export function buildProductCartFormat(
   data: ProductDetailNode,
@@ -63,6 +64,7 @@ export function buildProductCartFormat(
     length: ship.length,
     width: ship.width,
     height: ship.height,
+    inStock: isProductInStock(data),
   }
 }
 

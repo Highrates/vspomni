@@ -20,6 +20,7 @@ import { normalizeAromaLabel } from '@/lib/normalizeAromaLabel'
 import type { ProductCardItem, StarChoiceItem } from '@/types/product'
 import { isValidSlug } from '@/lib/productPaths'
 import { variantShippingFromSaleorVariant } from '@/lib/saleorVariantShipping'
+import { isProductInStock } from '@/lib/product/stock'
 
 // -----------------------------------------------------------
 // A. Product Queries (products, product)
@@ -351,6 +352,17 @@ function mapNodeToProductCard(
   const categorySlug =
     (opts?.categorySlug ?? node.category?.slug)?.trim() || undefined
 
+  const stockKnown =
+    node.isAvailableForPurchase !== undefined ||
+    variant.quantityAvailable !== undefined ||
+    node.productVariants?.edges?.some(
+      (e: any) => e?.node?.quantityAvailable !== undefined,
+    )
+
+  const inStock = stockKnown
+    ? isProductInStock(node)
+    : true
+
   return {
     id: variant.id,
     name: node.name,
@@ -363,12 +375,14 @@ function mapNodeToProductCard(
     oldPrice,
     discountPercent,
     size: variant.name,
+    variantId: variant.id,
     group,
     aromas,
     weight,
     length,
     width,
     height,
+    inStock,
   }
 }
 
@@ -503,12 +517,14 @@ export async function getGreedProducts(): Promise<any> {
         category {
           slug
         }
+        isAvailableForPurchase
         productVariants(first: 12) {
           edges {
             node {
               id
               name
               sku
+              quantityAvailable
               weight {
                 value
               }
@@ -614,12 +630,14 @@ export async function getPopularProducts(): Promise<any> {
         category {
           slug
         }
+        isAvailableForPurchase
         productVariants(first: 12) {
           edges {
             node {
               id
               name
               sku
+              quantityAvailable
               weight {
                 value
               }
@@ -708,12 +726,14 @@ const CATALOG_PRODUCT_NODE_FRAGMENT = `
             category {
               slug
             }
+            isAvailableForPurchase
             productVariants(first: 12) {
               edges {
                 node {
                   id
                   name
                   sku
+                  quantityAvailable
                   pricing {
                     price {
                       gross {
@@ -891,12 +911,14 @@ const CHOICE_PRODUCTS_QUERY = `
           media {
             url
           }
+          isAvailableForPurchase
           productVariants(first: 12) {
             edges {
               node {
                 id
                 name
                 sku
+                quantityAvailable
                 weight {
                   value
                 }
@@ -1083,12 +1105,14 @@ const PRODUCTS_BY_COLLECTION_QUERY = `
           media { id alt url }
           collections { id name slug }
           category { slug }
+          isAvailableForPurchase
           productVariants(first: 12) {
             edges {
               node {
                 id
                 name
                 sku
+                quantityAvailable
                 pricing {
                   price { gross { currency amount } }
                   priceUndiscounted { gross { currency amount } }
@@ -1192,12 +1216,14 @@ export async function getProductsByAromaSlug(aromaSlug: string): Promise<Product
             media { id alt url }
             collections { id name slug }
             category { slug }
+            isAvailableForPurchase
             productVariants(first: 12) {
               edges {
                 node {
                   id
                   name
                   sku
+                  quantityAvailable
                   pricing {
                     price { gross { currency amount } }
                     priceUndiscounted { gross { currency amount } }
@@ -1253,12 +1279,14 @@ export async function getProductsByAromaValue(aromaName: string): Promise<Produc
             media { id alt url }
             collections { id name slug }
             category { slug }
+            isAvailableForPurchase
             productVariants(first: 12) {
               edges {
                 node {
                   id
                   name
                   sku
+                  quantityAvailable
                   pricing {
                     price { gross { currency amount } }
                     priceUndiscounted { gross { currency amount } }
@@ -1323,12 +1351,14 @@ export async function getProductsByCategorySlug(categorySlug: string): Promise<a
         category {
           slug
         }
+        isAvailableForPurchase
         productVariants(first: 12) {
           edges {
             node {
               id
               name
               sku
+              quantityAvailable
               weight {
                 value
               }

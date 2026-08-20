@@ -4,24 +4,32 @@ import { absoluteUrl, getPublicSiteUrl } from '@/lib/siteUrl'
 import { getAllCategory } from '@/graphql/queries/category.service'
 import { getAllArticles } from '@/graphql/queries/articles.service'
 import { getAllAromas } from '@/graphql/queries/allAromas.service'
-import { getProductsByCategorySlug } from '@/graphql/queries/product.service'
-import { categoryProductPath, isValidSlug } from '@/lib/productPaths'
+import { isValidSlug } from '@/lib/productPaths'
 
 const MAX_URLS = 49_000
 const PAGE_SIZE = 100
 
-function toLastMod(d?: string | null): Date {
-  if (!d) return new Date()
+/** Реальная дата из БД; без даты — не подставляем «сейчас» (ломает краулеров). */
+function toLastMod(d?: string | null): Date | undefined {
+  if (!d) return undefined
   const t = Date.parse(d)
-  return Number.isFinite(t) ? new Date(t) : new Date()
+  return Number.isFinite(t) ? new Date(t) : undefined
 }
 
-function productLocPath(productSlug: string, categorySlug?: string | null): string {
+function productLocPath(
+  productSlug: string,
+  categorySlug?: string | null,
+): string {
   const cat = categorySlug?.trim()
   if (cat) {
     return `/category/${encodeURIComponent(cat)}/${encodeURIComponent(productSlug)}`
   }
   return `/product/${encodeURIComponent(productSlug)}`
+}
+
+/** Заглушки вроде aromat-1 не отдаём в sitemap */
+function isPlaceholderAromaSlug(slug: string): boolean {
+  return /^aromat-\d+$/i.test(slug.trim())
 }
 
 interface SitemapProductsResponse {
@@ -77,14 +85,12 @@ async function fetchAllPublishedProductsForSitemap(): Promise<
 
   while (out.length < MAX_URLS && guard < maxPages) {
     guard += 1
-    const pageData: SitemapProductsResponse = await graphqlRequest<SitemapProductsResponse>(
-      query,
-      {
+    const pageData: SitemapProductsResponse =
+      await graphqlRequest<SitemapProductsResponse>(query, {
         channel: CHANNEL,
         first: PAGE_SIZE,
         after: after,
-      },
-    )
+      })
 
     const edges = pageData.products?.edges ?? []
     for (const e of edges) {
@@ -110,41 +116,30 @@ async function fetchAllPublishedProductsForSitemap(): Promise<
 export async function buildSitemapEntries(): Promise<MetadataRoute.Sitemap> {
   const base = getPublicSiteUrl()
   const entries: MetadataRoute.Sitemap = []
+  const seen = new Set<string>()
 
   const push = (path: string, lastModified?: Date) => {
     if (entries.length >= MAX_URLS) return
-    entries.push({
+    if (seen.has(path)) return
+    seen.add(path)
+    const entry: MetadataRoute.Sitemap[number] = {
       url: absoluteUrl(path),
-      lastModified: lastModified ?? new Date(),
-    })
+    }
+    if (lastModified) entry.lastModified = lastModified
+    entries.push(entry)
   }
 
-  push('/', new Date())
-
-  const staticPages: { path: string; lastModified?: Date }[] = [
-    { path: '/catalog' },
-    { path: '/news' },
-    { path: '/partners' },
-  ]
-  for (const p of staticPages) push(p.path, p.lastModified)
+  // Статика без lastmod — нет надёжной даты в БД
+  push('/')
+  push('/catalog')
+  push('/news')
+  push('/partners')
 
   try {
     const categories = await getAllCategory(100)
     for (const c of categories) {
       if (!c.slug) continue
       push(`/category/${encodeURIComponent(c.slug)}`)
-
-      try {
-        const products = await getProductsByCategorySlug(c.slug)
-        for (const product of products) {
-          if (entries.length >= MAX_URLS) break
-          if (!isValidSlug(product.slug)) continue
-          const path = categoryProductPath(c.slug, product.slug)
-          if (path) push(path)
-        }
-      } catch {
-        /* ignore category products */
-      }
     }
   } catch {
     /* ignore */
@@ -154,9 +149,8 @@ export async function buildSitemapEntries(): Promise<MetadataRoute.Sitemap> {
     const products = await fetchAllPublishedProductsForSitemap()
     for (const p of products) {
       if (entries.length >= MAX_URLS) break
-      if (!p.categorySlug) {
-        push(productLocPath(p.slug, null), toLastMod(p.updatedAt))
-      }
+      if (!isValidSlug(p.slug)) continue
+      push(productLocPath(p.slug, p.categorySlug), toLastMod(p.updatedAt))
     }
   } catch {
     /* ignore */
@@ -178,8 +172,18 @@ export async function buildSitemapEntries(): Promise<MetadataRoute.Sitemap> {
     const aromas = await getAllAromas()
     for (const ar of aromas) {
       if (!ar.slug) continue
+      if (isPlaceholderAromaSlug(ar.slug)) continue
       if (entries.length >= MAX_URLS) break
-      push(`/catalog/aroma/${encodeURIComponent(ar.slug)}`)
+      // Без контента и картинки — пустышка, не тратим crawl budget
+      const hasBody =
+        Boolean(ar.content?.trim()) ||
+        Boolean(ar.text?.trim()) ||
+        Boolean(ar.image?.trim())
+      if (!hasBody && !ar.title?.trim()) continue
+      push(
+        `/catalog/aroma/${encodeURIComponent(ar.slug)}`,
+        toLastMod(ar.publishedAt),
+      )
     }
   } catch {
     /* ignore */

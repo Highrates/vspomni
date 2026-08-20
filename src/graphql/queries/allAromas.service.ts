@@ -47,6 +47,7 @@ export interface AllAromasItem {
   image: string
   /** Поле content страницы Saleor (Editor.js и т.п.) */
   content?: string | null
+  publishedAt?: string | null
 }
 
 /** Заголовок как на /catalog/aroma/[slug]: title → text → slug */
@@ -158,6 +159,7 @@ export async function getAllAromas(): Promise<AllAromasItem[]> {
         text,
         image,
         content: node.content ?? null,
+        publishedAt: node.publishedAt ?? null,
       })
     })
 

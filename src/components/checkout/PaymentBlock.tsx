@@ -8,6 +8,11 @@ import { createCart } from '@/graphql/queries/cart.service'
 import { getSingleProduct } from '@/graphql/queries/product.service'
 import { toast } from 'react-toastify'
 import { isValidRuPhone } from '@/lib/ruPhone'
+import {
+  isProductInStock,
+  isSelectedVariantInStock,
+  isVariantSellable,
+} from '@/lib/product/stock'
 
 export default function PaymentBlock() {
   const [confirmationToken, setConfirmationToken] = useState<string | null>(null)
@@ -75,8 +80,8 @@ export default function PaymentBlock() {
             try {
               const productData = await getSingleProduct(item.product.slug)
 
-              // Если товар по каналу недоступен для покупки — блокируем оформление
-              if (productData && productData.isAvailableForPurchase === false) {
+              // Единый источник наличия (остаток + канал)
+              if (productData && !isProductInStock(productData)) {
                 throw new Error(
                   `Товар "${item.product.name}" закончился. ` +
                   `Пожалуйста, удалите его из корзины.`,
@@ -90,6 +95,12 @@ export default function PaymentBlock() {
                 )
 
                 if (matchingVariant) {
+                  if (!isVariantSellable(matchingVariant.node.quantityAvailable)) {
+                    throw new Error(
+                      `Товар "${item.product.name}" (${matchingVariant.node.name}) закончился. ` +
+                      `Пожалуйста, удалите его из корзины.`,
+                    )
+                  }
                   variantId = matchingVariant.node.id
                   const updatedItems = items.map((i: any) =>
                     i.id === item.id ? { ...i, variantId } : i
@@ -116,21 +127,15 @@ export default function PaymentBlock() {
             try {
               const productData = await getSingleProduct(item.product.slug)
 
-              // Повторный запрос: также проверяем общую доступность товара
-              if (productData && productData.isAvailableForPurchase === false) {
+              // Повторный запрос: единый источник наличия
+              if (
+                productData &&
+                !isSelectedVariantInStock(productData, variantId)
+              ) {
                 throw new Error(
                   `Товар "${item.product.name}" закончился. ` +
                   `Пожалуйста, удалите его из корзины.`,
                 )
-              }
-
-              if (productData?.productVariants?.edges) {
-                const variant = productData.productVariants.edges.find(
-                  (edge) => edge.node.id === variantId
-                )
-                // Здесь намеренно НЕ смотрим на quantityAvailable, полагаемся
-                // только на флаг доступности товара и нашу кастомную логику на бэкенде.
-                void variant
               }
             } catch (error: any) {
               if (error.message && error.message.includes('недоступен')) {

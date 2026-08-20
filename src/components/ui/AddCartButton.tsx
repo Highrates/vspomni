@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { Minus, Plus } from "lucide-react";
 import { useCartStore } from "@/stores/useCart";
@@ -10,9 +10,16 @@ interface AddCartButtonProps {
   product: ProductCardItem | null;
   size: string | null;
   variantId?: string | null;
+  /** false → кнопка «Нет в наличии» (единый источник с SEO) */
+  inStock?: boolean;
 }
 
-export default function AddCartButton({ product, size, variantId }: AddCartButtonProps) {
+export default function AddCartButton({
+  product,
+  size,
+  variantId,
+  inStock = true,
+}: AddCartButtonProps) {
   const addItem = useCartStore((state) => state.addItem);
   const increaseQuantity = useCartStore((state) => state.increaseQuantity);
   const decreaseQuantity = useCartStore((state) => state.decreaseQuantity);
@@ -26,9 +33,13 @@ export default function AddCartButton({ product, size, variantId }: AddCartButto
       lineId ? (s.items.find((item) => item.id === lineId)?.quantity ?? 0) : 0,
     );
 
-  const canAdd = Boolean(product && size);
+  const canAdd = Boolean(product && size && inStock);
 
   const handleAddFirst = () => {
+    if (!inStock) {
+      toast.error("Товара нет в наличии");
+      return;
+    }
     if (!product || !size) {
       toast.error("Пожалуйста, выберите размер перед добавлением в корзину.");
       return;
@@ -42,8 +53,21 @@ export default function AddCartButton({ product, size, variantId }: AddCartButto
   };
 
   const handleInc = () => {
+    if (!inStock) return;
     if (lineId) increaseQuantity(lineId);
   };
+
+  if (!inStock) {
+    return (
+      <button
+        type="button"
+        disabled
+        className="w-full bg-black/20 text-black/50 rounded-full py-3 text-base font-medium cursor-not-allowed select-none"
+      >
+        Нет в наличии
+      </button>
+    );
+  }
 
   if (canAdd && quantity > 0) {
     return (

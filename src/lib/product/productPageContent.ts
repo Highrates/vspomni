@@ -1,6 +1,7 @@
 import { decodeUnicode } from '@/lib/functions'
 import { normalizeAromaLabel } from '@/lib/normalizeAromaLabel'
 import type { ProductDetailNode } from '@/graphql/types/product.types'
+import { isProductInStock } from '@/lib/product/stock'
 
 export const NOTE_ATTRIBUTE_SLUGS = {
   basic: 'bazovye-noty',
@@ -118,8 +119,8 @@ export function extractProductSeoContent(
     aromas,
     price: firstVariant?.pricing?.price?.gross?.amount ?? null,
     currency: firstVariant?.pricing?.price?.gross?.currency ?? 'RUB',
-    // Как в чекауте: availability по isAvailableForPurchase, не по quantityAvailable.
-    inStock: Boolean(product.isAvailableForPurchase),
+    // Единый источник: isAvailableForPurchase + quantityAvailable (см. lib/product/stock).
+    inStock: isProductInStock(product),
     sku: firstVariant?.sku ?? null,
     imageUrls,
     categoryName: product.category?.name?.trim() || null,

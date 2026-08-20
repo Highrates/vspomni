@@ -75,6 +75,8 @@ export interface ProductCardItem {
   length?: number; // длина в мм
   width?: number; // ширина в мм
   height?: number; // высота в мм
+  /** Единый флаг наличия (остаток + канал); false → не добавлять в корзину */
+  inStock?: boolean
 }
 
 export interface StarChoiceItem {

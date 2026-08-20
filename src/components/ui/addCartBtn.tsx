@@ -25,10 +25,15 @@ export default function AddCartBtn({ product, size, variantId, mobileRow }: AddC
 
   const resolvedSize = size || product.size || '100 мл'
   const resolvedVariantId = variantId || product.variantId || undefined
+  const inStock = product.inStock !== false
 
   const handleAddFirst = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
+    if (!inStock) {
+      toast.error('Товара нет в наличии')
+      return
+    }
     addItem(product, 1, resolvedSize, resolvedVariantId)
     toast.success('Товар добавлен в корзину!')
   }
@@ -110,10 +115,11 @@ export default function AddCartBtn({ product, size, variantId, mobileRow }: AddC
       <button
         type="button"
         onClick={handleAddFirst}
-        className="w-full h-9 pl-3.5 pr-4 rounded-full bg-black text-white text-[12px] font-medium flex items-center justify-center gap-1.5 cursor-pointer select-none active:scale-[0.98] transition-transform"
+        disabled={!inStock}
+        className="w-full h-9 pl-3.5 pr-4 rounded-full bg-black text-white text-[12px] font-medium flex items-center justify-center gap-1.5 cursor-pointer select-none active:scale-[0.98] transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
       >
         <ShoppingBag className="w-4 h-4 text-white shrink-0" strokeWidth={1.8} aria-hidden />
-        В корзину
+        {inStock ? 'В корзину' : 'Нет в наличии'}
       </button>
     )
   }
@@ -122,9 +128,12 @@ export default function AddCartBtn({ product, size, variantId, mobileRow }: AddC
     <button
       type="button"
       onClick={handleAddFirst}
-      className="rounded-full bg-black w-[42px] h-[42px] flex items-center justify-center relative cursor-pointer select-none hover:scale-110 transition-transform duration-300 ease-out"
+      disabled={!inStock}
+      title={inStock ? 'Добавить в корзину' : 'Нет в наличии'}
+      aria-label={inStock ? 'Добавить в корзину' : 'Нет в наличии'}
+      className="rounded-full bg-black w-[42px] h-[42px] flex items-center justify-center relative cursor-pointer select-none hover:scale-110 transition-transform duration-300 ease-out disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100"
     >
-      <Image src="/shopping-bag.svg" alt="Добавить в корзину" width={22} height={22} />
+      <Image src="/shopping-bag.svg" alt="" width={22} height={22} />
     </button>
   )
 }
