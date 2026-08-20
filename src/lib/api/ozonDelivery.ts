@@ -12,7 +12,17 @@ async function post<T>(body: unknown): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  const data = await res.json()
+  const text = await res.text()
+  let data: unknown
+  try {
+    data = text ? JSON.parse(text) : {}
+  } catch {
+    throw new Error(
+      res.status === 404
+        ? 'API Ozon недоступен (404). На сервере nginx должен проксировать /api/ozon-delivery на Next.js.'
+        : `Ozon API: неверный ответ сервера (${res.status})`,
+    )
+  }
   if (!res.ok) {
     const msg = (data as { error?: string }).error || res.statusText
     throw new Error(msg)

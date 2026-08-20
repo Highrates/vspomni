@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { estimateOzonShipmentPackage } from '@/lib/ozonShipmentEstimate'
+import { orderedYandexPvzCityNames } from '@/lib/yandexCityGeo'
+import { estimateOzonDeliveryRub } from '@/lib/ozonTariffEstimate'
+import {
+  buildOzonAuthorizeUrl,
+  describeOzonAuthSetup,
+  getOzonApiBase,
+  getOzonAuthHeaders,
+} from '@/lib/ozonSellerAuth'
 import type { OzonPickupPoint } from '@/types/ozonDelivery'
-
-const OZON_API_BASE = (process.env.OZON_API_URL || 'https://xapi.ozon.ru').replace(/\/$/, '')
-const INTEGRATION_PREFIX = '/principal-integration-api/v1'
-const AUTH_PATH = '/principal-auth-api/connect/token'
 
 type ShipmentLineBody = {
   quantity: number
@@ -14,10 +17,6 @@ type ShipmentLineBody = {
   height_mm?: number
 }
 
-let cachedToken: string | null = null
-let tokenExpiry = 0
-let cachedFromPlaceId: string | null = null
-
 function json(data: unknown, status = 200) {
   return NextResponse.json(data, {
     status,
@@ -25,89 +24,51 @@ function json(data: unknown, status = 200) {
   })
 }
 
-function getCredentials() {
-  const clientId = process.env.OZON_CLIENT_ID?.trim()
-  const clientSecret = process.env.OZON_CLIENT_SECRET?.trim()
-  if (!clientId || !clientSecret) {
-    throw new Error(
-      'OZON_CLIENT_ID и OZON_CLIENT_SECRET не заданы. Добавьте ключи из ЛК Ozon Logistika.',
-    )
-  }
-  return { clientId, clientSecret }
-}
-
-async function getOzonToken(): Promise<string> {
-  if (cachedToken && Date.now() < tokenExpiry - 60_000) {
-    return cachedToken
-  }
-
-  const { clientId, clientSecret } = getCredentials()
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 20_000)
-
+async function geocodeCityCenter(cityName: string): Promise<{ lat: number; lon: number } | null> {
   try {
-    const res = await fetch(`${OZON_API_BASE}${AUTH_PATH}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials',
-        client_id: clientId,
-        client_secret: clientSecret,
-      }),
-      signal: controller.signal,
+    const url = new URL('https://nominatim.openstreetmap.org/search')
+    url.searchParams.set('q', `Россия, ${cityName}`)
+    url.searchParams.set('format', 'json')
+    url.searchParams.set('limit', '1')
+    const res = await fetch(url.toString(), {
+      headers: { 'User-Agent': 'VspomniStore/1.0' },
       cache: 'no-store',
     })
-
-    const text = await res.text()
-    let data: { access_token?: string; expires_in?: number; message?: string; error?: string }
-    try {
-      data = JSON.parse(text)
-    } catch {
-      throw new Error(`Ozon auth: неверный ответ (${res.status})`)
+    const data = (await res.json()) as Array<{ lat?: string; lon?: string }>
+    if (Array.isArray(data) && data[0]) {
+      const lat = parseFloat(data[0].lat || '')
+      const lon = parseFloat(data[0].lon || '')
+      if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat, lon }
     }
+  } catch {
+    // ignore
+  }
+  return null
+}
 
-    if (!res.ok || !data.access_token) {
-      throw new Error(
-        data.message || data.error || `Ozon auth failed (${res.status})`,
-      )
-    }
-
-    cachedToken = data.access_token
-    tokenExpiry = Date.now() + (data.expires_in ?? 3600) * 1000
-    return cachedToken
-  } finally {
-    clearTimeout(timeout)
+function cityViewport(
+  center: { lat: number; lon: number },
+  delta = 0.35,
+): Record<string, unknown> {
+  return {
+    left_bottom: { lat: center.lat - delta, long: center.lon - delta },
+    right_top: { lat: center.lat + delta, long: center.lon + delta },
   }
 }
 
-async function ozonRequest(
-  path: string,
-  options: {
-    method?: 'GET' | 'POST'
-    query?: Record<string, string | number | boolean | undefined>
-    body?: unknown
-  } = {},
-) {
-  const token = await getOzonToken()
-  const url = new URL(`${OZON_API_BASE}${path}`)
-  if (options.query) {
-    for (const [k, v] of Object.entries(options.query)) {
-      if (v !== undefined && v !== '') url.searchParams.set(k, String(v))
-    }
-  }
-
+async function ozonRequest(path: string, body: unknown = {}) {
+  const headers = await getOzonAuthHeaders()
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 25_000)
-
   try {
-    const res = await fetch(url.toString(), {
-      method: options.method || 'GET',
+    const res = await fetch(`${getOzonApiBase()}${path}`, {
+      method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
+        ...headers,
         Accept: 'application/json',
-        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        'Content-Type': 'application/json',
       },
-      body: options.body ? JSON.stringify(options.body) : undefined,
+      body: JSON.stringify(body ?? {}),
       signal: controller.signal,
       cache: 'no-store',
     })
@@ -131,187 +92,150 @@ function ozonErrorMessage(res: Response, data: Record<string, unknown>): string 
   const msg =
     (typeof data.message === 'string' && data.message) ||
     (typeof data.error === 'string' && data.error) ||
-    (typeof data.title === 'string' && data.title) ||
     ''
   if (res.status === 401 || res.status === 403) {
-    return 'Доступ к Ozon Logistika запрещён. Проверьте OZON_CLIENT_ID и OZON_CLIENT_SECRET.'
+    return `Доступ к Ozon Seller API запрещён (${describeOzonAuthSetup()}).`
   }
   return msg || `Ozon API error (${res.status})`
 }
 
-function asArray<T>(value: unknown): T[] {
-  if (Array.isArray(value)) return value as T[]
-  return []
-}
-
-function pickString(obj: Record<string, unknown>, ...keys: string[]): string {
-  for (const k of keys) {
-    const v = obj[k]
-    if (typeof v === 'string' && v.trim()) return v.trim()
+function formatWorkingHours(raw: unknown): string | undefined {
+  if (!Array.isArray(raw) || !raw.length) return undefined
+  const parts: string[] = []
+  for (const day of raw) {
+    if (!day || typeof day !== 'object') continue
+    const d = day as Record<string, unknown>
+    const date = typeof d.date === 'string' ? d.date.slice(0, 10) : ''
+    const periods = Array.isArray(d.periods) ? d.periods : []
+    const slots = periods
+      .map((p) => {
+        if (!p || typeof p !== 'object') return ''
+        const pr = p as Record<string, unknown>
+        const min = pr.min as Record<string, unknown> | undefined
+        const max = pr.max as Record<string, unknown> | undefined
+        const from = min ? `${min.hours ?? 0}:${String(min.minutes ?? 0).padStart(2, '0')}` : ''
+        const to = max ? `${max.hours ?? 0}:${String(max.minutes ?? 0).padStart(2, '0')}` : ''
+        return from && to ? `${from}-${to}` : ''
+      })
+      .filter(Boolean)
+    if (date && slots.length) parts.push(`${date}: ${slots.join(', ')}`)
+    else if (slots.length) parts.push(slots.join(', '))
   }
-  return ''
+  return parts.length ? parts.slice(0, 3).join('; ') : undefined
 }
 
-function normalizePickupPoint(raw: Record<string, unknown>): OzonPickupPoint | null {
-  const id = raw.id ?? raw.deliveryVariantId
-  if (id == null) return null
+function normalizePointInfo(
+  mapPointId: string,
+  method: Record<string, unknown>,
+): OzonPickupPoint | null {
+  const addressDetails =
+    (method.address_details as Record<string, unknown> | undefined) || {}
+  const coords = method.coordinates as Record<string, unknown> | undefined
+  const lat = typeof coords?.lat === 'number' ? coords.lat : undefined
+  const lon = typeof coords?.long === 'number' ? coords.long : undefined
 
-  const addressRaw =
-    (raw.address as Record<string, unknown> | undefined) ||
-    (raw.pickupPoint as Record<string, unknown> | undefined) ||
-    {}
-
-  const coordsRaw =
-    (raw.coordinates as Record<string, unknown> | undefined) ||
-    (raw.geoCoordinates as Record<string, unknown> | undefined) ||
-    (addressRaw.coordinates as Record<string, unknown> | undefined)
-
-  const lat =
-    typeof coordsRaw?.lat === 'number'
-      ? coordsRaw.lat
-      : typeof coordsRaw?.latitude === 'number'
-        ? coordsRaw.latitude
-        : undefined
-  const lon =
-    typeof coordsRaw?.lng === 'number'
-      ? coordsRaw.lng
-      : typeof coordsRaw?.longitude === 'number'
-        ? coordsRaw.longitude
-        : undefined
-
-  const city = pickString(addressRaw, 'city', 'settlement', 'locality')
-  const region = pickString(addressRaw, 'region', 'area')
-  const street = pickString(addressRaw, 'address', 'addressLine', 'street')
-  const postalCode = pickString(addressRaw, 'postalCode', 'postal_code', 'zip')
-
+  const city = typeof addressDetails.city === 'string' ? addressDetails.city : ''
+  const region = typeof addressDetails.region === 'string' ? addressDetails.region : ''
+  const street = typeof addressDetails.street === 'string' ? addressDetails.street : ''
+  const house = typeof addressDetails.house === 'string' ? addressDetails.house : ''
   const fullAddress =
-    pickString(addressRaw, 'fullAddress', 'full_address') ||
-    [city, street].filter(Boolean).join(', ')
+    (typeof method.address === 'string' && method.address) ||
+    [city, street, house].filter(Boolean).join(', ')
 
-  const type =
-    pickString(raw, 'objectTypeName', 'deliveryType', 'type') || 'PickPoint'
-
-  const workingHoursRaw = raw.workingHours ?? raw.working_hours
-  const workingHours =
-    typeof workingHoursRaw === 'string'
-      ? workingHoursRaw
-      : Array.isArray(workingHoursRaw)
-        ? workingHoursRaw
-            .map((w) => {
-              if (typeof w === 'string') return w
-              if (w && typeof w === 'object') {
-                const o = w as Record<string, unknown>
-                return [o.days, o.hours, o.from, o.to].filter(Boolean).join(' ')
-              }
-              return ''
-            })
-            .filter(Boolean)
-            .join('; ')
-        : undefined
+  const deliveryType = method.delivery_type as Record<string, unknown> | undefined
+  const typeName =
+    (typeof deliveryType?.name === 'string' && deliveryType.name) || 'PickPoint'
 
   return {
-    id: String(id),
-    name: pickString(raw, 'name', 'title') || fullAddress || `ПВЗ ${id}`,
-    type,
+    id: mapPointId,
+    name: (typeof method.name === 'string' && method.name) || fullAddress || `ПВЗ ${mapPointId}`,
+    type: typeName,
     address: {
       region,
       city,
       address: street || fullAddress,
-      postalCode,
       fullAddress,
     },
-    workingHours,
+    workingHours: formatWorkingHours(method.working_hours),
     coordinates:
-      lat != null && lon != null && Number.isFinite(lat) && Number.isFinite(lon)
-        ? { latitude: lat, longitude: lon }
-        : undefined,
+      lat != null && lon != null ? { latitude: lat, longitude: lon } : undefined,
   }
 }
 
-async function resolveFromPlaceId(): Promise<string> {
-  const envId = process.env.OZON_FROM_PLACE_ID?.trim()
-  if (envId) return envId
-  if (cachedFromPlaceId) return cachedFromPlaceId
+async function fetchMapPointIdsForCity(cityName: string): Promise<string[]> {
+  const center = await geocodeCityCenter(cityName)
+  if (!center) return []
 
-  const res = await ozonRequest(`${INTEGRATION_PREFIX}/delivery/from_places`)
+  const res = await ozonRequest('/v1/delivery/map', {
+    viewport: cityViewport(center),
+    zoom: 10,
+  })
   const data = await parseOzonJson(res)
   if (!res.ok) throw new Error(ozonErrorMessage(res, data))
 
-  const places = asArray<Record<string, unknown>>(data.data ?? data.Data ?? data)
-  const first = places[0]
-  const id = first?.id ?? first?.fromPlaceId
-  if (id == null) {
-    throw new Error(
-      'Ozon: не найден склад передачи отправлений (from_places). Укажите OZON_FROM_PLACE_ID в .env.',
-    )
-  }
-  cachedFromPlaceId = String(id)
-  return cachedFromPlaceId
-}
-
-function buildPackagesFromLines(
-  lines: ShipmentLineBody[] | undefined,
-  estimatedPrice: number,
-) {
-  if (lines?.length) {
-    return lines.map((l) => {
-      const qty = Math.max(1, Math.floor(l.quantity || 1))
-      const pkg = estimateOzonShipmentPackage([
-        {
-          quantity: qty,
-          weightKg: l.weight_kg,
-          lengthMm: l.length_mm,
-          widthMm: l.width_mm,
-          heightMm: l.height_mm,
-        },
-      ])
-      return {
-        count: 1,
-        dimensions: {
-          weight: pkg.totalWeightG,
-          length: pkg.lengthMm,
-          width: pkg.widthMm,
-          height: pkg.heightMm,
-        },
-        price: estimatedPrice,
-        estimatedPrice,
+  const clusters = Array.isArray(data.clusters) ? data.clusters : []
+  const ids = new Set<string>()
+  for (const c of clusters) {
+    if (!c || typeof c !== 'object') continue
+    const cluster = c as Record<string, unknown>
+    const mapPointIds = cluster.map_point_ids
+    if (Array.isArray(mapPointIds)) {
+      for (const id of mapPointIds) {
+        if (id != null && String(id).trim()) ids.add(String(id))
       }
-    })
-  }
-
-  return [
-    {
-      count: 1,
-      dimensions: { weight: 300, length: 200, width: 200, height: 100 },
-      price: estimatedPrice,
-      estimatedPrice,
-    },
-  ]
-}
-
-function extractAmount(data: Record<string, unknown>): number {
-  const candidates = [
-    data.amount,
-    data.Amount,
-    (data.data as Record<string, unknown> | undefined)?.amount,
-    (data.result as Record<string, unknown> | undefined)?.amount,
-  ]
-  for (const c of candidates) {
-    if (typeof c === 'number' && Number.isFinite(c)) return c
-    if (typeof c === 'string') {
-      const n = parseFloat(c.replace(/\s/g, '').replace(',', '.'))
-      if (Number.isFinite(n)) return n
     }
   }
-  return 0
+  return [...ids]
 }
 
-function extractDays(data: Record<string, unknown>): number | undefined {
-  const candidates = [data.days, data.Days, (data.data as Record<string, unknown>)?.days]
-  for (const c of candidates) {
-    if (typeof c === 'number' && Number.isFinite(c)) return c
+async function fetchPickupPointsByIds(mapPointIds: string[]): Promise<OzonPickupPoint[]> {
+  if (!mapPointIds.length) return []
+
+  const res = await ozonRequest('/v1/delivery/point/info', {
+    map_point_ids: mapPointIds.slice(0, 200),
+  })
+  const data = await parseOzonJson(res)
+  if (!res.ok) throw new Error(ozonErrorMessage(res, data))
+
+  const rawPoints = Array.isArray(data.points) ? data.points : []
+  const result: OzonPickupPoint[] = []
+  for (const item of rawPoints) {
+    if (!item || typeof item !== 'object') continue
+    const row = item as Record<string, unknown>
+    if (row.enabled === false) continue
+    const method = row.delivery_method as Record<string, unknown> | undefined
+    if (!method) continue
+    const mapPointId = method.map_point_id
+    if (mapPointId == null) continue
+    const point = normalizePointInfo(String(mapPointId), method)
+    if (point) result.push(point)
   }
-  return undefined
+  return result
+}
+
+function shipmentLinesFromBody(body: Record<string, unknown>): ShipmentLineBody[] | undefined {
+  const lines = body.shipment_lines
+  if (!Array.isArray(lines)) return undefined
+  return lines as ShipmentLineBody[]
+}
+
+export async function GET(req: NextRequest) {
+  const action = req.nextUrl.searchParams.get('action')
+  if (action === 'auth-url') {
+    try {
+      const url = buildOzonAuthorizeUrl()
+      return json({ authorizeUrl: url, auth: describeOzonAuthSetup() })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'auth-url failed'
+      return json({ error: msg }, 500)
+    }
+  }
+  return json({
+    ok: true,
+    api: 'ozon-seller',
+    auth: describeOzonAuthSetup(),
+    hint: 'POST {action:"list-cities"} или GET ?action=auth-url для OAuth',
+  })
 }
 
 export async function POST(req: NextRequest) {
@@ -319,26 +243,13 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as Record<string, unknown>
     const action = String(body.action || '')
 
-    if (action === 'list-cities') {
-      const res = await ozonRequest(`${INTEGRATION_PREFIX}/delivery/cities`)
-      const data = await parseOzonJson(res)
-      if (!res.ok) return json({ error: ozonErrorMessage(res, data) }, res.status)
+    if (action === 'auth-url') {
+      const url = buildOzonAuthorizeUrl()
+      return json({ authorizeUrl: url, auth: describeOzonAuthSetup() })
+    }
 
-      const raw = data.data ?? data.cities ?? data
-      let cities: string[] = []
-      if (Array.isArray(raw)) {
-        cities = raw
-          .map((c) => {
-            if (typeof c === 'string') return c
-            if (c && typeof c === 'object') {
-              const o = c as Record<string, unknown>
-              return pickString(o, 'name', 'city', 'cityName')
-            }
-            return ''
-          })
-          .filter(Boolean)
-      }
-      cities = [...new Set(cities)].sort((a, b) => a.localeCompare(b, 'ru'))
+    if (action === 'list-cities') {
+      const cities = orderedYandexPvzCityNames()
       return json({ cities })
     }
 
@@ -346,38 +257,16 @@ export async function POST(req: NextRequest) {
       const cityName = String(body.cityName || '').trim()
       if (!cityName) return json({ error: 'cityName обязателен' }, 400)
 
-      const deliveryTypes = Array.isArray(body.deliveryTypes)
-        ? (body.deliveryTypes as string[])
-        : ['PickPoint', 'Postamat']
+      const mapPointIds = await fetchMapPointIdsForCity(cityName)
+      const points = await fetchPickupPointsByIds(mapPointIds)
 
-      const res = await ozonRequest(`${INTEGRATION_PREFIX}/delivery/variants`, {
-        query: {
-          cityName,
-          'pagination.size': 200,
-          'payloadIncludes.includeWorkingHours': true,
-          'payloadIncludes.includePostalCode': true,
-        },
+      const cityNorm = cityName.toLowerCase().replace(/ё/g, 'е')
+      const filtered = points.filter((p) => {
+        const c = (p.address.city || '').toLowerCase().replace(/ё/g, 'е')
+        return !c || c.includes(cityNorm) || cityNorm.includes(c)
       })
-      const data = await parseOzonJson(res)
-      if (!res.ok) return json({ error: ozonErrorMessage(res, data) }, res.status)
 
-      const variants = asArray<Record<string, unknown>>(data.data ?? data.variants)
-      const allowed = new Set(deliveryTypes.map((t) => t.toLowerCase()))
-      const points = variants
-        .map(normalizePickupPoint)
-        .filter((p): p is OzonPickupPoint => {
-          if (!p) return false
-          const t = p.type.toLowerCase()
-          if (allowed.size === 0) return true
-          return (
-            allowed.has(t) ||
-            t.includes('pick') ||
-            t.includes('postamat') ||
-            t.includes('pvz')
-          )
-        })
-
-      return json({ points })
+      return json({ points: filtered.length ? filtered : points })
     }
 
     if (action === 'calculate') {
@@ -386,87 +275,53 @@ export async function POST(req: NextRequest) {
         return json({ error: 'deliveryVariantId обязателен' }, 400)
       }
 
-      const lines = body.shipment_lines as ShipmentLineBody[] | undefined
-      const estimatedPrice =
-        typeof body.estimatedPrice === 'number' && body.estimatedPrice > 0
-          ? body.estimatedPrice
-          : 1000
-
-      let weightG =
+      const lines = shipmentLinesFromBody(body)
+      const weightG =
         typeof body.weightG === 'number' && body.weightG > 0
           ? Math.ceil(body.weightG)
-          : 0
+          : undefined
 
-      if (!weightG && lines?.length) {
-        weightG = estimateOzonShipmentPackage(
-          lines.map((l) => ({
-            quantity: l.quantity,
-            weightKg: l.weight_kg,
-            lengthMm: l.length_mm,
-            widthMm: l.width_mm,
-            heightMm: l.height_mm,
-          })),
-        ).totalWeightG
-      }
-      if (!weightG) weightG = 300
-
-      const fromPlaceId = await resolveFromPlaceId()
-      const res = await ozonRequest(`${INTEGRATION_PREFIX}/delivery/calculate`, {
-        query: {
-          deliveryVariantId,
-          weight: weightG,
-          fromPlaceId,
-          estimatedPrice,
-        },
+      const estimate = estimateOzonDeliveryRub({
+        shipmentLines: lines?.map((l) => ({
+          quantity: l.quantity,
+          weightKg: l.weight_kg,
+          lengthMm: l.length_mm,
+          widthMm: l.width_mm,
+          heightMm: l.height_mm,
+        })),
+        weightG,
+        courier: false,
       })
-      const data = await parseOzonJson(res)
-      if (!res.ok) return json({ error: ozonErrorMessage(res, data) }, res.status)
-
-      const amount = extractAmount(data)
-      if (amount <= 0) {
-        return json({ error: 'Ozon не вернул стоимость доставки' }, 502)
-      }
-      return json({ amount: Math.round(amount), days: extractDays(data) })
+      return json(estimate)
     }
 
     if (action === 'calculate-by-address') {
-      const address = String(body.address || '').trim()
-      if (!address) return json({ error: 'address обязателен' }, 400)
-
-      const lines = body.shipment_lines as ShipmentLineBody[] | undefined
-      const estimatedPrice =
-        typeof body.estimatedPrice === 'number' && body.estimatedPrice > 0
-          ? body.estimatedPrice
-          : 1000
-
-      const fromPlaceId = await resolveFromPlaceId()
-      const packages = buildPackagesFromLines(lines, estimatedPrice)
-
-      const res = await ozonRequest(
-        `${INTEGRATION_PREFIX}/delivery/calculate/information`,
-        {
-          method: 'POST',
-          body: {
-            fromPlaceId: Number(fromPlaceId) || fromPlaceId,
-            address,
-            packages,
-          },
-        },
-      )
-      const data = await parseOzonJson(res)
-      if (!res.ok) return json({ error: ozonErrorMessage(res, data) }, res.status)
-
-      const amount = extractAmount(data)
-      if (amount <= 0) {
-        return json({ error: 'Ozon не вернул стоимость доставки по адресу' }, 502)
-      }
-      return json({ amount: Math.round(amount), days: extractDays(data) })
+      const lines = shipmentLinesFromBody(body)
+      const estimate = estimateOzonDeliveryRub({
+        shipmentLines: lines?.map((l) => ({
+          quantity: l.quantity,
+          weightKg: l.weight_kg,
+          lengthMm: l.length_mm,
+          widthMm: l.width_mm,
+          heightMm: l.height_mm,
+        })),
+        courier: true,
+      })
+      return json(estimate)
     }
 
     return json({ error: `Unknown action: ${action}` }, 400)
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Internal server error'
     console.error('[ozon-delivery]', msg)
+    if (msg.includes('OAuth') || msg.includes('Api-Key') || msg.includes('авториза')) {
+      try {
+        const authorizeUrl = buildOzonAuthorizeUrl()
+        return json({ error: msg, authorizeUrl, auth: describeOzonAuthSetup() }, 401)
+      } catch {
+        return json({ error: msg, auth: describeOzonAuthSetup() }, 401)
+      }
+    }
     return json({ error: msg }, 500)
   }
 }
