@@ -234,24 +234,29 @@ async function fetchMapPointIdsForCity(cityName: string): Promise<string[]> {
 async function fetchPickupPointsByIds(mapPointIds: string[]): Promise<OzonPickupPoint[]> {
   if (!mapPointIds.length) return []
 
-  const res = await ozonRequest('/v1/delivery/point/info', {
-    map_point_ids: mapPointIds.slice(0, 200),
-  })
-  const data = await parseOzonJson(res)
-  if (!res.ok) throw new Error(ozonErrorMessage(res, data))
-
-  const rawPoints = Array.isArray(data.points) ? data.points : []
   const result: OzonPickupPoint[] = []
-  for (const item of rawPoints) {
-    if (!item || typeof item !== 'object') continue
-    const row = item as Record<string, unknown>
-    if (row.enabled === false) continue
-    const method = row.delivery_method as Record<string, unknown> | undefined
-    if (!method) continue
-    const mapPointId = method.map_point_id
-    if (mapPointId == null) continue
-    const point = normalizePointInfo(String(mapPointId), method)
-    if (point) result.push(point)
+  const BATCH = 100
+
+  for (let i = 0; i < mapPointIds.length; i += BATCH) {
+    const batch = mapPointIds.slice(i, i + BATCH)
+    const res = await ozonRequest('/v1/delivery/point/info', {
+      map_point_ids: batch.map((id) => Number(id)).filter(Number.isFinite),
+    })
+    const data = await parseOzonJson(res)
+    if (!res.ok) throw new Error(ozonErrorMessage(res, data))
+
+    const rawPoints = Array.isArray(data.points) ? data.points : []
+    for (const item of rawPoints) {
+      if (!item || typeof item !== 'object') continue
+      const row = item as Record<string, unknown>
+      if (row.enabled === false) continue
+      const method = row.delivery_method as Record<string, unknown> | undefined
+      if (!method) continue
+      const mapPointId = method.map_point_id
+      if (mapPointId == null) continue
+      const point = normalizePointInfo(String(mapPointId), method)
+      if (point) result.push(point)
+    }
   }
   return result
 }
