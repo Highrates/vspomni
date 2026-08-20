@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Search, MapPin, Loader2, ChevronDown, Check, Clock } from 'lucide-react'
 import type { OzonPickupPoint } from '@/types/ozonDelivery'
 import { listOzonCities, listOzonPickupPoints } from '@/lib/api/ozonDelivery'
+import OzonPvzMap from './OzonPvzMap'
 
 const PRIORITY_CITIES = ['Москва', 'Санкт-Петербург']
 
@@ -188,6 +189,14 @@ export default function OzonPvzList({
           </div>
         )}
       </div>
+
+      {pickedCity && points.length > 0 && !pointsLoading && (
+        <OzonPvzMap
+          points={filteredPoints.length > 0 ? filteredPoints : points}
+          onSelect={onChoose}
+          selectedPointId={selectedPointId}
+        />
+      )}
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black/30" />

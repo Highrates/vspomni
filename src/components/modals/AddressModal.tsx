@@ -24,6 +24,7 @@ import {
 import { yandexPickupCityArea } from '@/lib/yandexPickupCityArea'
 import { inferRuCountryAreaFromYandexPvz } from '@/lib/ruAddressRegion'
 import { yandexPointIdForCargoOffers } from '@/lib/yandexPickupPointId'
+import { extractRuPostalCode } from '@/lib/extractRuPostalCode'
 
 interface AddressModalProps {
   visible: boolean
@@ -550,7 +551,11 @@ export default function AddressModal({
       countryArea: pvz.address.region || prev.countryArea,
       city: pvz.address.city || prev.city,
       streetAddress1: pvz.address.address || pvz.address.fullAddress || prev.streetAddress1,
-      postalCode: pvz.address.postalCode || prev.postalCode,
+      postalCode:
+        pvz.address.postalCode ||
+        extractRuPostalCode(pvz.address.fullAddress) ||
+        extractRuPostalCode(pvz.address.address) ||
+        prev.postalCode,
       companyName: pvz.name || prev.companyName,
     }))
     setErrors((prev) => ({

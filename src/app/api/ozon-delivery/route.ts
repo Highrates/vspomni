@@ -8,6 +8,7 @@ import {
   getOzonApiBase,
   getOzonAuthHeaders,
 } from '@/lib/ozonSellerAuth'
+import { extractRuPostalCode } from '@/lib/extractRuPostalCode'
 import type { OzonPickupPoint } from '@/types/ozonDelivery'
 
 type ShipmentLineBody = {
@@ -198,6 +199,17 @@ function normalizePointInfo(
     (typeof method.address === 'string' && method.address) ||
     [city, street, house].filter(Boolean).join(', ')
 
+  const postalFromDetails =
+    typeof addressDetails.postal_code === 'string'
+      ? addressDetails.postal_code
+      : typeof addressDetails.zip_code === 'string'
+        ? addressDetails.zip_code
+        : undefined
+  const postalCode =
+    extractRuPostalCode(postalFromDetails) ||
+    extractRuPostalCode(fullAddress) ||
+    extractRuPostalCode(street)
+
   const deliveryType = method.delivery_type as Record<string, unknown> | undefined
   const typeName =
     (typeof deliveryType?.name === 'string' && deliveryType.name) || 'PickPoint'
@@ -210,6 +222,7 @@ function normalizePointInfo(
       region,
       city,
       address: street || fullAddress,
+      postalCode,
       fullAddress,
     },
     workingHours: formatWorkingHours(method.working_hours),
