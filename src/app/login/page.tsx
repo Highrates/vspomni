@@ -77,10 +77,6 @@ const LoginContent = () => {
     setEmail(userEmail)
     setCurrentStep('verify')
   }
-  const handleResetPasswordEmail = (userEmail: string) => {
-    setEmail(userEmail)
-    setCurrentStep('reset')
-  }
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-white px-4">
@@ -105,10 +101,7 @@ const LoginContent = () => {
           />
         )}
         {currentStep === 'forgot' && (
-          <ForgotPasswordForm 
-            onResetPassword={handleResetPasswordEmail}
-            onBack={handleSwitchToLogin}
-          />
+          <ForgotPasswordForm onBack={handleSwitchToLogin} />
         )}
         {currentStep == 'reset' && (
           <ResetPasswordForm 
