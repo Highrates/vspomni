@@ -41,7 +41,7 @@ export default function Footer() {
           </div>
           <div className="mt-4 inline-flex justify-start items-center gap-2">
             <Link
-              href="https://vspomni.mobz.click/wildberries"
+              href="https://www.wildberries.ru/brands/312306051-vspomni"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Wildberries"
@@ -50,7 +50,7 @@ export default function Footer() {
               <Image src={wbIcon} alt="" width={36} height={36} unoptimized />
             </Link>
             <Link
-              href="https://vspomni.mobz.click/ozon"
+              href="https://www.ozon.ru/seller/vspomni-3814167/products/"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Ozon"
@@ -59,7 +59,7 @@ export default function Footer() {
               <Image src={ozonIcon} alt="" width={36} height={36} unoptimized />
             </Link>
             <Link
-              href="https://vspomni.mobz.click/yandexmarket"
+              href="https://market.yandex.ru/business--vspomni/216511078"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Яндекс Маркет"
@@ -68,7 +68,7 @@ export default function Footer() {
               <Image src={yamIcon} alt="" width={36} height={36} unoptimized />
             </Link>
             <Link
-              href="https://vspomni.mobz.click/goldapple"
+              href="https://goldapple.ru/brands/vspomni"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Золотое яблоко"
@@ -77,7 +77,7 @@ export default function Footer() {
               <Image src={zyaIcon} alt="" width={36} height={36} unoptimized />
             </Link>
             <Link
-              href="https://rivegauche.ru/brands/nice-by-septivit"
+              href="https://rivegauche.ru/brands/vspomni"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Рив Гош"
@@ -86,7 +86,7 @@ export default function Footer() {
               <Image src={rgIcon} alt="" width={36} height={36} unoptimized />
             </Link>
             <Link
-              href="https://vspomni.mobz.click/lamoda"
+              href="https://www.lamoda.ru/b/38470/brand-vspomni/"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Lamoda"
