@@ -1,7 +1,6 @@
 'use client'
 
 import Image from 'next/image'
-import PopularScentsAlt from '@/components/features/PopularScentsAlt'
 import Choice from '@/components/home/Choice'
 import CollectionNoseBlock from '@/components/home/CollectionNoseBlock'
 import GiftPackagesUpsellSection from '@/components/home/GiftPackagesUpsellSection'
@@ -684,7 +683,6 @@ export default function ProductPageClient({
         hideWhenCategorySlug={product?.category?.slug}
       />
       <Choice initialProducts={initialChoiceProducts} />
-      <PopularScentsAlt />
       <CollectionNoseBlock />
     </PageTransition>
   )
