@@ -7,6 +7,18 @@ import {
   type StoryMediaType,
 } from '@/lib/storyMedia'
 
+function toAbsoluteMediaUrl(url: string | null | undefined): string | null {
+  if (!url || !url.trim()) return null
+  const t = url.trim()
+  if (t.startsWith('http://') || t.startsWith('https://')) return t
+  if (t.startsWith('//')) return `https:${t}`
+  const base =
+    typeof process !== 'undefined' && process.env.GRAPHQL_PUBLIC_API_URL
+      ? new URL(process.env.GRAPHQL_PUBLIC_API_URL).origin
+      : 'https://vspomni.store'
+  return t.startsWith('/') ? `${base}${t}` : `${base}/${t}`
+}
+
 export interface StoryMediaItem {
   id: string
   url: string
@@ -169,7 +181,7 @@ export async function getAllStories(): Promise<StoryNode[]> {
           )
         })
         .map((attr) => {
-          const url = attr.fileValue!.url
+          const url = toAbsoluteMediaUrl(attr.fileValue!.url) || attr.fileValue!.url
           const type = getStoryMediaType(url, attr.fileValue?.contentType)
           return {
             id: attr.attribute.id,
@@ -188,13 +200,14 @@ export async function getAllStories(): Promise<StoryNode[]> {
       }))
 
       const firstImageItem = items.find((item) => item.type === 'image')
+      const absoluteCover = toAbsoluteMediaUrl(coverUrl)
 
       return {
         id: node.id,
         title: node.title,
         slug: node.slug,
-        coverUrl,
-        image: coverUrl ?? firstImageItem?.url ?? null,
+        coverUrl: absoluteCover,
+        image: absoluteCover ?? firstImageItem?.url ?? null,
         order: 0,
         isPublished: node.isPublished || false,
         publishedAt: node.publishedAt,

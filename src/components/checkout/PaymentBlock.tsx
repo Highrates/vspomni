@@ -482,9 +482,9 @@ export default function PaymentBlock() {
         disabled={
           isCreatingPayment ||
           !Boolean(
-            user.name.length > 2 &&
-            user.familyName.length > 0 &&
-            user.email.length > 5 &&
+            user.name.trim().length >= 2 &&
+            user.familyName.trim().length >= 1 &&
+            user.email.trim().length > 5 &&
             user.email.includes('@') &&
             isValidRuPhone(user.phone),
           )

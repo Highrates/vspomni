@@ -39,6 +39,25 @@ import {
   displayStreetAddress2Comment,
   formatDeliveryAddressSummary,
 } from '@/lib/addressVspMeta'
+import { useUserStore } from '@/stores/useUser'
+import { formatPhoneInputValue } from '@/lib/ruPhone'
+
+/** Подставляем имя/фамилию/телефон из адреса доставки в форму checkout */
+function syncCheckoutUserFromAddress(addr: AddressInfo) {
+  const { user, setUser } = useUserStore.getState()
+  const first = addr.firstName?.trim() || ''
+  const last = addr.lastName?.trim() || ''
+  const phoneFromAddr = addr.phone?.trim()
+    ? formatPhoneInputValue(addr.phone)
+    : ''
+
+  setUser({
+    ...user,
+    name: first || user.name || '',
+    familyName: last || user.familyName || '',
+    phone: user.phone?.trim() || phoneFromAddr || '',
+  })
+}
 
 export default function OrderDelivery() {
   const [selected, setSelected] = useState('')
@@ -243,6 +262,7 @@ export default function OrderDelivery() {
             // Также рассчитаем доставку для адреса по умолчанию при загрузке
             const currentAddr = data.addresses.find((a: AddressInfo) => a.id === id) || data.addresses[0]
             if (currentAddr) {
+              syncCheckoutUserFromAddress(currentAddr)
               console.log('Calculating shipping for initial address:', currentAddr.city)
               updateShippingPrice(currentAddr)
             }
@@ -273,6 +293,7 @@ export default function OrderDelivery() {
     setSelected(id)
     const addr = addresses.find(a => a.id === id)
     if (addr) {
+      syncCheckoutUserFromAddress(addr)
       updateShippingPrice(addr)
     }
   }
@@ -284,6 +305,7 @@ export default function OrderDelivery() {
       setAddresses((prev) => [...prev, newAddress])
     }
     setSelected(newAddress.id)
+    syncCheckoutUserFromAddress(newAddress)
     updateShippingPrice(newAddress)
   }
 
@@ -292,6 +314,7 @@ export default function OrderDelivery() {
       prev.map(addr => (addr.id === updatedAddress.id ? updatedAddress : addr)),
     )
     if (selected === updatedAddress.id) {
+      syncCheckoutUserFromAddress(updatedAddress)
       updateShippingPrice(updatedAddress)
     }
   }
@@ -310,6 +333,7 @@ export default function OrderDelivery() {
           const def =
             remaining.find(a => a.isDefaultShippingAddress) || remaining[0]
           setSelected(def.id)
+          syncCheckoutUserFromAddress(def)
         } else {
           setSelected('')
         }
@@ -334,8 +358,8 @@ export default function OrderDelivery() {
   return (
     <>
       <section className="select-none">
-        <div className="mb-10">
-          <h2 className="text-[32px] leading-tight font-semibold mb-6">
+        <div className="mb-6 sm:mb-8 md:mb-10 min-w-0">
+          <h2 className="text-2xl sm:text-3xl md:text-[32px] leading-tight font-semibold mb-4 sm:mb-5 md:mb-6">
             Доставка
           </h2>
 
@@ -449,7 +473,12 @@ function AddressOptions({
           </div>
         </DropdownMenuTrigger>
 
-        <DropdownMenuContent side="right" className="p-2 bg-white border space-y-1">
+        <DropdownMenuContent
+          side="bottom"
+          align="end"
+          collisionPadding={12}
+          className="p-2 bg-white border space-y-1 max-w-[calc(100vw-1.5rem)]"
+        >
           <button
             className="flex items-center gap-2 w-full px-2 py-1 rounded-sm hover:bg-gray-100 text-sm"
             onClick={() => {

@@ -11,7 +11,7 @@ export default function Navigation() {
       </Link>
       {/* Временно скрыты пункты "Партнеры" и "Блог" */}
       <Link
-        href="https://t.me/vspomni_zabota"
+        href="https://t.me/vspomni_corp"
         target="_blank"
         rel="noopener noreferrer"
         className="hover:text-black transition-colors"

@@ -31,7 +31,7 @@ export default function Footer() {
               height={17}
             />
             <Link
-              href="https://t.me/vspomni_zabota"
+              href="https://t.me/vspomni_corp"
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm md:text-base text-black font-medium"

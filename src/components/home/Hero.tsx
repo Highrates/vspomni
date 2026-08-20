@@ -65,7 +65,8 @@ function apiSlidesToHero(
     const def = defaultSlides[i % defaultSlides.length]
     const banner = bottomBanners[i]
     const badgeHref = banner?.href?.trim()
-    const slideHref = slide.href?.trim()
+    // Ссылка большого баннера: ssilka-N, иначе ссылка нижней плашки того же слайда
+    const slideHref = slide.href?.trim() || badgeHref || ''
     return {
       id: slide.id,
       image: slide.image || def.image,
@@ -84,7 +85,7 @@ const SWIPER_CLASS = 'hero-swiper w-full h-[70vh] sm:h-[80vh] md:h-[85vh] lg:h-[
 function HeroBottomBadge({ slide }: { slide: HeroSlide }) {
   const href = slide.href?.trim() || HERO_BOTTOM_BADGE_LINK
   const motionClass =
-    'absolute left-3 right-3 md:left-6 md:right-6 bottom-4 md:bottom-8 flex flex-row gap-4 md:gap-5 bg-white/30 backdrop-blur-md rounded-4xl p-3 md:p-2.5 shadow-[0_4px_20px_rgba(0,0,0,0.08)]'
+    'pointer-events-auto absolute left-3 right-3 md:left-6 md:right-6 bottom-4 md:bottom-8 flex flex-row gap-4 md:gap-5 bg-white/30 backdrop-blur-md rounded-4xl p-3 md:p-2.5 shadow-[0_4px_20px_rgba(0,0,0,0.08)]'
   const inner = (
     <motion.div
       key={slide.id + '-badge'}
@@ -136,7 +137,7 @@ function HeroBottomBadge({ slide }: { slide: HeroSlide }) {
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="contents cursor-pointer"
+        className="pointer-events-auto contents cursor-pointer"
         aria-label={`${slide.title}: перейти`}
       >
         {inner}
@@ -147,7 +148,7 @@ function HeroBottomBadge({ slide }: { slide: HeroSlide }) {
   return (
     <Link
       href={href}
-      className="contents cursor-pointer"
+      className="pointer-events-auto contents cursor-pointer"
       aria-label={`${slide.title}: перейти`}
     >
       {inner}
@@ -246,12 +247,9 @@ function HeroSwiper({
               ) : (
                 imageEl
               )}
-              {/* Нижняя плашка поверх большого баннера */}
-              <div className="absolute inset-0 z-10 flex pointer-events-none">
-                <div className="relative lg:flex-1 w-full h-full items-center pointer-events-auto">
-                  <HeroBottomBadge slide={slide} />
-                </div>
-                <div className="flex-1 pointer-events-none" />
+              {/* Плашка не перехватывает клики по баннеру: pointer-events только у самой плашки */}
+              <div className="absolute inset-0 z-10 pointer-events-none">
+                <HeroBottomBadge slide={slide} />
               </div>
             </div>
           </SwiperSlide>

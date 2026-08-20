@@ -35,14 +35,14 @@ export const Summary = ({
     shippingCarrier === 'yandex' ? 'Доставка Яндекс:' : 'Доставка СДЭК:'
 
   return (
-    <div className="p-4">
+    <div className="p-2 sm:p-4 min-w-0">
       {/* Сумма без учёта скидок */}
-      <div className="flex justify-between text-xl font-semibold mb-3">
-        <span>
+      <div className="flex justify-between gap-3 text-lg sm:text-xl font-semibold mb-3 min-w-0">
+        <span className="min-w-0 break-words">
           Сумма • {totalItems}{' '}
           {totalItems === 1 ? 'товар' : totalItems < 5 ? 'товара' : 'товаров'}
         </span>
-        <span className="font-semibold text-xl">
+        <span className="shrink-0 font-semibold">
           {formatCurrency(subtotal)} ₽
         </span>
       </div>
@@ -50,8 +50,8 @@ export const Summary = ({
       {/* Блок скидок / промокода */}
       {hasDiscount && (
         <div className="space-y-1.5 mb-3">
-          <div className="flex justify-between text-[15px] font-medium text-gray-600">
-            <span>
+          <div className="flex justify-between gap-3 text-[15px] font-medium text-gray-600 min-w-0">
+            <span className="min-w-0 break-words">
               Скидка
               {appliedPromoCode && (
                 <>
@@ -67,15 +67,15 @@ export const Summary = ({
                 </>
               )}
             </span>
-            <span className="text-red">−{formatCurrency(discount)} ₽</span>
+            <span className="shrink-0 text-red">−{formatCurrency(discount)} ₽</span>
           </div>
         </div>
       )}
 
       {/* Доставка */}
-      <div className="flex justify-between text-[15px] font-medium text-gray-600 mb-3">
-        <span>{deliveryLabel}</span>
-        <span>
+      <div className="flex justify-between gap-3 text-[15px] font-medium text-gray-600 mb-3 min-w-0">
+        <span className="min-w-0">{deliveryLabel}</span>
+        <span className="shrink-0 text-right">
           {shippingLoading
             ? 'Рассчитывается...'
             : shipping > 0
@@ -85,9 +85,9 @@ export const Summary = ({
       </div>
 
       {/* Итоговая сумма к оплате */}
-      <div className="flex justify-between items-baseline mt-2">
+      <div className="flex justify-between items-baseline gap-3 mt-2 min-w-0">
         <span className="text-lg font-semibold">Итого</span>
-        <span className="text-2xl font-semibold">
+        <span className="shrink-0 text-xl sm:text-2xl font-semibold">
           {formatCurrency(total)} ₽
         </span>
       </div>

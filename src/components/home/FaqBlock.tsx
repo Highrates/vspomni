@@ -38,7 +38,8 @@ export default function FaqBlock({ initialFaqs = [] }: Props) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 lg:gap-12">
-        <div className="lg:grid lg:grid-cols-2 flex flex-col gap-3 sm:gap-4 lg:gap-5 h-auto lg:h-[752px] relative transition">
+        {/* Картинки FAQ — только десктоп / планшет широкий */}
+        <div className="hidden lg:grid lg:grid-cols-2 gap-3 sm:gap-4 lg:gap-5 h-auto lg:h-[752px] relative transition">
           <div className="faq-block-first-image relative w-full h-[180px] sm:h-[220px] md:h-[260px] lg:h-auto rounded-xl sm:rounded-2xl lg:rounded-[22px] overflow-hidden transition-all duration-500 hover:-translate-y-0.5">
             <Image
               src="/images/image_faq_1.png"
@@ -48,7 +49,7 @@ export default function FaqBlock({ initialFaqs = [] }: Props) {
               className="object-cover object-top md:object-center transition-transform duration-500 hover:scale-105"
             />
           </div>
-          <div className="relative w-full lg:block hidden lg:row-span-2 rounded-2xl lg:rounded-[22px] overflow-hidden transition-all duration-500 hover:-translate-y-0.5">
+          <div className="relative w-full lg:row-span-2 rounded-2xl lg:rounded-[22px] overflow-hidden transition-all duration-500 hover:-translate-y-0.5">
             <Image
               src="/images/image_faq_3.png"
               alt=""
@@ -58,7 +59,7 @@ export default function FaqBlock({ initialFaqs = [] }: Props) {
             />
           </div>
 
-          <div className="relative w-full lg:block hidden lg:row-span-2 rounded-2xl lg:rounded-[22px] overflow-hidden transition-all duration-500 hover:-translate-y-0.5">
+          <div className="relative w-full lg:row-span-2 rounded-2xl lg:rounded-[22px] overflow-hidden transition-all duration-500 hover:-translate-y-0.5">
             <Image
               src="/images/image_faq_2.png"
               alt=""
@@ -68,7 +69,7 @@ export default function FaqBlock({ initialFaqs = [] }: Props) {
             />
           </div>
 
-          <div className="hidden md:block relative w-full h-[180px] sm:h-[220px] md:h-[260px] lg:h-auto rounded-xl sm:rounded-2xl lg:rounded-[22px] overflow-hidden transition-all duration-500 hover:-translate-y-0.5">
+          <div className="relative w-full h-[180px] sm:h-[220px] md:h-[260px] lg:h-auto rounded-xl sm:rounded-2xl lg:rounded-[22px] overflow-hidden transition-all duration-500 hover:-translate-y-0.5">
             <Image
               src="/images/image_faq_4.png"
               alt=""

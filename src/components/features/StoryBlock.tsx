@@ -6,6 +6,7 @@ import StoryCirclePreview from './StoryCirclePreview'
 import { getAllStories, StoryNode } from '@/graphql/queries/stories.service'
 
 function getCirclePreviewSources(story: StoryNode) {
+  // Любое фото: обложка → image → первый image-слайд (не только «первый медиа»)
   const imageUrl =
     story.coverUrl ||
     story.image ||
@@ -13,8 +14,8 @@ function getCirclePreviewSources(story: StoryNode) {
     null
 
   const videoUrl =
-    !imageUrl && story.items[0]?.type === 'video'
-      ? story.items[0].url
+    !imageUrl
+      ? story.items.find((item) => item.type === 'video')?.url || null
       : null
 
   return { imageUrl, videoUrl }

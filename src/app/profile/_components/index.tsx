@@ -418,7 +418,7 @@ export default function ProfileIndex() {
             <div>
               <p className="text-sm text-textgrey mb-1">Нужна помощь?</p>
               <Link
-                href="https://t.me/vspomni_zabota"
+                href="https://t.me/vspomni_corp"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-md font-medium cursor-pointer hover:underline inline-block"

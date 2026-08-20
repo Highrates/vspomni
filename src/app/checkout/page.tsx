@@ -17,22 +17,34 @@ const CheckoutPage = () => {
     if (!isAuthenticated) navigate.push('/login')
   }, [])
 
+  // Блокируем горизонтальный «разъезд» страницы на мобилке при свайпах
+  useEffect(() => {
+    const prevHtml = document.documentElement.style.overflowX
+    const prevBody = document.body.style.overflowX
+    document.documentElement.style.overflowX = 'clip'
+    document.body.style.overflowX = 'clip'
+    return () => {
+      document.documentElement.style.overflowX = prevHtml
+      document.body.style.overflowX = prevBody
+    }
+  }, [])
+
   return (
-    <div className="flex pb-12">
-      <div className="container px-4 sm:px-6 lg:px-0">
+    <div className="w-full min-w-0 overflow-x-clip overscroll-x-none touch-pan-y pb-12">
+      <div className="container w-full min-w-0 max-w-full px-4 sm:px-6 lg:px-0">
         {/* На мобилке сначала товары (OrderSummary), затем форма + доставка + телефон + оплата */}
-        <div className="flex flex-col lg:flex-row-reverse gap-6 lg:gap-8">
+        <div className="flex flex-col lg:flex-row-reverse gap-6 lg:gap-8 min-w-0">
           {/* Колонка с товарами / суммой заказа */}
-          <div className="w-full lg:w-1/2 lg:sticky lg:top-24 lg:h-fit">
-            <div className="bg-[#FAFAFA] p-4 sm:p-6 lg:p-8 rounded-lg">
+          <div className="w-full min-w-0 lg:w-1/2 lg:sticky lg:top-24 lg:h-fit">
+            <div className="bg-[#FAFAFA] p-4 sm:p-6 lg:p-8 rounded-lg overflow-x-clip min-w-0">
               <OrderSummary />
             </div>
           </div>
 
           {/* Колонка с данными пользователя и оплатой */}
-          <div className="w-full lg:w-1/2">
+          <div className="w-full min-w-0 lg:w-1/2">
             <BackButton />
-            <div className="border p-4 sm:p-6 lg:p-8 rounded-lg shadow-md mt-4 space-y-6">
+            <div className="border p-4 sm:p-6 lg:p-8 rounded-lg shadow-md mt-4 space-y-6 overflow-x-clip min-w-0">
               <OrderForm />
               <OrderDelivery />
               <OrderPhone />

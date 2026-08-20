@@ -36,9 +36,9 @@ export const useUserStore = create<AuthState>()(
               user: {
                 // сохраняем уже введённый пользователем телефон, если он есть
                 userId: '0',
-                name: '',
-                familyName: '',
-                email: authEmail,
+                name: state.user.name || '',
+                familyName: state.user.familyName || '',
+                email: authEmail || state.user.email || '',
                 phone: state.user.phone || '',
               },
             }))
@@ -59,11 +59,23 @@ export const useUserStore = create<AuthState>()(
             const rawPhone = localPhone || phoneFromAddress || ''
             const finalPhone = rawPhone ? formatPhoneInputValue(rawPhone) : ''
 
+            const nameFromAddr = defaultAddress?.firstName?.trim() || ''
+            const familyFromAddr = defaultAddress?.lastName?.trim() || ''
+
             return {
               user: {
                 userId: meInfo.id || '0',
-                name: meInfo.firstName || '',
-                familyName: meInfo.lastName || '',
+                // Профиль → адрес доставки → уже введённое локально
+                name:
+                  meInfo.firstName?.trim() ||
+                  nameFromAddr ||
+                  state.user.name ||
+                  '',
+                familyName:
+                  meInfo.lastName?.trim() ||
+                  familyFromAddr ||
+                  state.user.familyName ||
+                  '',
                 email: meInfo.email || '',
                 phone: finalPhone,
               },

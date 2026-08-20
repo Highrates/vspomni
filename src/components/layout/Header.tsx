@@ -173,7 +173,7 @@ export default function Header({ variant = 'default' }: HeaderProps) {
             Все ароматы
           </Link>
               <Link
-                href="https://t.me/vspomni_zabota"
+                href="https://t.me/vspomni_corp"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 hover:opacity-80 transition whitespace-nowrap"
@@ -324,7 +324,7 @@ export default function Header({ variant = 'default' }: HeaderProps) {
                   Все ароматы
                 </Link>
                 <Link
-                  href="https://t.me/vspomni_zabota"
+                  href="https://t.me/vspomni_corp"
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => setMenuOpen(false)}
@@ -335,7 +335,17 @@ export default function Header({ variant = 'default' }: HeaderProps) {
                 </Link>
 
                 <div className={`flex items-center gap-6 pt-4 border-t mt-4 ${isOverlay && !scrolled ? 'border-white/20' : 'border-black/10'}`}>
-                  <User size={20} strokeWidth={1.8} color="#000000" onClick={handleProfile} />
+                  <button
+                    type="button"
+                    onClick={handleProfile}
+                    className="flex items-center gap-2 hover:opacity-70 transition-opacity"
+                    aria-label="Личный кабинет"
+                  >
+                    <User size={20} strokeWidth={1.8} color="#000000" />
+                    <span className="text-md font-medium text-black">
+                      Личный кабинет
+                    </span>
+                  </button>
                 </div>
               </nav>
             </motion.div>

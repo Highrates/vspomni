@@ -93,16 +93,17 @@ export const PromoCodeInput = ({ checkoutId }: { checkoutId: string }) => {
   }, [appliedPromoCode, isExpanded])
 
   return (
-    <div className="gap-2 p-4 border rounded-lg shadow-md mb-8 mt-12.5">
+    <div className="gap-2 p-3 sm:p-4 border rounded-lg shadow-md mb-8 mt-8 sm:mt-12.5 min-w-0 overflow-x-clip">
       <div
-        className="flex items-center w-full justify-between cursor-pointer"
+        className="flex items-start sm:items-center w-full gap-2 justify-between cursor-pointer min-w-0"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <label className="text-xl font-semibold text-black block mb-1 cursor-pointer">
+        <label className="min-w-0 flex-1 text-base sm:text-xl font-semibold text-black leading-snug cursor-pointer">
           Добавить промокод или сертификат
         </label>
         <button
-          className="w-10 h-10 flex items-center justify-center hover:bg-gray-100 rounded-full transition-colors border border-black/10"
+          type="button"
+          className="shrink-0 w-10 h-10 flex items-center justify-center hover:bg-gray-100 rounded-full transition-colors border border-black/10"
           onClick={(e) => {
             e.stopPropagation()
             setIsExpanded(!isExpanded)

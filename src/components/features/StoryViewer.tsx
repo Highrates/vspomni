@@ -35,7 +35,7 @@ export default function StoryViewer({
   const [progress, setProgress] = useState(0)
   const [direction, setDirection] = useState<'next' | 'prev' | null>(null)
   const [isMuted, setIsMuted] = useState(false)
-  const touchStartX = useRef<number | null>(null)
+  const touchStart = useRef<{ x: number; y: number } | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
   const currentSlide = group?.stories[index]
@@ -180,24 +180,49 @@ export default function StoryViewer({
 
   const minSwipe = 60
   const onTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX
+    touchStart.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+    }
   }
   const onTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX.current == null) return
-    const dx = e.changedTouches[0].clientX - touchStartX.current
-    touchStartX.current = null
+    if (!touchStart.current) return
+    const dx = e.changedTouches[0].clientX - touchStart.current.x
+    const dy = e.changedTouches[0].clientY - touchStart.current.y
+    touchStart.current = null
+
+    // Свайп вниз — закрыть (моб)
+    if (dy > minSwipe && Math.abs(dy) > Math.abs(dx)) {
+      onClose()
+      return
+    }
+    if (Math.abs(dx) < minSwipe) return
     if (dx < -minSwipe) goToNextGroup()
     else if (dx > minSwipe) handlePrev()
   }
 
   const handleDragEnd = useCallback(
-    (_: unknown, info: { offset: { x: number }; velocity: { x: number } }) => {
+    (
+      _: unknown,
+      info: {
+        offset: { x: number; y: number }
+        velocity: { x: number; y: number }
+      },
+    ) => {
       const threshold = 40
       const { offset, velocity } = info
+      // Свайп / флик вниз — закрыть (приоритет над горизонтальным)
+      const isVertical =
+        Math.abs(offset.y) > Math.abs(offset.x) ||
+        Math.abs(velocity.y) > Math.abs(velocity.x)
+      if (isVertical && (offset.y > 80 || velocity.y > 500)) {
+        onClose()
+        return
+      }
       if (offset.x < -threshold || velocity.x < -150) goToNextGroup()
       else if (offset.x > threshold || velocity.x > 150) handlePrev()
     },
-    [goToNextGroup, handlePrev],
+    [goToNextGroup, handlePrev, onClose],
   )
 
   if (!group || group.stories.length === 0) return null
@@ -254,9 +279,9 @@ export default function StoryViewer({
               x: direction === 'next' ? -80 : direction === 'prev' ? 80 : 0,
             }}
             transition={{ duration: 0.3 }}
-            drag="x"
-            dragConstraints={{ left: -120, right: 120 }}
-            dragElastic={0.2}
+            drag
+            dragConstraints={{ left: -120, right: 120, top: 0, bottom: 220 }}
+            dragElastic={0.25}
             onDragEnd={handleDragEnd}
           />
         ) : (
@@ -275,9 +300,9 @@ export default function StoryViewer({
               x: direction === 'next' ? -80 : direction === 'prev' ? 80 : 0,
             }}
             transition={{ duration: 0.3 }}
-            drag="x"
-            dragConstraints={{ left: -120, right: 120 }}
-            dragElastic={0.2}
+            drag
+            dragConstraints={{ left: -120, right: 120, top: 0, bottom: 220 }}
+            dragElastic={0.25}
             onDragEnd={handleDragEnd}
           />
         )}
