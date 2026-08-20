@@ -129,13 +129,13 @@ function missingCredentialsError(): string {
   const sellerId = getSellerId()
   const apiKey = getApiKey()
   if (apiKey && !sellerId) {
-    return 'Ozon: задан OZON_API_KEY, но нет OZON_SELLER_ID=3814167 в .env'
+    return 'Ozon: задан OZON_API_KEY, но нет OZON_SELLER_ID в .env'
   }
   if (sellerId && !apiKey) {
     return 'Ozon: задан OZON_SELLER_ID, но нет OZON_API_KEY в .env (seller.ozon.ru → API ключи)'
   }
   return (
-    'Ozon: добавьте OZON_SELLER_ID=3814167 и OZON_API_KEY в .env, затем npm run build && pm2 restart vspomni-front --update-env'
+    'Ozon: добавьте OZON_SELLER_ID и OZON_API_KEY из seller.ozon.ru → API ключи, затем npm run build && pm2 restart vspomni-front --update-env'
   )
 }
 

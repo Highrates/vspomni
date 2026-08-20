@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { orderedYandexPvzCityNames } from '@/lib/yandexCityGeo'
+import { resolveOzonCityCenter } from '@/lib/ozonCityCenters'
 import { estimateOzonDeliveryRub } from '@/lib/ozonTariffEstimate'
 import {
   buildOzonAuthorizeUrl,
@@ -46,16 +47,6 @@ async function geocodeCityCenter(cityName: string): Promise<{ lat: number; lon: 
   return null
 }
 
-function cityViewport(
-  center: { lat: number; lon: number },
-  delta = 0.35,
-): Record<string, unknown> {
-  return {
-    left_bottom: { lat: center.lat - delta, long: center.lon - delta },
-    right_top: { lat: center.lat + delta, long: center.lon + delta },
-  }
-}
-
 async function ozonRequest(path: string, body: unknown = {}) {
   const headers = await getOzonAuthHeaders()
   const controller = new AbortController()
@@ -93,10 +84,75 @@ function ozonErrorMessage(res: Response, data: Record<string, unknown>): string 
     (typeof data.message === 'string' && data.message) ||
     (typeof data.error === 'string' && data.error) ||
     ''
+  if (msg) return msg
   if (res.status === 401 || res.status === 403) {
     return `Доступ к Ozon Seller API запрещён (${describeOzonAuthSetup()}).`
   }
-  return msg || `Ozon API error (${res.status})`
+  return `Ozon API error (${res.status})`
+}
+
+type OzonPointListItem = {
+  map_point_id?: number
+  coordinate?: { lat?: number; long?: number }
+}
+
+let cachedPointList: { at: number; items: OzonPointListItem[] } | null = null
+const POINT_LIST_TTL_MS = 60 * 60 * 1000
+
+async function fetchAllPointListItems(): Promise<OzonPointListItem[]> {
+  if (cachedPointList && Date.now() - cachedPointList.at < POINT_LIST_TTL_MS) {
+    return cachedPointList.items
+  }
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 120_000)
+  try {
+    const headers = await getOzonAuthHeaders()
+    const res = await fetch(`${getOzonApiBase()}/v1/delivery/point/list`, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+      signal: controller.signal,
+      cache: 'no-store',
+    })
+    const data = await parseOzonJson(res)
+    if (!res.ok) throw new Error(ozonErrorMessage(res, data))
+
+    const items = Array.isArray(data.points) ? (data.points as OzonPointListItem[]) : []
+    cachedPointList = { at: Date.now(), items }
+    return items
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+function filterPointIdsInViewport(
+  items: OzonPointListItem[],
+  center: { lat: number; lon: number },
+  delta = 0.35,
+  limit = 200,
+): string[] {
+  const ids: string[] = []
+  const minLat = center.lat - delta
+  const maxLat = center.lat + delta
+  const minLon = center.lon - delta
+  const maxLon = center.lon + delta
+
+  for (const item of items) {
+    if (ids.length >= limit) break
+    const lat = item.coordinate?.lat
+    const lon = item.coordinate?.long
+    const id = item.map_point_id
+    if (lat == null || lon == null || id == null) continue
+    if (lat >= minLat && lat <= maxLat && lon >= minLon && lon <= maxLon) {
+      ids.push(String(id))
+    }
+  }
+  return ids
 }
 
 function formatWorkingHours(raw: unknown): string | undefined {
@@ -162,30 +218,17 @@ function normalizePointInfo(
   }
 }
 
+async function resolveCityCenter(cityName: string): Promise<{ lat: number; lon: number } | null> {
+  return resolveOzonCityCenter(cityName) || geocodeCityCenter(cityName)
+}
+
 async function fetchMapPointIdsForCity(cityName: string): Promise<string[]> {
-  const center = await geocodeCityCenter(cityName)
+  const center = await resolveCityCenter(cityName)
   if (!center) return []
 
-  const res = await ozonRequest('/v1/delivery/map', {
-    viewport: cityViewport(center),
-    zoom: 10,
-  })
-  const data = await parseOzonJson(res)
-  if (!res.ok) throw new Error(ozonErrorMessage(res, data))
-
-  const clusters = Array.isArray(data.clusters) ? data.clusters : []
-  const ids = new Set<string>()
-  for (const c of clusters) {
-    if (!c || typeof c !== 'object') continue
-    const cluster = c as Record<string, unknown>
-    const mapPointIds = cluster.map_point_ids
-    if (Array.isArray(mapPointIds)) {
-      for (const id of mapPointIds) {
-        if (id != null && String(id).trim()) ids.add(String(id))
-      }
-    }
-  }
-  return [...ids]
+  // /v1/delivery/map часто недоступен для API-ключа — используем /v1/delivery/point/list
+  const allPoints = await fetchAllPointListItems()
+  return filterPointIdsInViewport(allPoints, center)
 }
 
 async function fetchPickupPointsByIds(mapPointIds: string[]): Promise<OzonPickupPoint[]> {
