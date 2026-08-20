@@ -13,7 +13,7 @@ interface CartState {
   shippingPrice: number
   shippingLoading: boolean
   /** Как считалась доставка на checkout (по метке в адресе) */
-  shippingCarrier: 'cdek' | 'yandex' | null
+  shippingCarrier: 'cdek' | 'yandex' | 'ozon' | null
   appliedPromoCode: string | null
 
   addItem: (product: ProductCardItem, quantity: number, size: string, variantId?: string) => void
@@ -23,7 +23,7 @@ interface CartState {
   clearCart: () => void
   setShippingPrice: (price: number) => void
   setShippingLoading: (loading: boolean) => void
-  setShippingCarrier: (carrier: 'cdek' | 'yandex' | null) => void
+  setShippingCarrier: (carrier: 'cdek' | 'yandex' | 'ozon' | null) => void
   applyPromoCode: (
     code: string,
     discountPercent: number,

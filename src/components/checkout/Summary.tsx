@@ -13,7 +13,7 @@ type SummaryProps = {
   shipping: number
   shippingLoading: boolean
   /** null / неизвестно — показываем как СДЭК (старые адреса без метки) */
-  shippingCarrier?: 'cdek' | 'yandex' | null
+  shippingCarrier?: 'cdek' | 'yandex' | 'ozon' | null
   discountType?: 'PERCENTAGE' | 'FIXED'
 }
 
@@ -32,7 +32,11 @@ export const Summary = ({
 }: SummaryProps) => {
   const hasDiscount = discount > 0
   const deliveryLabel =
-    shippingCarrier === 'yandex' ? 'Доставка Яндекс:' : 'Доставка СДЭК:'
+    shippingCarrier === 'yandex'
+      ? 'Доставка Яндекс:'
+      : shippingCarrier === 'ozon'
+        ? 'Доставка Ozon:'
+        : 'Доставка СДЭК:'
 
   return (
     <div className="p-2 sm:p-4 min-w-0">

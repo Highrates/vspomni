@@ -12,8 +12,10 @@ import { formatPhoneInputValue, isValidRuPhone } from '@/lib/ruPhone'
 import { useUserStore } from '@/stores/useUser'
 import CdekPvzList, { type CdekPvzInfo } from '../ui/CdekPvzList'
 import YandexPvzList from '../ui/YandexPvzList'
+import OzonPvzList from '../ui/OzonPvzList'
 import DeliveryCourierMap, { type CourierMapResult } from '../ui/DeliveryCourierMap'
 import type { YandexPickupPoint } from '@/types/yandexDelivery'
+import type { OzonPickupPoint } from '@/types/ozonDelivery'
 import {
   buildStreetAddress2WithMeta,
   parseVspAddressMeta,
@@ -83,7 +85,7 @@ export default function AddressModal({
 
   const [formData, setFormData] = useState<FormData>(initialFormState)
   const [errors, setErrors] = useState<FormErrors>({})
-  const [deliveryService, setDeliveryService] = useState<'cdek' | 'yandex'>('cdek')
+  const [deliveryService, setDeliveryService] = useState<'cdek' | 'yandex' | 'ozon'>('cdek')
   /** Координаты выбранного ПВЗ Яндекса (для расчёта доставки на checkout) */
   const [yandexPvzCoords, setYandexPvzCoords] = useState<{
     lon: number
@@ -91,8 +93,10 @@ export default function AddressModal({
   } | null>(null)
   /** id пункта из API Яндекса — для расчёта с type=pvz */
   const [yandexPvzId, setYandexPvzId] = useState<string | null>(null)
+  const [ozonPvzId, setOzonPvzId] = useState<string | null>(null)
   const [cdekDropoff, setCdekDropoff] = useState<'pvz' | 'courier'>('pvz')
   const [yandexDropoff, setYandexDropoff] = useState<'pvz' | 'courier'>('pvz')
+  const [ozonDropoff, setOzonDropoff] = useState<'pvz' | 'courier'>('pvz')
   /** Курьер до двери (СДЭК и Яндекс): координаты с карты */
   const [courierCoords, setCourierCoords] = useState<{
     lon: number
@@ -132,7 +136,9 @@ export default function AddressModal({
           setYandexPvzCoords(null)
           setYandexPvzId(null)
           setYandexDropoff('pvz')
-        } else {
+          setOzonDropoff('pvz')
+          setOzonPvzId(null)
+        } else if (carrier === 'yandex') {
           setCdekDropoff('pvz')
           setCourierCoords(null)
           const yPvz = Boolean(meta?.yandexPvzId?.trim())
@@ -173,6 +179,41 @@ export default function AddressModal({
             setYandexPvzCoords(null)
             setYandexPvzId(null)
           }
+          setOzonDropoff('pvz')
+          setOzonPvzId(null)
+        } else {
+          setCdekDropoff('pvz')
+          setYandexDropoff('pvz')
+          setYandexPvzCoords(null)
+          setYandexPvzId(null)
+          const oPvz = Boolean(meta?.ozonPvzId?.trim())
+          const oCourier =
+            meta?.dropoff === 'courier' ||
+            (!oPvz &&
+              meta?.lon != null &&
+              meta?.lat != null &&
+              Number.isFinite(meta.lon) &&
+              Number.isFinite(meta.lat))
+          setOzonDropoff(oCourier ? 'courier' : 'pvz')
+          if (oCourier) {
+            if (
+              meta?.lon != null &&
+              meta?.lat != null &&
+              Number.isFinite(meta.lon) &&
+              Number.isFinite(meta.lat)
+            ) {
+              setCourierCoords({ lon: meta.lon, lat: meta.lat })
+            } else {
+              setCourierCoords(null)
+            }
+            setOzonPvzId(null)
+          } else if (oPvz) {
+            setOzonPvzId(meta?.ozonPvzId?.trim() || null)
+            setCourierCoords(null)
+          } else {
+            setOzonPvzId(null)
+            setCourierCoords(null)
+          }
         }
 
         // Safe extraction of country code (handles if backend returns object or string)
@@ -199,9 +240,11 @@ export default function AddressModal({
         setDeliveryService('cdek')
         setCdekDropoff('pvz')
         setYandexDropoff('pvz')
+        setOzonDropoff('pvz')
         setCourierCoords(null)
         setYandexPvzCoords(null)
         setYandexPvzId(null)
+        setOzonPvzId(null)
         // Pre-fill for new address using User Profile data
         setFormData({
           ...initialFormState,
@@ -310,7 +353,11 @@ export default function AddressModal({
 
     try {
       const dropoff =
-        deliveryService === 'cdek' ? cdekDropoff : yandexDropoff
+        deliveryService === 'cdek'
+          ? cdekDropoff
+          : deliveryService === 'yandex'
+            ? yandexDropoff
+            : ozonDropoff
 
       const metaPayload: VspAddressMeta = {
         carrier: deliveryService,
@@ -332,6 +379,11 @@ export default function AddressModal({
         Number.isFinite(yandexPvzCoords.lon) &&
         Number.isFinite(yandexPvzCoords.lat)
           ? { lon: yandexPvzCoords.lon, lat: yandexPvzCoords.lat }
+          : {}),
+        ...(deliveryService === 'ozon' &&
+        dropoff === 'pvz' &&
+        ozonPvzId?.trim()
+          ? { ozonPvzId: ozonPvzId.trim() }
           : {}),
       }
       const streetAddress2WithMeta = buildStreetAddress2WithMeta(
@@ -480,9 +532,34 @@ export default function AddressModal({
       setYandexDropoff('courier')
       setYandexPvzId(null)
       setYandexPvzCoords(null)
+    } else if (deliveryService === 'ozon') {
+      setOzonDropoff('courier')
+      setOzonPvzId(null)
     } else {
       setCdekDropoff('courier')
     }
+  }
+
+  const handleOzonPvzChoose = (pvz: OzonPickupPoint) => {
+    setOzonDropoff('pvz')
+    setCourierCoords(null)
+    setOzonPvzId(pvz.id)
+    setFormData((prev) => ({
+      ...prev,
+      country: 'RU',
+      countryArea: pvz.address.region || prev.countryArea,
+      city: pvz.address.city || prev.city,
+      streetAddress1: pvz.address.address || pvz.address.fullAddress || prev.streetAddress1,
+      postalCode: pvz.address.postalCode || prev.postalCode,
+      companyName: pvz.name || prev.companyName,
+    }))
+    setErrors((prev) => ({
+      ...prev,
+      countryArea: '',
+      city: '',
+      streetAddress1: '',
+      postalCode: '',
+    }))
   }
 
   if (!show) return null
@@ -578,6 +655,7 @@ export default function AddressModal({
                   setDeliveryService('cdek')
                   setYandexPvzCoords(null)
                   setYandexPvzId(null)
+                  setOzonPvzId(null)
                   setCourierCoords(null)
                 }}
                 className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${deliveryService === 'cdek' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
@@ -589,12 +667,26 @@ export default function AddressModal({
                 type="button"
                 onClick={() => {
                   setDeliveryService('yandex')
+                  setOzonPvzId(null)
                   setCourierCoords(null)
                 }}
                 className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${deliveryService === 'yandex' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
                   }`}
               >
                 Яндекс
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeliveryService('ozon')
+                  setYandexPvzCoords(null)
+                  setYandexPvzId(null)
+                  setCourierCoords(null)
+                }}
+                className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${deliveryService === 'ozon' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
+                  }`}
+              >
+                Ozon
               </button>
             </div>
 
@@ -654,6 +746,33 @@ export default function AddressModal({
               </div>
             )}
 
+            {deliveryService === 'ozon' && (
+              <div className="flex gap-2 p-1 bg-black/5 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOzonDropoff('pvz')
+                    setCourierCoords(null)
+                  }}
+                  className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${ozonDropoff === 'pvz' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
+                    }`}
+                >
+                  Пункт выдачи
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOzonDropoff('courier')
+                    setOzonPvzId(null)
+                  }}
+                  className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${ozonDropoff === 'courier' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
+                    }`}
+                >
+                  Курьером
+                </button>
+              </div>
+            )}
+
             <div className="mt-2 border border-black/10 rounded-xl p-3 bg-white max-h-[520px] overflow-y-auto min-h-[200px]">
               {deliveryService === 'cdek' && cdekDropoff === 'pvz' && (
                 <CdekPvzList onChoose={handleCdekPvzChoose} />
@@ -675,6 +794,21 @@ export default function AddressModal({
               {deliveryService === 'yandex' && yandexDropoff === 'courier' && (
                 <DeliveryCourierMap
                   key={`yandex-courier-${addressToEdit?.id ?? 'new'}`}
+                  onSelect={handleCourierMapChoose}
+                  initialCoords={courierCoords}
+                  hintCity={formData.city?.trim() || 'Москва'}
+                />
+              )}
+              {deliveryService === 'ozon' && ozonDropoff === 'pvz' && (
+                <OzonPvzList
+                  onChoose={handleOzonPvzChoose}
+                  defaultCity={formData.city?.trim() || 'Москва'}
+                  selectedPointId={ozonPvzId}
+                />
+              )}
+              {deliveryService === 'ozon' && ozonDropoff === 'courier' && (
+                <DeliveryCourierMap
+                  key={`ozon-courier-${addressToEdit?.id ?? 'new'}`}
                   onSelect={handleCourierMapChoose}
                   initialCoords={courierCoords}
                   hintCity={formData.city?.trim() || 'Москва'}

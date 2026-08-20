@@ -34,6 +34,11 @@ import {
   parseYandexOfferPrice,
 } from '@/lib/api/yandexDelivery'
 import {
+  calculateOzonDelivery,
+  calculateOzonDeliveryByAddress,
+  parseOzonAmount,
+} from '@/lib/api/ozonDelivery'
+import {
   parseVspAddressMeta,
   getShippingCarrierFromAddress,
   displayStreetAddress2Comment,
@@ -132,6 +137,68 @@ export default function OrderDelivery() {
           console.error('Yandex shipping calculation failed:', yErr)
         }
         setShippingCarrier('yandex')
+        setShippingPrice(0)
+        return
+      }
+
+      // === Ozon Logistika (ПВЗ или курьер) ===
+      if (carrier === 'ozon') {
+        try {
+          const { meta } = parseVspAddressMeta(address.streetAddress2 || '')
+          const shipmentLines = items
+            .filter((i) => i.product)
+            .map((i) => ({
+              quantity: i.quantity,
+              weightKg: i.product.weight,
+              lengthMm: i.product.length,
+              widthMm: i.product.width,
+              heightMm: i.product.height,
+            }))
+          const cartSubtotal = items.reduce(
+            (sum, i) => sum + (i.product?.price || 0) * i.quantity,
+            0,
+          )
+          const estimatedPrice = Math.max(1000, Math.round(cartSubtotal))
+
+          const usePvz =
+            meta?.dropoff === 'pvz' ||
+            (meta?.dropoff !== 'courier' && Boolean(meta?.ozonPvzId?.trim()))
+          const ozonPvzId = meta?.ozonPvzId?.trim()
+
+          if (usePvz && ozonPvzId) {
+            const res = await calculateOzonDelivery({
+              deliveryVariantId: ozonPvzId,
+              weightG: 0,
+              estimatedPrice,
+              ...(shipmentLines.length > 0 ? { shipmentLines } : {}),
+            })
+            const amount = parseOzonAmount(res.amount)
+            setShippingCarrier('ozon')
+            setShippingPrice(amount > 0 ? Math.round(amount) : 0)
+            return
+          }
+
+          const addrLine = [
+            address.city?.trim(),
+            address.streetAddress1?.trim(),
+          ]
+            .filter(Boolean)
+            .join(', ')
+          if (addrLine) {
+            const res = await calculateOzonDeliveryByAddress({
+              address: addrLine,
+              estimatedPrice,
+              ...(shipmentLines.length > 0 ? { shipmentLines } : {}),
+            })
+            const amount = parseOzonAmount(res.amount)
+            setShippingCarrier('ozon')
+            setShippingPrice(amount > 0 ? Math.round(amount) : 0)
+            return
+          }
+        } catch (ozErr) {
+          console.error('Ozon shipping calculation failed:', ozErr)
+        }
+        setShippingCarrier('ozon')
         setShippingPrice(0)
         return
       }

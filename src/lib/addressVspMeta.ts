@@ -5,19 +5,21 @@
  */
 
 export type VspAddressMeta = {
-  carrier: 'cdek' | 'yandex'
+  carrier: 'cdek' | 'yandex' | 'ozon'
   lon?: number
   lat?: number
   /** id пункта из API Яндекса (pickup-points); для offers/calculate с type=pvz */
   yandexPvzId?: string
+  /** id способа доставки Ozon (deliveryVariantId) */
+  ozonPvzId?: string
   /** Пункт выдачи или курьер до двери (по умолчанию для старых адресов — ПВЗ) */
   dropoff?: 'pvz' | 'courier'
 }
 
 function parseMetaFirstLine(first: string): VspAddressMeta | null {
-  const m = first.match(/^__VSP:carrier=(cdek|yandex)(.*)__$/)
+  const m = first.match(/^__VSP:carrier=(cdek|yandex|ozon)(.*)__$/)
   if (!m) return null
-  const carrier = m[1] as 'cdek' | 'yandex'
+  const carrier = m[1] as 'cdek' | 'yandex' | 'ozon'
   const tail = m[2] || ''
   const meta: VspAddressMeta = { carrier }
   if (!tail) return meta
@@ -34,7 +36,10 @@ function parseMetaFirstLine(first: string): VspAddressMeta | null {
       const n = Number(val)
       if (Number.isFinite(n)) meta.lat = n
     } else if (key === 'pvz' && val) {
-      meta.yandexPvzId = val
+      if (carrier === 'ozon') meta.ozonPvzId = val
+      else meta.yandexPvzId = val
+    } else if (key === 'ozonPvz' && val) {
+      meta.ozonPvzId = val
     } else if (key === 'dropoff' && (val === 'pvz' || val === 'courier')) {
       meta.dropoff = val
     }
@@ -76,6 +81,10 @@ export function buildStreetAddress2WithMeta(
   if (pvz) {
     line += `|pvz=${pvz}`
   }
+  const ozonPvz = meta.ozonPvzId?.trim()
+  if (ozonPvz) {
+    line += `|ozonPvz=${ozonPvz}`
+  }
   if (meta.dropoff) {
     line += `|dropoff=${meta.dropoff}`
   }
@@ -91,14 +100,14 @@ export function displayStreetAddress2Comment(streetAddress2: string | undefined 
 
 export function getShippingCarrierFromAddress(
   streetAddress2: string | undefined | null,
-): 'cdek' | 'yandex' {
+): 'cdek' | 'yandex' | 'ozon' {
   return parseVspAddressMeta(streetAddress2 || '').meta?.carrier ?? 'cdek'
 }
 
 /** Режим доставки для отображения (ПВЗ / курьер) по метаданным адреса. */
 export function getDeliveryDisplayMode(
   streetAddress2: string | undefined | null,
-): { carrier: 'cdek' | 'yandex'; mode: 'pvz' | 'courier' } {
+): { carrier: 'cdek' | 'yandex' | 'ozon'; mode: 'pvz' | 'courier' } {
   const { meta } = parseVspAddressMeta(streetAddress2 || '')
   const carrier = meta?.carrier ?? 'cdek'
   if (!meta) {
@@ -113,6 +122,23 @@ export function getDeliveryDisplayMode(
   if (carrier === 'yandex') {
     if (meta.yandexPvzId?.trim()) {
       return { carrier, mode: 'pvz' }
+    }
+    if (
+      meta.lon != null &&
+      meta.lat != null &&
+      Number.isFinite(meta.lon) &&
+      Number.isFinite(meta.lat)
+    ) {
+      return { carrier, mode: 'courier' }
+    }
+    return { carrier, mode: 'pvz' }
+  }
+  if (carrier === 'ozon') {
+    if (meta.ozonPvzId?.trim()) {
+      return { carrier, mode: 'pvz' }
+    }
+    if (meta.dropoff === 'courier') {
+      return { carrier, mode: 'courier' }
     }
     if (
       meta.lon != null &&
@@ -144,7 +170,12 @@ export function formatDeliveryAddressSummary(address: {
   streetAddress1?: string | null
 }): string {
   const { carrier, mode } = getDeliveryDisplayMode(address.streetAddress2)
-  const carrierLabel = carrier === 'yandex' ? 'Яндекс Доставка' : 'СДЭК'
+  const carrierLabel =
+    carrier === 'yandex'
+      ? 'Яндекс Доставка'
+      : carrier === 'ozon'
+        ? 'Ozon'
+        : 'СДЭК'
   const modeLabel = mode === 'pvz' ? 'ПВЗ' : 'Курьер'
   const city = (address.city || '').trim()
   const street = (address.streetAddress1 || '').trim()
