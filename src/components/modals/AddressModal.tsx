@@ -25,6 +25,7 @@ import { yandexPickupCityArea } from '@/lib/yandexPickupCityArea'
 import { inferRuCountryAreaFromYandexPvz } from '@/lib/ruAddressRegion'
 import { yandexPointIdForCargoOffers } from '@/lib/yandexPickupPointId'
 import { extractRuPostalCode } from '@/lib/extractRuPostalCode'
+import { reverseGeocodeRuPostalCode } from '@/lib/reverseGeocodeRuPostalCode'
 
 interface AddressModalProps {
   visible: boolean
@@ -545,17 +546,20 @@ export default function AddressModal({
     setOzonDropoff('pvz')
     setCourierCoords(null)
     setOzonPvzId(pvz.id)
+
+    const postalFromAddress =
+      pvz.address.postalCode ||
+      extractRuPostalCode(pvz.address.fullAddress) ||
+      extractRuPostalCode(pvz.address.address) ||
+      ''
+
     setFormData((prev) => ({
       ...prev,
       country: 'RU',
       countryArea: pvz.address.region || prev.countryArea,
       city: pvz.address.city || prev.city,
       streetAddress1: pvz.address.address || pvz.address.fullAddress || prev.streetAddress1,
-      postalCode:
-        pvz.address.postalCode ||
-        extractRuPostalCode(pvz.address.fullAddress) ||
-        extractRuPostalCode(pvz.address.address) ||
-        prev.postalCode,
+      postalCode: postalFromAddress || prev.postalCode,
       companyName: pvz.name || prev.companyName,
     }))
     setErrors((prev) => ({
@@ -565,6 +569,21 @@ export default function AddressModal({
       streetAddress1: '',
       postalCode: '',
     }))
+
+    if (
+      !postalFromAddress &&
+      pvz.coordinates?.latitude != null &&
+      pvz.coordinates?.longitude != null
+    ) {
+      void reverseGeocodeRuPostalCode(
+        pvz.coordinates.latitude,
+        pvz.coordinates.longitude,
+      ).then((postalCode) => {
+        if (!postalCode) return
+        setFormData((prev) => ({ ...prev, postalCode }))
+        setErrors((prev) => ({ ...prev, postalCode: '' }))
+      })
+    }
   }
 
   if (!show) return null
