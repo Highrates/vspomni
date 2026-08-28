@@ -24,8 +24,9 @@ export async function POST(request: NextRequest) {
         const checkoutId = metadata?.orderId || metadata?.checkoutId
 
         if (!checkoutId) {
-            console.error('Webhook Error: No checkoutId (orderId) found in metadata', metadata)
-            return NextResponse.json({ error: 'No checkoutId in metadata' }, { status: 400 })
+            // Платежи не с сайта (инвойсы dashboard и т.п.) — игнорируем, чтобы ЮKassa не ретраила
+            console.log('Webhook ignored: no checkoutId in metadata (not a site checkout)', metadata)
+            return NextResponse.json({ received: true, ignored: true })
         }
 
         console.log(`Processing successful payment for checkout: ${checkoutId}`, {
