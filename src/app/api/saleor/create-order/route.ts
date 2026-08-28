@@ -168,6 +168,8 @@ export async function POST(request: NextRequest) {
         id: result.checkout.token,
         token: result.checkout.token,
       },
+      total: result.total || undefined,
+      promo: result.promo || undefined,
     })
 
   } catch (error: unknown) {

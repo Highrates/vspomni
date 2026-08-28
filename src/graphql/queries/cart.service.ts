@@ -520,11 +520,16 @@ async function applyCheckoutAddresses(
     await setCheckoutShippingAddress(checkoutId, resolved);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    // Лимит quantity_limit_per_customer ломает GraphQL после custom create —
-    // адрес уже должен быть на checkout через REST create/complete.
-    if (message.includes('Cannot add more than')) {
+    // После create-without-stock-check GraphQL address update снова
+    // гоняет check_lines_quantity (лимит / «0 remaining in stock»).
+    // Адрес уже пишем через REST create/complete — не блокируем оплату.
+    if (
+      message.includes('Cannot add more than') ||
+      message.includes('remaining in stock') ||
+      message.includes('Could not add items')
+    ) {
       console.warn(
-        'GraphQL address update skipped due to quantity limit:',
+        'GraphQL address update skipped due to stock/quantity check:',
         message,
       );
       return;

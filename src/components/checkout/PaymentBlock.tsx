@@ -342,23 +342,38 @@ export default function PaymentBlock() {
           console.log('Setting checkoutId state to:', newCheckoutId)
           setCheckoutId(newCheckoutId)
 
-          // Attach customer; адрес уже на checkout — quantity-ошибки не блокируют оплату
-          try {
-            await syncDeliveryToCheckout(newCheckoutId)
-          } catch (syncError: unknown) {
-            const message =
-              syncError instanceof Error ? syncError.message : String(syncError)
-            if (message.includes('Cannot add more than')) {
-              console.warn(
-                'Skipping GraphQL address sync due to quantity limit; address already set via REST:',
-                message,
-              )
-              const { attachCheckoutToCustomer } = await import(
-                '@/graphql/queries/cart.service'
-              )
-              await attachCheckoutToCustomer(newCheckoutId, accountEmail)
-            } else {
-              throw syncError
+          // Адрес уже на checkout через REST — GraphQL shippingAddressUpdate
+          // снова проверяет склад и падает с «Only 0 remaining in stock».
+          // Только привязываем пользователя; иначе sync с soft-fail.
+          if (saleorAddress && accountEmail) {
+            const { attachCheckoutToCustomer } = await import(
+              '@/graphql/queries/cart.service'
+            )
+            await attachCheckoutToCustomer(newCheckoutId, accountEmail)
+          } else {
+            try {
+              await syncDeliveryToCheckout(newCheckoutId)
+            } catch (syncError: unknown) {
+              const message =
+                syncError instanceof Error ? syncError.message : String(syncError)
+              if (
+                message.includes('Cannot add more than') ||
+                message.includes('remaining in stock') ||
+                message.includes('Could not add items')
+              ) {
+                console.warn(
+                  'Skipping GraphQL address sync due to stock/quantity check:',
+                  message,
+                )
+                if (accountEmail) {
+                  const { attachCheckoutToCustomer } = await import(
+                    '@/graphql/queries/cart.service'
+                  )
+                  await attachCheckoutToCustomer(newCheckoutId, accountEmail)
+                }
+              } else {
+                throw syncError
+              }
             }
           }
 
