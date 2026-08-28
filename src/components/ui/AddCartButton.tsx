@@ -5,6 +5,10 @@ import { useCartStore } from "@/stores/useCart";
 import { useCartUiStore } from "@/stores/useCartUiStore";
 import { ProductCardItem } from "@/types/product";
 import { toast } from "react-toastify";
+import {
+  formatQuantityLimitMessage,
+  normalizeQuantityLimit,
+} from "@/lib/product/quantityLimit";
 
 interface AddCartButtonProps {
   product: ProductCardItem | null;
@@ -34,6 +38,8 @@ export default function AddCartButton({
     );
 
   const canAdd = Boolean(product && size && inStock);
+  const maxQty = normalizeQuantityLimit(product?.quantityLimitPerCustomer);
+  const atLimit = maxQty != null && quantity >= maxQty;
 
   const handleAddFirst = () => {
     if (!inStock) {
@@ -44,7 +50,11 @@ export default function AddCartButton({
       toast.error("Пожалуйста, выберите размер перед добавлением в корзину.");
       return;
     }
-    addItem(product, 1, size, variantId || product.variantId || undefined);
+    const result = addItem(product, 1, size, variantId || product.variantId || undefined);
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
     toast.success("Товар добавлен в корзину!");
   };
 
@@ -54,7 +64,15 @@ export default function AddCartButton({
 
   const handleInc = () => {
     if (!inStock) return;
-    if (lineId) increaseQuantity(lineId);
+    if (atLimit && maxQty != null) {
+      toast.error(formatQuantityLimitMessage(maxQty));
+      return;
+    }
+    if (!lineId) return;
+    const result = increaseQuantity(lineId);
+    if (!result.ok) {
+      toast.error(result.message);
+    }
   };
 
   if (!inStock) {
@@ -86,8 +104,13 @@ export default function AddCartButton({
           </span>
           <button
             type="button"
-            aria-label="Увеличить количество"
-            className="w-10 h-10 shrink-0 flex items-center justify-center rounded-full hover:bg-white/15 active:bg-white/20 transition-colors"
+            aria-label={
+              atLimit && maxQty != null
+                ? formatQuantityLimitMessage(maxQty)
+                : "Увеличить количество"
+            }
+            disabled={atLimit}
+            className="w-10 h-10 shrink-0 flex items-center justify-center rounded-full hover:bg-white/15 active:bg-white/20 transition-colors disabled:opacity-35 disabled:hover:bg-transparent disabled:cursor-not-allowed"
             onClick={handleInc}
           >
             <Plus className="w-5 h-5 text-white" strokeWidth={2.2} />

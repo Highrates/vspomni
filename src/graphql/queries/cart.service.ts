@@ -515,8 +515,22 @@ async function applyCheckoutAddresses(
   const resolved = toSaleorDeliveryAddress(
     (address || MINIMAL_CHECKOUT_ADDRESS) as AddressInfo,
   );
-  await setCheckoutBillingAddress(checkoutId, resolved);
-  await setCheckoutShippingAddress(checkoutId, resolved);
+  try {
+    await setCheckoutBillingAddress(checkoutId, resolved);
+    await setCheckoutShippingAddress(checkoutId, resolved);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    // Лимит quantity_limit_per_customer ломает GraphQL после custom create —
+    // адрес уже должен быть на checkout через REST create/complete.
+    if (message.includes('Cannot add more than')) {
+      console.warn(
+        'GraphQL address update skipped due to quantity limit:',
+        message,
+      );
+      return;
+    }
+    throw error;
+  }
 }
 
 /**
@@ -630,6 +644,7 @@ export type FinalizeCheckoutParams = {
   paymentId?: string
   shippingAmount?: number
   shippingCarrier?: ShippingCarrier | null
+  address?: Partial<AddressInfo> | null
 }
 
 /**
@@ -643,6 +658,7 @@ export async function finalizeCheckoutViaRest({
   paymentId,
   shippingAmount,
   shippingCarrier,
+  address,
 }: FinalizeCheckoutParams): Promise<{ order: any; errors: any[] }> {
   const normalizedEmail = (userEmail?.trim() || '').toLowerCase()
   const baseUrl = getSaleorRestBaseUrl()
@@ -658,6 +674,7 @@ export async function finalizeCheckoutViaRest({
       userEmail: normalizedEmail || undefined,
       shippingAmount,
       shippingCarrier,
+      address: address || undefined,
     }),
   })
 
@@ -753,6 +770,13 @@ export async function completeCheckout(
       paymentId,
       shippingAmount,
       shippingCarrier,
+      address: deliveryAddress
+        ? toSaleorDeliveryAddress(
+            contact
+              ? mergeCheckoutContact(deliveryAddress as AddressInfo, contact)
+              : (deliveryAddress as AddressInfo),
+          )
+        : undefined,
     })
   } catch (error: unknown) {
     console.error('Error in completeCheckout via REST:', error)

@@ -75,6 +75,7 @@ export interface ProductVariant {
     sku: string;
     name: string;
     quantityAvailable?: number;
+    quantityLimitPerCustomer?: number | null;
     /** Вес в кг (Saleor Dashboard → вариант → доставка) */
     weight?: {
       value: number;

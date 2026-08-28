@@ -153,6 +153,10 @@ export default function ProductPageClient({
               length: ship.length,
               width: ship.width,
               height: ship.height,
+              quantityLimitPerCustomer:
+                typeof variant.quantityLimitPerCustomer === 'number'
+                  ? variant.quantityLimitPerCustomer
+                  : variant.quantityLimitPerCustomer ?? null,
             }
           : prev,
       )

@@ -2,6 +2,11 @@ import { formatCurrency } from "@/lib/functions";
 import { ProductCardItem } from "@/types/product";
 import Image from "next/image";
 import { useCartStore } from "@/stores/useCart";
+import { toast } from "react-toastify";
+import {
+  formatQuantityLimitMessage,
+  normalizeQuantityLimit,
+} from "@/lib/product/quantityLimit";
 
 interface CartCardProps {
   product: ProductCardItem;
@@ -23,6 +28,7 @@ export default function CartCard({
   outStock,
 }: CartCardProps) {
   const discountPercent = useCartStore((state) => state.discount)
+  const increaseQuantity = useCartStore((state) => state.increaseQuantity)
   const sizeStr = size ?? ''
   const sizeHasMl = sizeStr.toLowerCase().includes('мл')
   const displaySize = sizeStr === 'sampler' ? 'Пробник' : (sizeHasMl ? sizeStr : sizeStr ? `${sizeStr} мл` : '')
@@ -41,18 +47,43 @@ export default function CartCard({
     : priceWithProductDiscount
   const showOldPrice = hasProductDiscount || hasPromoDiscount
 
+  const maxQty = normalizeQuantityLimit(product?.quantityLimitPerCustomer)
+  const atLimit = maxQty != null && quantity >= maxQty
+  const lineId = String(product?.variantId || product?.id || '')
+
+  const handleIncrease = () => {
+    if (atLimit && maxQty != null) {
+      toast.error(formatQuantityLimitMessage(maxQty))
+      return
+    }
+    if (lineId) {
+      const result = increaseQuantity(lineId)
+      if (!result.ok) {
+        toast.error(result.message)
+      }
+      return
+    }
+    onIncrease?.()
+  }
+
   const ActionButton = ({
     children,
     onClick,
+    disabled,
+    title,
   }: {
     children: React.ReactNode
     onClick?: () => void
+    disabled?: boolean
+    title?: string
   }) => (
     <button
       type="button"
       onClick={onClick}
-      className="w-8 h-8 sm:w-9 sm:h-9 border border-black/15 rounded-xl flex items-center justify-center cursor-pointer hover:bg-black/5 active:scale-95 transition-all duration-200"
-      aria-label={typeof children === 'string' ? children : undefined}
+      disabled={disabled}
+      title={title}
+      className="w-8 h-8 sm:w-9 sm:h-9 border border-black/15 rounded-xl flex items-center justify-center cursor-pointer hover:bg-black/5 active:scale-95 transition-all duration-200 disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:active:scale-100"
+      aria-label={typeof children === 'string' ? children : title}
     >
       {children}
     </button>
@@ -102,7 +133,15 @@ export default function CartCard({
                 )}
               </ActionButton>
               <span className="text-sm font-semibold min-w-[1.25rem] text-center">{quantity}</span>
-              <ActionButton onClick={onIncrease}>
+              <ActionButton
+                onClick={handleIncrease}
+                disabled={atLimit}
+                title={
+                  atLimit && maxQty != null
+                    ? formatQuantityLimitMessage(maxQty)
+                    : 'Увеличить количество'
+                }
+              >
                 <span className="text-base font-medium select-none">+</span>
               </ActionButton>
             </div>

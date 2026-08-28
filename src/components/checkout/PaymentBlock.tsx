@@ -12,7 +12,9 @@ import { isValidRuPhone } from '@/lib/ruPhone'
 import { getAccountEmail } from '@/lib/auth/accountEmail'
 import {
   buildCheckoutContact,
+  mergeCheckoutContact,
   resolveCheckoutDeliveryAddress,
+  toSaleorDeliveryAddress,
 } from '@/lib/checkout/deliveryAddress'
 import {
   isProductInStock,
@@ -287,6 +289,13 @@ export default function PaymentBlock() {
 
       try {
         const accountEmail = getAccountEmail()
+        const contact = getCheckoutContact()
+        const saleorAddress = resolvedDelivery
+          ? toSaleorDeliveryAddress(
+              mergeCheckoutContact(resolvedDelivery, contact),
+            )
+          : undefined
+
         const checkoutResponse = await fetch('/api/saleor/create-order', {
           method: 'POST',
           headers: {
@@ -296,6 +305,8 @@ export default function PaymentBlock() {
             lines: checkoutLines,
             userEmail: accountEmail,
             channel: 'vspomni-site',
+            address: saleorAddress,
+            promoCode: appliedPromoCode || undefined,
           }),
         })
 
@@ -306,9 +317,14 @@ export default function PaymentBlock() {
           console.log('Checkout created via custom API:', checkoutResult.checkout)
           const newCheckoutId = checkoutResult.checkout.token as string
 
-          // Синхронизируем промокод с реальным checkout в Saleor
-          let checkoutTotalFromSaleor: number | null = null
-          if (appliedPromoCode) {
+          // Промокод и адрес уже применены на бэке (без quantity limit GraphQL)
+          let checkoutTotalFromSaleor: number | null =
+            checkoutResult.total?.amount != null
+              ? Number(checkoutResult.total.amount)
+              : null
+
+          // Fallback: если бэк не применил промо — пробуем GraphQL (не блокируем оплату)
+          if (appliedPromoCode && checkoutTotalFromSaleor == null) {
             try {
               const { addPromoCodeService } = await import('@/graphql/queries/promocode.service')
               const checkoutWithPromo = await addPromoCodeService(
@@ -326,7 +342,25 @@ export default function PaymentBlock() {
           console.log('Setting checkoutId state to:', newCheckoutId)
           setCheckoutId(newCheckoutId)
 
-          await syncDeliveryToCheckout(newCheckoutId)
+          // Attach customer; адрес уже на checkout — quantity-ошибки не блокируют оплату
+          try {
+            await syncDeliveryToCheckout(newCheckoutId)
+          } catch (syncError: unknown) {
+            const message =
+              syncError instanceof Error ? syncError.message : String(syncError)
+            if (message.includes('Cannot add more than')) {
+              console.warn(
+                'Skipping GraphQL address sync due to quantity limit; address already set via REST:',
+                message,
+              )
+              const { attachCheckoutToCustomer } = await import(
+                '@/graphql/queries/cart.service'
+              )
+              await attachCheckoutToCustomer(newCheckoutId, accountEmail)
+            } else {
+              throw syncError
+            }
+          }
 
           const amountForPayment = await prepareCheckoutPayment(
             newCheckoutId,

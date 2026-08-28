@@ -2,6 +2,14 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { CartItem } from '@/types/cart'
 import { ProductCardItem } from '@/types/product'
+import {
+  formatQuantityLimitMessage,
+  normalizeQuantityLimit,
+} from '@/lib/product/quantityLimit'
+
+export type CartQuantityResult =
+  | { ok: true }
+  | { ok: false; reason: 'limit'; message: string; maxQuantity: number }
 
 interface CartState {
   items: CartItem[]
@@ -16,9 +24,14 @@ interface CartState {
   shippingCarrier: 'cdek' | 'yandex' | 'ozon' | null
   appliedPromoCode: string | null
 
-  addItem: (product: ProductCardItem, quantity: number, size: string, variantId?: string) => void
+  addItem: (
+    product: ProductCardItem,
+    quantity: number,
+    size: string,
+    variantId?: string,
+  ) => CartQuantityResult
   removeItem: (id: string) => void
-  increaseQuantity: (id: string) => void
+  increaseQuantity: (id: string) => CartQuantityResult
   decreaseQuantity: (id: string) => void
   clearCart: () => void
   setShippingPrice: (price: number) => void
@@ -55,6 +68,23 @@ const calcTotals = (items: CartItem[], discount: number = 0, discountAmount?: nu
   }
 }
 
+function clampCartItems(items: CartItem[]): CartItem[] {
+  return items.map((item) => {
+    const max = normalizeQuantityLimit(item.product?.quantityLimitPerCustomer)
+    if (max == null || item.quantity <= max) return item
+    return { ...item, quantity: max }
+  })
+}
+
+function limitFailure(max: number): CartQuantityResult {
+  return {
+    ok: false,
+    reason: 'limit',
+    message: formatQuantityLimitMessage(max),
+    maxQuantity: max,
+  }
+}
+
 export const useCartStore = create<CartState>()(
   persist(
     (set, get) => ({
@@ -70,20 +100,66 @@ export const useCartStore = create<CartState>()(
       appliedPromoCode: null,
 
       addItem: (product, quantity, size, variantId) => {
-        // Используем variantId как ID для уникальности товара с конкретным вариантом
         const id = variantId || product.id
+        const addBy = Math.max(1, Math.floor(quantity) || 1)
         const items = [...get().items]
         const existingIndex = items.findIndex((item) => item.id === id)
+        const currentQty = existingIndex >= 0 ? items[existingIndex].quantity : 0
+        const max = normalizeQuantityLimit(
+          product.quantityLimitPerCustomer ??
+            (existingIndex >= 0
+              ? items[existingIndex].product?.quantityLimitPerCustomer
+              : undefined),
+        )
+
+        if (max != null && currentQty + addBy > max) {
+          if (currentQty < max && existingIndex >= 0) {
+            items[existingIndex] = {
+              ...items[existingIndex],
+              quantity: max,
+              product: {
+                ...items[existingIndex].product,
+                ...product,
+                quantityLimitPerCustomer: max,
+              },
+            }
+            const { discount, discountAmount, shippingPrice } = get()
+            set({ items, ...calcTotals(items, discount, discountAmount, shippingPrice) })
+          } else if (currentQty === 0 && max >= 1) {
+            // first add but requested more than limit — add up to max
+            items.push({
+              id,
+              product: { ...product, quantityLimitPerCustomer: max },
+              quantity: max,
+              size,
+              variantId,
+            })
+            const { discount, discountAmount, shippingPrice } = get()
+            set({ items, ...calcTotals(items, discount, discountAmount, shippingPrice) })
+          }
+          return limitFailure(max)
+        }
 
         if (existingIndex >= 0) {
-          items[existingIndex].quantity += quantity
+          items[existingIndex] = {
+            ...items[existingIndex],
+            quantity: currentQty + addBy,
+            product: {
+              ...items[existingIndex].product,
+              ...product,
+              quantityLimitPerCustomer:
+                product.quantityLimitPerCustomer ??
+                items[existingIndex].product.quantityLimitPerCustomer,
+            },
+          }
         } else {
-          items.push({ id, product, quantity, size, variantId })
+          items.push({ id, product, quantity: addBy, size, variantId })
         }
 
         const { discount, discountAmount, shippingPrice } = get()
         const totals = calcTotals(items, discount, discountAmount, shippingPrice)
         set({ items, ...totals })
+        return { ok: true }
       },
 
       removeItem: (id) => {
@@ -94,12 +170,21 @@ export const useCartStore = create<CartState>()(
       },
 
       increaseQuantity: (id) => {
-        const items = get().items.map((item) =>
-          item.id === id ? { ...item, quantity: item.quantity + 1 } : item,
-        )
+        const items = [...get().items]
+        const index = items.findIndex((item) => item.id === id)
+        if (index < 0) return { ok: true }
+
+        const item = items[index]
+        const max = normalizeQuantityLimit(item.product?.quantityLimitPerCustomer)
+        if (max != null && item.quantity >= max) {
+          return limitFailure(max)
+        }
+
+        items[index] = { ...item, quantity: item.quantity + 1 }
         const { discount, discountAmount, shippingPrice } = get()
         const totals = calcTotals(items, discount, discountAmount, shippingPrice)
         set({ items, ...totals })
+        return { ok: true }
       },
 
       decreaseQuantity: (id: any) => {
@@ -158,8 +243,17 @@ export const useCartStore = create<CartState>()(
         appliedPromoCode: null,
       }),
     }),
-    { name: 'cart-storage' },
+    {
+      name: 'cart-storage',
+      onRehydrateStorage: () => (state) => {
+        if (!state?.items?.length) return
+        const clamped = clampCartItems(state.items)
+        if (clamped.some((item, i) => item.quantity !== state.items[i]?.quantity)) {
+          const { discount, discountAmount, shippingPrice } = state
+          const totals = calcTotals(clamped, discount, discountAmount, shippingPrice)
+          useCartStore.setState({ items: clamped, ...totals })
+        }
+      },
+    },
   ),
 )
-
-

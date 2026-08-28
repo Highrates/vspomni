@@ -88,6 +88,7 @@ export async function getSingleProduct(
               name
               sku
               quantityAvailable
+              quantityLimitPerCustomer
               weight {
                 value
               }
@@ -363,6 +364,13 @@ function mapNodeToProductCard(
     ? isProductInStock(node)
     : true
 
+  const quantityLimitPerCustomer =
+    typeof variant.quantityLimitPerCustomer === 'number'
+      ? variant.quantityLimitPerCustomer
+      : variant.quantityLimitPerCustomer === null
+        ? null
+        : undefined
+
   return {
     id: variant.id,
     name: node.name,
@@ -383,6 +391,7 @@ function mapNodeToProductCard(
     width,
     height,
     inStock,
+    quantityLimitPerCustomer,
   }
 }
 
@@ -525,6 +534,7 @@ export async function getGreedProducts(): Promise<any> {
               name
               sku
               quantityAvailable
+              quantityLimitPerCustomer
               weight {
                 value
               }
@@ -638,6 +648,7 @@ export async function getPopularProducts(): Promise<any> {
               name
               sku
               quantityAvailable
+              quantityLimitPerCustomer
               weight {
                 value
               }
@@ -734,6 +745,7 @@ const CATALOG_PRODUCT_NODE_FRAGMENT = `
                   name
                   sku
                   quantityAvailable
+                  quantityLimitPerCustomer
                   pricing {
                     price {
                       gross {
@@ -919,6 +931,7 @@ const CHOICE_PRODUCTS_QUERY = `
                 name
                 sku
                 quantityAvailable
+                quantityLimitPerCustomer
                 weight {
                   value
                 }
@@ -1113,6 +1126,7 @@ const PRODUCTS_BY_COLLECTION_QUERY = `
                 name
                 sku
                 quantityAvailable
+                quantityLimitPerCustomer
                 pricing {
                   price { gross { currency amount } }
                   priceUndiscounted { gross { currency amount } }
@@ -1224,6 +1238,7 @@ export async function getProductsByAromaSlug(aromaSlug: string): Promise<Product
                   name
                   sku
                   quantityAvailable
+                  quantityLimitPerCustomer
                   pricing {
                     price { gross { currency amount } }
                     priceUndiscounted { gross { currency amount } }
@@ -1287,6 +1302,7 @@ export async function getProductsByAromaValue(aromaName: string): Promise<Produc
                   name
                   sku
                   quantityAvailable
+                  quantityLimitPerCustomer
                   pricing {
                     price { gross { currency amount } }
                     priceUndiscounted { gross { currency amount } }
@@ -1359,6 +1375,7 @@ export async function getProductsByCategorySlug(categorySlug: string): Promise<a
               name
               sku
               quantityAvailable
+              quantityLimitPerCustomer
               weight {
                 value
               }

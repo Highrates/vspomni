@@ -5,6 +5,10 @@ import { Minus, Plus, ShoppingBag } from 'lucide-react'
 import { useCartStore } from '@/stores/useCart'
 import { toast } from 'react-toastify'
 import { ProductCardItem } from '@/types/product'
+import {
+  formatQuantityLimitMessage,
+  normalizeQuantityLimit,
+} from '@/lib/product/quantityLimit'
 
 interface AddCartBtnProps {
   product: ProductCardItem
@@ -26,6 +30,8 @@ export default function AddCartBtn({ product, size, variantId, mobileRow }: AddC
   const resolvedSize = size || product.size || '100 мл'
   const resolvedVariantId = variantId || product.variantId || undefined
   const inStock = product.inStock !== false
+  const maxQty = normalizeQuantityLimit(product.quantityLimitPerCustomer)
+  const atLimit = maxQty != null && quantity >= maxQty
 
   const handleAddFirst = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -34,7 +40,11 @@ export default function AddCartBtn({ product, size, variantId, mobileRow }: AddC
       toast.error('Товара нет в наличии')
       return
     }
-    addItem(product, 1, resolvedSize, resolvedVariantId)
+    const result = addItem(product, 1, resolvedSize, resolvedVariantId)
+    if (!result.ok) {
+      toast.error(result.message)
+      return
+    }
     toast.success('Товар добавлен в корзину!')
   }
 
@@ -47,8 +57,17 @@ export default function AddCartBtn({ product, size, variantId, mobileRow }: AddC
   const handleInc = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    increaseQuantity(lineId)
+    if (atLimit && maxQty != null) {
+      toast.error(formatQuantityLimitMessage(maxQty))
+      return
+    }
+    const result = increaseQuantity(lineId)
+    if (!result.ok) {
+      toast.error(result.message)
+    }
   }
+
+  const plusDisabled = atLimit
 
   if (quantity > 0) {
     if (mobileRow) {
@@ -71,8 +90,13 @@ export default function AddCartBtn({ product, size, variantId, mobileRow }: AddC
           </span>
           <button
             type="button"
-            aria-label="Увеличить количество"
-            className="w-7 h-7 shrink-0 flex items-center justify-center rounded-full hover:bg-white/15 active:bg-white/20 transition-colors"
+            aria-label={
+              plusDisabled && maxQty != null
+                ? formatQuantityLimitMessage(maxQty)
+                : 'Увеличить количество'
+            }
+            disabled={plusDisabled}
+            className="w-7 h-7 shrink-0 flex items-center justify-center rounded-full hover:bg-white/15 active:bg-white/20 transition-colors disabled:opacity-35 disabled:hover:bg-transparent disabled:cursor-not-allowed"
             onClick={handleInc}
           >
             <Plus className="w-[14px] h-[14px] text-white" strokeWidth={1.65} />
@@ -100,8 +124,13 @@ export default function AddCartBtn({ product, size, variantId, mobileRow }: AddC
         </span>
         <button
           type="button"
-          aria-label="Увеличить количество"
-          className="w-9 h-9 shrink-0 flex items-center justify-center rounded-full hover:bg-white/15 active:bg-white/20 transition-colors"
+          aria-label={
+            plusDisabled && maxQty != null
+              ? formatQuantityLimitMessage(maxQty)
+              : 'Увеличить количество'
+          }
+          disabled={plusDisabled}
+          className="w-9 h-9 shrink-0 flex items-center justify-center rounded-full hover:bg-white/15 active:bg-white/20 transition-colors disabled:opacity-35 disabled:hover:bg-transparent disabled:cursor-not-allowed"
           onClick={handleInc}
         >
           <Plus className="w-[18px] h-[18px] text-white" strokeWidth={2.2} />

@@ -61,6 +61,8 @@ export async function POST(request: NextRequest) {
       lines,
       userEmail,
       channel = 'vspomni-site',
+      address,
+      promoCode,
     } = body
 
     // Валидация обязательных полей
@@ -75,6 +77,8 @@ export async function POST(request: NextRequest) {
       channel,
       userEmail,
       linesCount: lines.length,
+      hasAddress: Boolean(address),
+      hasPromo: Boolean(promoCode),
     })
 
     // Выполняем запрос к кастомному REST endpoint в Saleor
@@ -85,6 +89,8 @@ export async function POST(request: NextRequest) {
         variantId: line.variantId,
         quantity: line.quantity,
       })),
+      address: address || undefined,
+      promoCode: promoCode || undefined,
     })
 
     // Проверяем content-type перед парсингом JSON

@@ -65,6 +65,10 @@ export function buildProductCartFormat(
     width: ship.width,
     height: ship.height,
     inStock: isProductInStock(data),
+    quantityLimitPerCustomer:
+      typeof firstVariant.quantityLimitPerCustomer === 'number'
+        ? firstVariant.quantityLimitPerCustomer
+        : firstVariant.quantityLimitPerCustomer ?? null,
   }
 }
 
