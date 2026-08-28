@@ -306,7 +306,7 @@ export default function DeliveryCourierMap({
 
       <div
         ref={containerRef}
-        className="relative h-[320px] w-full overflow-hidden rounded-xl border border-black/10 bg-gray-100"
+        className="relative h-[220px] sm:h-[320px] w-full overflow-hidden rounded-xl border border-black/10 bg-gray-100"
       >
         {!scriptShouldLoad && (
           <div className="flex h-full items-center justify-center text-black/40 text-sm">

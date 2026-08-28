@@ -308,17 +308,11 @@ export default function AddressModal({
     else if (!isValidRuPhone(formData.phone)) {
       newErrors.phone = 'Номер в формате +7 (900) 000-00-00'
     }
-    // Для РФ Saleor часто принимает пустой регион; неверная строка даёт INVALID
-    if (
-      formData.country !== 'RU' &&
-      !formData.countryArea.trim()
-    ) {
+    // Регион и район заполняются автоматически при выборе ПВЗ/карты
+    if (formData.country !== 'RU' && !formData.countryArea.trim()) {
       newErrors.countryArea = 'Обязательное поле'
     }
     if (!formData.city.trim()) newErrors.city = 'Заполните город'
-    if (formData.country !== 'RU' && !formData.cityArea.trim()) {
-      newErrors.cityArea = 'Обязательное поле'
-    }
     if (!formData.streetAddress1.trim())
       newErrors.streetAddress1 = 'Заполните улицу и номер дома'
     if (!formData.postalCode.trim()) {
@@ -600,10 +594,10 @@ export default function AddressModal({
         initial={{ x: '100%' }}
         animate={{ x: visible ? 0 : '100%' }}
         transition={{ duration: 0.18, ease: 'easeOut' }}
-        className="relative w-[90vw] max-w-[90vw] h-full bg-white shadow-xl rounded-tl-3xl md:rounded-l-3xl flex flex-col"
+        className="relative w-full sm:w-[min(90vw,720px)] h-full max-h-[100dvh] bg-white shadow-xl rounded-none sm:rounded-l-3xl flex flex-col"
       >
-        <div className="max-sm:p-4 p-8 border-b border-black/10 flex items-center justify-between shrink-0">
-          <h1 className="text-2xl font-semibold">
+        <div className="max-sm:px-4 max-sm:py-4 sm:p-8 border-b border-black/10 flex items-center justify-between shrink-0">
+          <h1 className="text-xl sm:text-2xl font-semibold">
             {isEditMode ? 'Редактировать адрес' : 'Новый адрес'}
           </h1>
           <button
@@ -614,8 +608,8 @@ export default function AddressModal({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto max-sm:px-4 px-8 py-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+        <div className="flex-1 overflow-y-auto overscroll-contain max-sm:px-4 max-sm:py-4 sm:px-8 sm:py-6 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col">
               <label className="text-sm font-medium mb-2">Имя *</label>
               <input
@@ -662,17 +656,15 @@ export default function AddressModal({
           />
 
           {/* Доставка: выбор ПВЗ / курьер */}
-          <div className="flex flex-col gap-3 p-4 border border-black/10 rounded-xl bg-gray-50/50">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <h3 className="text-base font-semibold">Способ доставки</h3>
-                <p className="text-sm text-black/60">
-                  Перевозчик, затем пункт выдачи или курьер до двери
-                </p>
-              </div>
+          <div className="flex flex-col gap-3 p-3 sm:p-4 border border-black/10 rounded-xl bg-gray-50/50">
+            <div>
+              <h3 className="text-sm sm:text-base font-semibold">Способ доставки</h3>
+              <p className="text-xs sm:text-sm text-black/60 mt-0.5">
+                Перевозчик, затем пункт выдачи или курьер до двери
+              </p>
             </div>
 
-            <div className="flex gap-2 p-1 bg-black/5 rounded-xl">
+            <div className="grid grid-cols-3 gap-1.5 sm:gap-2 p-1 bg-black/5 rounded-xl">
               <button
                 type="button"
                 onClick={() => {
@@ -682,7 +674,7 @@ export default function AddressModal({
                   setOzonPvzId(null)
                   setCourierCoords(null)
                 }}
-                className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${deliveryService === 'cdek' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
+                className={`h-9 sm:h-10 rounded-lg text-xs sm:text-sm font-semibold transition ${deliveryService === 'cdek' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
                   }`}
               >
                 СДЭК
@@ -694,7 +686,7 @@ export default function AddressModal({
                   setOzonPvzId(null)
                   setCourierCoords(null)
                 }}
-                className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${deliveryService === 'yandex' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
+                className={`h-9 sm:h-10 rounded-lg text-xs sm:text-sm font-semibold transition ${deliveryService === 'yandex' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
                   }`}
               >
                 Яндекс
@@ -707,7 +699,7 @@ export default function AddressModal({
                   setYandexPvzId(null)
                   setCourierCoords(null)
                 }}
-                className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${deliveryService === 'ozon' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
+                className={`h-9 sm:h-10 rounded-lg text-xs sm:text-sm font-semibold transition ${deliveryService === 'ozon' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
                   }`}
               >
                 Ozon
@@ -715,14 +707,14 @@ export default function AddressModal({
             </div>
 
             {deliveryService === 'cdek' && (
-              <div className="flex gap-2 p-1 bg-black/5 rounded-xl">
+              <div className="grid grid-cols-2 gap-1.5 sm:gap-2 p-1 bg-black/5 rounded-xl">
                 <button
                   type="button"
                   onClick={() => {
                     setCdekDropoff('pvz')
                     setCourierCoords(null)
                   }}
-                  className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${cdekDropoff === 'pvz' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
+                  className={`h-9 sm:h-10 rounded-lg text-xs sm:text-sm font-semibold transition ${cdekDropoff === 'pvz' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
                     }`}
                 >
                   Пункт выдачи
@@ -734,7 +726,7 @@ export default function AddressModal({
                     setYandexPvzId(null)
                     setYandexPvzCoords(null)
                   }}
-                  className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${cdekDropoff === 'courier' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
+                  className={`h-9 sm:h-10 rounded-lg text-xs sm:text-sm font-semibold transition ${cdekDropoff === 'courier' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
                     }`}
                 >
                   Курьером
@@ -743,14 +735,14 @@ export default function AddressModal({
             )}
 
             {deliveryService === 'yandex' && (
-              <div className="flex gap-2 p-1 bg-black/5 rounded-xl">
+              <div className="grid grid-cols-2 gap-1.5 sm:gap-2 p-1 bg-black/5 rounded-xl">
                 <button
                   type="button"
                   onClick={() => {
                     setYandexDropoff('pvz')
                     setCourierCoords(null)
                   }}
-                  className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${yandexDropoff === 'pvz' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
+                  className={`h-9 sm:h-10 rounded-lg text-xs sm:text-sm font-semibold transition ${yandexDropoff === 'pvz' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
                     }`}
                 >
                   Пункт выдачи
@@ -762,7 +754,7 @@ export default function AddressModal({
                     setYandexPvzId(null)
                     setYandexPvzCoords(null)
                   }}
-                  className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${yandexDropoff === 'courier' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
+                  className={`h-9 sm:h-10 rounded-lg text-xs sm:text-sm font-semibold transition ${yandexDropoff === 'courier' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
                     }`}
                 >
                   Курьером
@@ -771,14 +763,14 @@ export default function AddressModal({
             )}
 
             {deliveryService === 'ozon' && (
-              <div className="flex gap-2 p-1 bg-black/5 rounded-xl">
+              <div className="grid grid-cols-2 gap-1.5 sm:gap-2 p-1 bg-black/5 rounded-xl">
                 <button
                   type="button"
                   onClick={() => {
                     setOzonDropoff('pvz')
                     setCourierCoords(null)
                   }}
-                  className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${ozonDropoff === 'pvz' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
+                  className={`h-9 sm:h-10 rounded-lg text-xs sm:text-sm font-semibold transition ${ozonDropoff === 'pvz' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
                     }`}
                 >
                   Пункт выдачи
@@ -789,7 +781,7 @@ export default function AddressModal({
                     setOzonDropoff('courier')
                     setOzonPvzId(null)
                   }}
-                  className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${ozonDropoff === 'courier' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
+                  className={`h-9 sm:h-10 rounded-lg text-xs sm:text-sm font-semibold transition ${ozonDropoff === 'courier' ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
                     }`}
                 >
                   Курьером
@@ -797,7 +789,7 @@ export default function AddressModal({
               </div>
             )}
 
-            <div className="mt-2 border border-black/10 rounded-xl p-3 bg-white max-h-[520px] overflow-y-auto min-h-[200px]">
+            <div className="border border-black/10 rounded-xl p-2 sm:p-3 bg-white max-h-[min(48vh,480px)] sm:max-h-[520px] overflow-y-auto overscroll-contain min-h-[140px]">
               {deliveryService === 'cdek' && cdekDropoff === 'pvz' && (
                 <CdekPvzList onChoose={handleCdekPvzChoose} />
               )}
@@ -842,68 +834,19 @@ export default function AddressModal({
           </div>
 
           <div className="flex flex-col">
-            <label className="text-sm font-medium mb-2">
-              Регион
-              {formData.country === 'RU' && (
-                <span className="font-normal text-black/50"> — для РФ можно оставить пустым</span>
-              )}
-            </label>
+            <label className="text-sm font-medium mb-2">Город *</label>
             <input
               type="text"
-              value={formData.countryArea}
-              onChange={(e) => handleInputChange('countryArea', e.target.value)}
-              placeholder="Область, край"
-              className={`h-12 px-4 rounded-xl border text-base outline-none transition ${errors.countryArea
+              value={formData.city}
+              onChange={(e) => handleInputChange('city', e.target.value)}
+              className={`h-11 sm:h-12 px-4 rounded-xl border text-base outline-none transition ${errors.city
                 ? 'border-red-500'
                 : 'border-black/10 focus:border-black/30'
                 }`}
             />
-            {errors.countryArea && (
-              <span className="text-red-500 text-sm mt-1">
-                {errors.countryArea}
-              </span>
+            {errors.city && (
+              <span className="text-red-500 text-sm mt-1">{errors.city}</span>
             )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col">
-              <label className="text-sm font-medium mb-2">Город *</label>
-              <input
-                type="text"
-                value={formData.city}
-                onChange={(e) => handleInputChange('city', e.target.value)}
-                className={`h-12 px-4 rounded-xl border text-base outline-none transition ${errors.city
-                  ? 'border-red-500'
-                  : 'border-black/10 focus:border-black/30'
-                  }`}
-              />
-              {errors.city && (
-                <span className="text-red-500 text-sm mt-1">{errors.city}</span>
-              )}
-            </div>
-
-            <div className="flex flex-col">
-              <label className="text-sm font-medium mb-2">
-                Район
-                {formData.country === 'RU' && (
-                  <span className="font-normal text-black/50"> — необязательно</span>
-                )}
-              </label>
-              <input
-                type="text"
-                value={formData.cityArea}
-                onChange={(e) => handleInputChange('cityArea', e.target.value)}
-                className={`h-12 px-4 rounded-xl border text-base outline-none transition ${errors.cityArea
-                  ? 'border-red-500'
-                  : 'border-black/10 focus:border-black/30'
-                  }`}
-              />
-              {errors.cityArea && (
-                <span className="text-red-500 text-sm mt-1">
-                  {errors.cityArea}
-                </span>
-              )}
-            </div>
           </div>
 
           <div className="flex flex-col">
@@ -989,7 +932,7 @@ export default function AddressModal({
           }
         </div >
 
-        <div className="max-sm:p-4 p-8 border-t border-black/10 shrink-0">
+        <div className="max-sm:px-4 max-sm:py-4 sm:p-8 border-t border-black/10 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <Button
             onClick={handleSubmit}
             className={`${loading ? 'disabled' : ''} w-full justify-center `}

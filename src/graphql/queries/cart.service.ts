@@ -1,4 +1,17 @@
 import { graphqlRequest, CHANNEL } from "@/graphql/client";
+import { getAccountEmail } from "@/lib/auth/accountEmail";
+import type { CheckoutContact } from "@/lib/checkout/deliveryAddress";
+import {
+  mergeCheckoutContact,
+  resolveCheckoutDeliveryAddress,
+  toSaleorDeliveryAddress,
+} from "@/lib/checkout/deliveryAddress";
+import type { AddressInfo } from "@/graphql/types/auth.types";
+import {
+  computeCheckoutPaymentAmount,
+  getSaleorRestBaseUrl,
+  type ShippingCarrier,
+} from "@/lib/checkout/paymentAmount";
 import type {
   Cart,
   GetCartData,
@@ -247,9 +260,9 @@ async function createCheckoutPayment(checkoutId: string, amount: number, payment
 }
 
 /**
- * Получить сумму checkout для создания transaction
+ * Получить сумму checkout для оплаты (включая доставку, если она уже в Saleor).
  */
-async function getCheckoutTotal(checkoutId: string): Promise<number | null> {
+export async function getCheckoutTotal(checkoutId: string): Promise<number | null> {
   const graphqlCheckoutId = tokenToGraphQLId(checkoutId);
 
   const query = `
@@ -288,160 +301,89 @@ async function getCheckoutTotal(checkoutId: string): Promise<number | null> {
 }
 
 /**
- * Создать transaction в Saleor для checkout после успешной оплаты.
- * В Saleor суммы в TransactionCreateInput.amountCharged.amount передаются
- * в основных единицах валюты (Decimal), а не в копейках.
+ * Записать внешнюю доставку (CDEK/Yandex/Ozon) в Saleor checkout перед оплатой.
  */
-async function createCheckoutTransactionWithAmount(
+export async function syncCheckoutExternalShipping(
   checkoutId: string,
-  amountInRubles: number,
-  paymentId?: string,
-): Promise<void> {
-  const graphqlCheckoutId = tokenToGraphQLId(checkoutId);
+  shippingAmount: number,
+  shippingCarrier?: ShippingCarrier | null,
+): Promise<number | null> {
+  const amount = Number(shippingAmount) || 0
+  if (amount <= 0) {
+    return getCheckoutTotal(checkoutId)
+  }
 
-  // Создаем transaction для checkout
-  const mutation = `
-    mutation TransactionCreate($id: ID!, $transaction: TransactionCreateInput!, $transactionEvent: TransactionEventInput) {
-      transactionCreate(id: $id, transaction: $transaction, transactionEvent: $transactionEvent) {
-        transaction {
-          id
-          chargedAmount {
-            amount
-            currency
-          }
-        }
-        errors {
-          message
-          field
-          code
-        }
-      }
-    }
-  `;
+  const url = `${getSaleorRestBaseUrl()}/checkout/apply-external-shipping/`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      checkoutId,
+      shippingAmount: amount,
+      shippingCarrier: shippingCarrier || 'cdek',
+    }),
+  })
 
-  const transactionInput = {
-    name: paymentId ? `YooKassa Payment ${paymentId}` : 'YooKassa Payment',
-    pspReference: paymentId || '',
-    message: paymentId ? `Payment ID: ${paymentId}` : 'Payment via YooKassa',
-    availableActions: ['CHARGE', 'REFUND'], // Указываем доступные действия
-    amountCharged: {
-      // Передаём сумму в основных единицах (рубли), Saleor ожидает Decimal
-      amount: amountInRubles,
-      currency: 'RUB',
-    },
-    externalUrl: paymentId ? `https://yookassa.ru/my/payments/${paymentId}` : undefined,
-  };
+  const result = await response.json()
+  if (!response.ok) {
+    throw new Error(result.error || 'Failed to apply external shipping')
+  }
 
-  // TransactionEventInput содержит только pspReference и message
-  // События с amount, type, externalUrl создаются отдельно через transactionEventReport
-  const transactionEvent = {
-    pspReference: paymentId || '',
-    message: 'Payment successful via YooKassa',
-  };
+  const totalAmount = result.total?.amount
+  return totalAmount != null && Number.isFinite(Number(totalAmount))
+    ? Number(totalAmount)
+    : null
+}
 
+/**
+ * Итог к оплате: синхронизирует доставку в Saleor и берёт total оттуда.
+ */
+export async function resolveCheckoutPaymentAmount(
+  checkoutId: string,
+  shippingPrice: number,
+  shippingCarrier: ShippingCarrier | null | undefined,
+  cartTotalPrice: number,
+  saleorSubtotalAfterPromo?: number | null,
+): Promise<number> {
   try {
-    console.log('Creating transaction with amount (RUB):', amountInRubles);
-
-    const result = await graphqlRequest<{
-      transactionCreate: {
-        transaction: any | null;
-        errors: Array<{ message: string; field: string; code: string }>;
-      };
-    }>(mutation, {
-      id: graphqlCheckoutId,
-      transaction: transactionInput,
-      transactionEvent: transactionEvent,
-    });
-
-    console.log('transactionCreate result:', JSON.stringify(result, null, 2));
-
-    if (result.transactionCreate.errors?.length > 0) {
-      console.warn('Error creating transaction:', result.transactionCreate.errors);
-      // Не выбрасываем ошибку, так как transaction может уже существовать
-    } else if (!result.transactionCreate.transaction) {
-      console.warn('Transaction was NOT created (result.transaction is null), but no errors returned.');
-    } else {
-      console.log('Transaction created successfully:', result.transactionCreate.transaction.id);
+    const totalFromShipping = await syncCheckoutExternalShipping(
+      checkoutId,
+      shippingPrice,
+      shippingCarrier,
+    )
+    if (totalFromShipping != null && totalFromShipping > 0) {
+      return totalFromShipping
     }
   } catch (error) {
-    console.error('CRITICAL: Failed to create transaction:', error);
-    // Не выбрасываем ошибку, продолжаем выполнение
-  }
-}
-
-/**
- * Создать transaction в Saleor для checkout после успешной оплаты.
- * Приоритетно используем сумму checkout.totalPrice из Saleor как источник истины.
- */
-async function createCheckoutTransaction(
-  checkoutId: string,
-  amount: number,
-  paymentId?: string,
-): Promise<void> {
-  const graphqlCheckoutId = tokenToGraphQLId(checkoutId);
-
-  // Получаем реальную сумму checkout, чтобы убедиться, что transaction покрывает её
-  const checkoutTotal = await getCheckoutTotal(checkoutId);
-
-  console.log('=== Transaction Creation Debug ===');
-  console.log('Checkout total from Saleor (in RUB):', checkoutTotal);
-  console.log('Payment amount from frontend (in RUB):', amount);
-
-  // Определяем правильную сумму в рублях.
-  // Если checkoutTotal доступен, используем его (он всегда правильный).
-  // Иначе используем amount, но проверяем, что он разумный.
-  let finalAmountInRubles: number;
-
-  if (checkoutTotal !== null) {
-    // Всегда используем checkoutTotal если он доступен - это источник истины
-    finalAmountInRubles = checkoutTotal;
-    console.log('Using checkoutTotal as source of truth:', finalAmountInRubles);
-  } else {
-    // Если checkoutTotal недоступен, используем amount из платежки
-    finalAmountInRubles = amount;
-    console.log('Using payment amount (checkoutTotal unavailable):', finalAmountInRubles);
+    console.warn('syncCheckoutExternalShipping failed, falling back:', error)
   }
 
-  if (checkoutTotal !== null && Math.abs(checkoutTotal - amount) > 0.01) {
-    console.warn('⚠️ WARNING: Checkout total and payment amount differ!', {
-      checkoutTotal,
-      paymentAmount: amount,
-      difference: Math.abs(checkoutTotal - amount)
-    });
-  }
-
-  // Вызываем внутреннюю функцию с уже вычисленной суммой в рублях
-  await createCheckoutTransactionWithAmount(checkoutId, finalAmountInRubles, paymentId);
-}
-
-/**
- * Установить billing address в checkout
- */
-async function setCheckoutBillingAddress(checkoutId: string, address: any): Promise<void> {
-  const graphqlCheckoutId = tokenToGraphQLId(checkoutId);
-
-  const mutation = `
-    mutation CheckoutBillingAddressUpdate($id: ID!, $billingAddress: AddressInput!) {
-      checkoutBillingAddressUpdate(id: $id, billingAddress: $billingAddress) {
-        checkout {
-          id
-        }
-        errors {
-          message
-          field
-          code
-        }
-      }
+  const saleorTotal = await getCheckoutTotal(checkoutId)
+  if (saleorTotal != null && saleorTotal > 0) {
+    const shipping = Number(shippingPrice) || 0
+    if (shipping > 0 && saleorTotal < cartTotalPrice - 0.01) {
+      return saleorTotal + shipping
     }
-  `;
+    return saleorTotal
+  }
 
-  // Преобразуем адрес в формат AddressInput
-  // Убеждаемся, что все обязательные поля заполнены
-  const countryCode = typeof address.country === 'object' && address.country !== null
-    ? address.country.code
-    : address.country || 'RU';
+  return computeCheckoutPaymentAmount(
+    saleorSubtotalAfterPromo,
+    shippingPrice,
+    cartTotalPrice,
+  )
+}
 
-  const addressInput: any = {
+function addressToCheckoutInput(address: Partial<AddressInfo> & Record<string, unknown>) {
+  const countryRaw = address.country
+  const countryCode =
+    typeof countryRaw === 'object' && countryRaw !== null && 'code' in countryRaw
+      ? String((countryRaw as { code: string }).code)
+      : typeof countryRaw === 'string' && countryRaw
+        ? countryRaw
+        : 'RU';
+
+  const addressInput: Record<string, string> = {
     firstName: (address.firstName || '').trim() || 'Пользователь',
     lastName: (address.lastName || '').trim() || '',
     streetAddress1: (address.streetAddress1 || '').trim() || 'Адрес не указан',
@@ -450,62 +392,162 @@ async function setCheckoutBillingAddress(checkoutId: string, address: any): Prom
     country: countryCode,
   };
 
-  // Добавляем опциональные поля только если они есть
   if (address.streetAddress2) {
-    addressInput.streetAddress2 = address.streetAddress2.trim();
+    addressInput.streetAddress2 = String(address.streetAddress2).trim();
   }
   if (address.countryArea) {
-    addressInput.countryArea = address.countryArea.trim();
+    addressInput.countryArea = String(address.countryArea).trim();
   }
   if (address.phone) {
-    addressInput.phone = address.phone.trim();
+    addressInput.phone = String(address.phone).trim();
   }
   if (address.companyName) {
-    addressInput.companyName = address.companyName.trim();
+    addressInput.companyName = String(address.companyName).trim();
   }
 
-  console.log('Address input for checkout:', addressInput);
+  return addressInput;
+}
 
-  try {
-    const result = await graphqlRequest<{
-      checkoutBillingAddressUpdate: {
-        checkout: any | null;
-        errors: Array<{ message: string; field: string; code: string }>;
-      };
-    }>(mutation, { id: graphqlCheckoutId, billingAddress: addressInput });
+const MINIMAL_CHECKOUT_ADDRESS: Partial<AddressInfo> = {
+  firstName: 'Пользователь',
+  lastName: '',
+  streetAddress1: 'Адрес не указан',
+  city: 'Москва',
+  postalCode: '000000',
+  country: { code: 'RU', country: 'Russia' },
+  phone: '',
+};
 
-    if (result.checkoutBillingAddressUpdate.errors?.length > 0) {
-      console.warn('Error setting checkout billing address:', result.checkoutBillingAddressUpdate.errors);
-      throw new Error(result.checkoutBillingAddressUpdate.errors.map(e => e.message).join(', '));
+async function setCheckoutBillingAddress(checkoutId: string, address: Partial<AddressInfo>): Promise<void> {
+  const graphqlCheckoutId = tokenToGraphQLId(checkoutId);
+  const addressInput = addressToCheckoutInput(address);
+
+  const mutation = `
+    mutation CheckoutBillingAddressUpdate($id: ID!, $billingAddress: AddressInput!) {
+      checkoutBillingAddressUpdate(id: $id, billingAddress: $billingAddress) {
+        checkout { id }
+        errors { message field code }
+      }
     }
+  `;
 
-    console.log('Checkout billing address set successfully');
-  } catch (error) {
-    console.error('Failed to set checkout billing address:', error);
-    throw error;
+  const result = await graphqlRequest<{
+    checkoutBillingAddressUpdate: {
+      checkout: unknown | null;
+      errors: Array<{ message: string; field: string; code: string }>;
+    };
+  }>(mutation, { id: graphqlCheckoutId, billingAddress: addressInput });
+
+  if (result.checkoutBillingAddressUpdate.errors?.length > 0) {
+    throw new Error(
+      result.checkoutBillingAddressUpdate.errors.map((e) => e.message).join(', '),
+    );
+  }
+}
+
+async function setCheckoutShippingAddress(checkoutId: string, address: Partial<AddressInfo>): Promise<void> {
+  const graphqlCheckoutId = tokenToGraphQLId(checkoutId);
+  const addressInput = addressToCheckoutInput(address);
+
+  const mutation = `
+    mutation CheckoutShippingAddressUpdate($id: ID!, $shippingAddress: AddressInput!) {
+      checkoutShippingAddressUpdate(id: $id, shippingAddress: $shippingAddress) {
+        checkout { id }
+        errors { message field code }
+      }
+    }
+  `;
+
+  const result = await graphqlRequest<{
+    checkoutShippingAddressUpdate: {
+      checkout: unknown | null;
+      errors: Array<{ message: string; field: string; code: string }>;
+    };
+  }>(mutation, { id: graphqlCheckoutId, shippingAddress: addressInput });
+
+  if (result.checkoutShippingAddressUpdate.errors?.length > 0) {
+    throw new Error(
+      result.checkoutShippingAddressUpdate.errors.map((e) => e.message).join(', '),
+    );
+  }
+}
+
+async function applyCheckoutAddresses(
+  checkoutId: string,
+  deliveryAddress?: AddressInfo | null,
+  contact?: CheckoutContact,
+): Promise<void> {
+  let address: Partial<AddressInfo> | null =
+    resolveCheckoutDeliveryAddress(deliveryAddress);
+
+  if (address && contact) {
+    address = mergeCheckoutContact(address as AddressInfo, contact);
+  }
+
+  if (!address) {
+    try {
+      const { getMeInfo } = await import('@/graphql/queries/auth.service');
+      const meInfo = await getMeInfo();
+      if (meInfo?.addresses?.length) {
+        address =
+          meInfo.addresses.find(
+            (addr) => addr.isDefaultShippingAddress || addr.isDefaultBillingAddress,
+          ) || meInfo.addresses[0];
+        if (contact) {
+          address = mergeCheckoutContact(address as AddressInfo, contact);
+        }
+      } else if (meInfo) {
+        address = {
+          firstName: contact?.firstName || meInfo.firstName || 'Пользователь',
+          lastName: contact?.lastName || meInfo.lastName || '',
+          streetAddress1: 'Адрес не указан',
+          city: 'Москва',
+          postalCode: '000000',
+          country: { code: 'RU', country: 'Russia' },
+          phone: contact?.phone || '',
+        };
+      }
+    } catch (error) {
+      console.warn('Could not load profile address for checkout:', error);
+    }
+  }
+
+  const resolved = toSaleorDeliveryAddress(
+    (address || MINIMAL_CHECKOUT_ADDRESS) as AddressInfo,
+  );
+  await setCheckoutBillingAddress(checkoutId, resolved);
+  await setCheckoutShippingAddress(checkoutId, resolved);
+}
+
+/**
+ * Прокинуть выбранный адрес доставки в Saleor checkout (billing + shipping).
+ * Вызывать после создания checkout и перед completeCheckout.
+ */
+export async function syncCheckoutDeliveryAddress(
+  checkoutId: string,
+  deliveryAddress?: AddressInfo | null,
+  contact?: CheckoutContact,
+): Promise<void> {
+  await applyCheckoutAddresses(checkoutId, deliveryAddress, contact);
+
+  const accountEmail = getAccountEmail();
+  if (accountEmail) {
+    await attachCheckoutToCustomer(checkoutId, accountEmail);
   }
 }
 
 /**
- * Связать checkout с пользователем по email
+ * Связать checkout с пользователем: email + checkoutCustomerAttach (JWT).
  */
 export async function attachCheckoutToCustomer(checkoutId: string, userEmail: string): Promise<void> {
-  // Преобразуем token в GraphQL ID (если нужно)
   const graphqlCheckoutId = tokenToGraphQLId(checkoutId);
+  const normalizedEmail = userEmail.trim().toLowerCase();
 
-  // Сначала обновляем email
   const emailMutation = `
     mutation CheckoutEmailUpdate($id: ID!, $email: String!) {
       checkoutEmailUpdate(id: $id, email: $email) {
-        checkout {
-          id
-          email
-        }
-        errors {
-          message
-          field
-          code
-        }
+        checkout { id email }
+        errors { message field code }
       }
     }
   `;
@@ -513,179 +555,207 @@ export async function attachCheckoutToCustomer(checkoutId: string, userEmail: st
   try {
     const emailResult = await graphqlRequest<{
       checkoutEmailUpdate: {
-        checkout: any | null;
+        checkout: { id: string; email: string } | null;
         errors: Array<{ message: string; field: string; code: string }>;
       };
-    }>(emailMutation, { id: graphqlCheckoutId, email: userEmail });
+    }>(emailMutation, { id: graphqlCheckoutId, email: normalizedEmail });
 
     if (emailResult.checkoutEmailUpdate.errors?.length > 0) {
       console.warn('Error updating checkout email:', emailResult.checkoutEmailUpdate.errors);
     }
-
-    // Saleor автоматически свяжет checkout с пользователем по email при completeCheckout
-    // если пользователь существует с таким email
   } catch (error) {
     console.warn('Failed to update checkout email:', error);
-    // Продолжаем выполнение, так как это не критично
+  }
+
+  let rawToken: string | null = null;
+  if (typeof window !== 'undefined') {
+    try {
+      rawToken = localStorage.getItem('token');
+    } catch {
+      rawToken = null;
+    }
+  }
+  const token =
+    rawToken && rawToken !== 'null' && rawToken !== 'undefined' ? rawToken : null;
+
+  if (!token) {
+    console.log('No JWT — checkoutCustomerAttach skipped (email link only)');
+    return;
+  }
+
+  const attachMutation = `
+    mutation CheckoutCustomerAttach($id: ID!) {
+      checkoutCustomerAttach(id: $id) {
+        checkout {
+          id
+          email
+          user { id email }
+        }
+        errors { message field code }
+      }
+    }
+  `;
+
+  try {
+    const attachResult = await graphqlRequest<{
+      checkoutCustomerAttach: {
+        checkout: { id: string; email: string; user: { id: string; email: string } | null } | null;
+        errors: Array<{ message: string; field: string; code: string }>;
+      };
+    }>(attachMutation, { id: graphqlCheckoutId }, { token });
+
+    if (attachResult.checkoutCustomerAttach.errors?.length > 0) {
+      const errors = attachResult.checkoutCustomerAttach.errors;
+      const benign = errors.every((e) =>
+        e.message.toLowerCase().includes('already attached'),
+      );
+      if (!benign) {
+        console.warn('checkoutCustomerAttach errors:', errors);
+      }
+    } else {
+      console.log(
+        'checkoutCustomerAttach OK:',
+        attachResult.checkoutCustomerAttach.checkout?.user?.email,
+      );
+    }
+  } catch (error) {
+    console.warn('checkoutCustomerAttach failed:', error);
   }
 }
 
-export async function completeCheckout(checkoutId: string, userEmail?: string, paymentAmount?: number, paymentId?: string): Promise<{ order: any; errors: any[] }> {
-  console.log('completeCheckout called with:', { checkoutId, userEmail, paymentAmount, paymentId });
+export type FinalizeCheckoutParams = {
+  checkoutId: string
+  userEmail?: string
+  paymentAmount?: number
+  paymentId?: string
+  shippingAmount?: number
+  shippingCarrier?: ShippingCarrier | null
+}
+
+/**
+ * Финализация checkout через Saleor REST (работает и в браузере, и на сервере/webhook).
+ * Адрес и attach должны быть уже на checkout (sync до оплаты).
+ */
+export async function finalizeCheckoutViaRest({
+  checkoutId,
+  userEmail,
+  paymentAmount,
+  paymentId,
+  shippingAmount,
+  shippingCarrier,
+}: FinalizeCheckoutParams): Promise<{ order: any; errors: any[] }> {
+  const normalizedEmail = (userEmail?.trim() || '').toLowerCase()
+  const baseUrl = getSaleorRestBaseUrl()
+  const completeUrl = `${baseUrl}/checkout/complete-without-stock-check/`
+
+  const response = await fetch(completeUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      checkoutId,
+      paymentId,
+      paymentAmount,
+      userEmail: normalizedEmail || undefined,
+      shippingAmount,
+      shippingCarrier,
+    }),
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(result.error || 'Failed to complete checkout')
+  }
+
+  if (!result.success || !result.order) {
+    throw new Error('Order was not created')
+  }
+
+  return {
+    order: {
+      id: result.order.id,
+      number: result.order.number,
+      status: result.order.status,
+      statusDisplay: result.order.status,
+      created: new Date().toISOString(),
+      total: {
+        gross: { amount: 0, currency: 'RUB' },
+      },
+    },
+    errors: [],
+  }
+}
+
+export async function completeCheckout(
+  checkoutId: string,
+  userEmail?: string,
+  paymentAmount?: number,
+  paymentId?: string,
+  deliveryAddress?: AddressInfo | null,
+  contact?: CheckoutContact,
+  shippingAmount?: number,
+  shippingCarrier?: ShippingCarrier | null,
+): Promise<{ order: any; errors: any[] }> {
+  const normalizedEmail = (
+    userEmail?.trim() ||
+    (typeof window !== 'undefined' ? getAccountEmail() : '')
+  ).toLowerCase();
+
+  console.log('completeCheckout called with:', {
+    checkoutId,
+    userEmail: normalizedEmail,
+    paymentAmount,
+    paymentId,
+    shippingAmount,
+    shippingCarrier,
+    hasDeliveryAddress: Boolean(deliveryAddress),
+  });
 
   // Преобразуем token в GraphQL ID
   const graphqlCheckoutId = tokenToGraphQLId(checkoutId);
   console.log('Converted checkoutId to GraphQL ID:', { original: checkoutId, graphql: graphqlCheckoutId });
 
-  // Создаем transaction в Saleor для checkout ПЕРЕД всеми остальными операциями
-  // Это критично, чтобы Saleor знал о платеже перед завершением checkout
-  // Transaction должен быть создан с amountCharged, чтобы Saleor считал checkout оплаченным
-  if (paymentAmount !== undefined && paymentAmount > 0) {
-    try {
-      console.log('Creating transaction for checkout (BEFORE other operations):', { checkoutId, amount: paymentAmount, paymentId });
-      await createCheckoutTransaction(checkoutId, paymentAmount, paymentId);
-      console.log('Transaction created successfully');
-    } catch (error) {
-      console.warn('Failed to create transaction, continuing anyway:', error);
-      // Продолжаем выполнение, возможно transaction уже существует
-    }
-  }
+  // Transaction создаётся на бэкенде в complete-without-stock-check (HANDLE_PAYMENTS не нужен на фронте)
 
-  // Связываем checkout с пользователем перед завершением
-  if (userEmail) {
-    try {
-      console.log('Attaching checkout to customer:', userEmail);
-      // Передаем оригинальный checkoutId (token), функция сама преобразует его
-      await attachCheckoutToCustomer(checkoutId, userEmail);
-      console.log('Checkout attached to customer successfully');
+  const isBrowser = typeof window !== 'undefined'
 
-      // Получаем адрес пользователя и устанавливаем billing address
+  // GraphQL-подготовка только в браузере (JWT, sessionStorage). Webhook идёт сразу в REST.
+  if (isBrowser) {
+    if (normalizedEmail) {
       try {
-        const { getMeInfo } = await import('@/graphql/queries/auth.service');
-        const meInfo = await getMeInfo();
-
-        if (meInfo && meInfo.addresses && meInfo.addresses.length > 0) {
-          // Используем адрес по умолчанию или первый доступный
-          const address = meInfo.addresses.find(
-            (addr) => addr.isDefaultBillingAddress || addr.isDefaultShippingAddress
-          ) || meInfo.addresses[0];
-
-          console.log('Setting billing address from user address:', address);
-          await setCheckoutBillingAddress(checkoutId, address);
-          console.log('Billing address set successfully');
-        } else {
-          // Если нет адреса, создаем минимальный адрес из данных пользователя
-          console.warn('No user address found, creating minimal billing address');
-          const minimalAddress = {
-            firstName: meInfo?.firstName || 'Пользователь',
-            lastName: meInfo?.lastName || '',
-            streetAddress1: 'Адрес не указан',
-            city: 'Москва',
-            postalCode: '000000',
-            country: { code: 'RU' },
-            phone: '',
-          };
-          await setCheckoutBillingAddress(checkoutId, minimalAddress);
-          console.log('Minimal billing address set');
-        }
-      } catch (addressError: any) {
-        console.error('Failed to set billing address:', addressError);
-        // Пробуем создать минимальный адрес
-        try {
-          console.log('Trying to set minimal billing address as fallback');
-          const minimalAddress = {
-            firstName: 'Пользователь',
-            lastName: '',
-            streetAddress1: 'Адрес не указан',
-            city: 'Москва',
-            postalCode: '000000',
-            country: { code: 'RU' },
-            phone: '',
-          };
-          await setCheckoutBillingAddress(checkoutId, minimalAddress);
-          console.log('Minimal billing address set as fallback');
-        } catch (minimalError: any) {
-          console.error('Failed to set minimal billing address:', minimalError);
-          // Если не удалось установить адрес, выбрасываем ошибку
-          throw new Error(`Не удалось установить адрес для заказа: ${minimalError.message || 'Неизвестная ошибка'}`);
-        }
+        console.log('Attaching checkout to customer:', normalizedEmail)
+        await attachCheckoutToCustomer(checkoutId, normalizedEmail)
+        console.log('Checkout attached to customer successfully')
+      } catch (error) {
+        console.warn('Failed to attach checkout to customer:', error)
       }
-    } catch (error) {
-      console.warn('Failed to attach checkout to customer:', error);
-      // Продолжаем выполнение, так как это не критично
+    }
+
+    try {
+      await applyCheckoutAddresses(checkoutId, deliveryAddress, contact)
+      console.log('Checkout shipping/billing addresses set successfully')
+    } catch (addressError: unknown) {
+      const message =
+        addressError instanceof Error ? addressError.message : 'Неизвестная ошибка'
+      console.error('Failed to set checkout addresses:', addressError)
+      throw new Error(`Не удалось установить адрес для заказа: ${message}`)
     }
   }
 
-  // Если опция "Automatically complete checkout upon full payment" включена,
-  // Saleor автоматически завершит checkout когда transaction покрывает сумму
-  // Ждём немного, чтобы Saleor успел автоматически завершить checkout.
-  // В Saleor 3.23 это происходит ПОЧТИ МГНОВЕННО после transactionCreate.
-  console.log('Waiting for potential automatic checkout completion...');
-  await new Promise(resolve => setTimeout(resolve, 1500)); // Ждём 1.5 секунды
-
-  // Используем кастомный REST endpoint для завершения checkout без проверки наличия
-  // Это обходит проблему "Insufficient stock" при завершении checkout
-  // Важно: URL должен быть без /graphql/ префикса
-  // Получаем базовый URL - используем GRAPHQL_PUBLIC_API_URL и убираем /graphql/
-  const graphqlUrl = process.env.GRAPHQL_PUBLIC_API_URL || 'https://vspomni.store/graphql/';
-  // Убираем /graphql/ из конца URL чтобы получить базовый URL
-  const baseUrl = graphqlUrl.replace(/\/graphql\/?$/, '').replace(/\/$/, '') || 'https://vspomni.store';
-  const completeUrl = `${baseUrl}/checkout/complete-without-stock-check/`;
-
-  console.log('Calling complete checkout REST endpoint:', completeUrl);
-  console.log('GraphQL URL:', graphqlUrl);
-  console.log('Base URL (after cleanup):', baseUrl);
-  console.log('Checkout token:', checkoutId);
+  console.log('Calling complete checkout REST endpoint')
+  console.log('Checkout token:', checkoutId)
 
   try {
-    const response = await fetch(completeUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        checkoutId: checkoutId,
-        paymentId: paymentId,
-        paymentAmount: paymentAmount,
-        userEmail: userEmail,
-      }),
-    });
-
-    const result = await response.json();
-    console.log('Complete checkout REST response:', result);
-
-    if (!response.ok) {
-      const errorMessage = result.error || 'Failed to complete checkout';
-      console.error('Complete checkout REST error:', errorMessage);
-      throw new Error(errorMessage);
-    }
-
-    if (!result.success || !result.order) {
-      console.error('Complete checkout returned no order:', result);
-      throw new Error('Order was not created');
-    }
-
-    console.log('Order created successfully via REST endpoint:', result.order);
-
-    // Преобразуем ответ в формат, совместимый с GraphQL ответом
-    return {
-      order: {
-        id: result.order.id,
-        number: result.order.number,
-        status: result.order.status,
-        statusDisplay: result.order.status,
-        created: new Date().toISOString(),
-        total: {
-          gross: {
-            amount: 0, // Сумма будет получена из order позже
-            currency: 'RUB',
-          },
-        },
-      },
-      errors: [],
-    };
-  } catch (error: any) {
-    console.error('Error in completeCheckout via REST:', error);
+    return await finalizeCheckoutViaRest({
+      checkoutId,
+      userEmail: normalizedEmail,
+      paymentAmount,
+      paymentId,
+      shippingAmount,
+      shippingCarrier,
+    })
+  } catch (error: unknown) {
+    console.error('Error in completeCheckout via REST:', error)
 
     // Если REST endpoint не работает, пробуем GraphQL как fallback
     console.log('Falling back to GraphQL checkoutComplete...');

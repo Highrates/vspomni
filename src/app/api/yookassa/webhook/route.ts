@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { completeCheckout } from '@/graphql/queries/cart.service'
+import { finalizeCheckoutViaRest } from '@/graphql/queries/cart.service'
 
 /**
  * Обработчик вебхуков ЮKassa
@@ -38,10 +38,25 @@ export async function POST(request: NextRequest) {
         // Мы передаем email из метаданных, если он там есть
         const userEmail = metadata?.userId || metadata?.userEmail
         const paymentAmount = parseFloat(amount.value)
+        const shippingAmount = metadata?.shippingAmount
+          ? parseFloat(String(metadata.shippingAmount))
+          : undefined
+        const shippingCarrier = metadata?.shippingCarrier as
+          | 'cdek'
+          | 'yandex'
+          | 'ozon'
+          | undefined
 
         try {
-            console.log('Starting completeCheckout via Webhook...')
-            const result = await completeCheckout(checkoutId, userEmail, paymentAmount, paymentId)
+            console.log('Starting finalizeCheckoutViaRest via Webhook...')
+            const result = await finalizeCheckoutViaRest({
+              checkoutId,
+              userEmail,
+              paymentAmount,
+              paymentId,
+              shippingAmount,
+              shippingCarrier,
+            })
 
             console.log('Order successfully finalized via Webhook:', {
                 orderId: result.order?.id,

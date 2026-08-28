@@ -1,7 +1,7 @@
 import Script from 'next/script'
+import { YANDEX_METRIKA_ID } from '@/lib/analytics/yandexMetrika'
 
-/** Счётчик Яндекс.Метрики */
-export const YANDEX_METRIKA_ID = 111454140
+export { YANDEX_METRIKA_ID }
 
 export default function YandexMetrika() {
   const id = YANDEX_METRIKA_ID

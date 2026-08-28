@@ -206,7 +206,7 @@ export default function YandexPvzList({
               className="h-12 px-4 rounded-xl border border-black/10 text-base outline-none transition focus:border-black/30"
             />
           </div>
-          <div className="flex flex-col gap-2 max-h-72 overflow-y-auto">
+          <div className="flex flex-col gap-2 max-h-56 sm:max-h-72 overflow-y-auto overscroll-contain">
             <div className="text-xs text-black/40">Найдено: {filteredPvz.length}</div>
             {filteredPvz.length === 0 ? (
               <div className="text-center py-6 text-black/50 text-sm">

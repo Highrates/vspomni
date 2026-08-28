@@ -1,16 +1,27 @@
 'use client'
 
 import { useUserStore } from '@/stores/useUser'
+import { getAccountEmail } from '@/lib/auth/accountEmail'
 import React, { useEffect } from 'react'
 
 const OrderForm = () => {
   const { user, setUser, fetchUser } = useUserStore()
+  const accountEmail = getAccountEmail()
 
   useEffect(() => {
     fetchUser()
-  }, [])
+  }, [fetchUser])
+
+  useEffect(() => {
+    if (!accountEmail) return
+    const current = useUserStore.getState().user
+    if (current.email !== accountEmail) {
+      setUser({ ...current, email: accountEmail })
+    }
+  }, [accountEmail, setUser])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.name === 'email') return
     setUser({ ...user, [e.target.name]: e.target.value })
   }
 
@@ -55,14 +66,14 @@ const OrderForm = () => {
             type="email"
             name="email"
             autoComplete="email"
-            className="font-medium border-[0.5px] border-black/8 bg-[#FAFAFA] rounded-sm p-2 sm:p-2.5 w-full min-w-0 text-sm sm:text-base"
-            value={user.email}
-            onChange={handleChange}
+            readOnly
+            className="font-medium border-[0.5px] border-black/8 bg-[#F0F0F0] rounded-sm p-2 sm:p-2.5 w-full min-w-0 text-sm sm:text-base text-black/60 cursor-not-allowed"
+            value={accountEmail || user.email}
           />
         </div>
         <p className="text-xs text-black/35">
-          Имя и фамилию подставляем из выбранного адреса доставки — можно
-          поправить здесь.
+          Email берётся из вашего аккаунта — заказ будет привязан к нему.
+          Имя и фамилию подставляем из адреса доставки, их можно поправить.
         </p>
       </div>
     </section>

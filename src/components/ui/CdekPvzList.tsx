@@ -361,11 +361,11 @@ export default function CdekPvzList({
       {selectedCity && (
         <>
           {/* Переключатель режимов */}
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
             <button
               type="button"
               onClick={() => setShowWidget(false)}
-              className={`flex-1 h-10 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 ${!showWidget
+              className={`h-9 sm:h-10 rounded-lg text-xs sm:text-sm font-medium transition flex items-center justify-center gap-1.5 sm:gap-2 ${!showWidget
                 ? 'bg-black text-white'
                 : 'bg-gray-100 text-black/60 hover:bg-gray-200'
                 }`}
@@ -376,7 +376,7 @@ export default function CdekPvzList({
             <button
               type="button"
               onClick={() => setShowWidget(true)}
-              className={`flex-1 h-10 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 ${showWidget
+              className={`h-9 sm:h-10 rounded-lg text-xs sm:text-sm font-medium transition flex items-center justify-center gap-1.5 sm:gap-2 ${showWidget
                 ? 'bg-black text-white'
                 : 'bg-gray-100 text-black/60 hover:bg-gray-200'
                 }`}
@@ -412,7 +412,7 @@ export default function CdekPvzList({
               </div>
 
               {/* Список ПВЗ */}
-              <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">
+              <div className="flex flex-col gap-2 max-h-56 sm:max-h-80 overflow-y-auto overscroll-contain">
                 {pvzLoading ? (
                   <div className="flex items-center justify-center gap-2 py-8 text-black/60">
                     <Loader2 className="w-5 h-5 animate-spin" />

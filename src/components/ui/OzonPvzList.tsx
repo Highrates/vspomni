@@ -223,7 +223,7 @@ export default function OzonPvzList({
           В этом городе нет пунктов выдачи Ozon.
         </div>
       ) : (
-        <ul className="space-y-2 max-h-[320px] overflow-y-auto">
+        <ul className="space-y-2 max-h-56 sm:max-h-80 overflow-y-auto overscroll-contain">
           {filteredPoints.map((pvz) => {
             const selected = selectedPointId === pvz.id
             return (

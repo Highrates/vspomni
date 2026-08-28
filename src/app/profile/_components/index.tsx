@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/stores/useAuth'
 import { useUserStore } from '@/stores/useUser'
 import { useRouter } from 'next/navigation'
@@ -51,7 +52,22 @@ import {
   formatDeliveryAddressSummary,
 } from '@/lib/addressVspMeta'
 
+const PROFILE_TABS = ['global-info', 'my-orders', 'logout'] as const
+type ProfileTab = (typeof PROFILE_TABS)[number]
+
+function resolveProfileTab(value: string | null): ProfileTab {
+  if (value && PROFILE_TABS.includes(value as ProfileTab)) {
+    return value as ProfileTab
+  }
+  return 'global-info'
+}
+
 export default function ProfileIndex() {
+  const searchParams = useSearchParams()
+  const tabFromUrl = searchParams.get('tab')
+  const [activeTab, setActiveTab] = useState<ProfileTab>(() =>
+    resolveProfileTab(tabFromUrl),
+  )
   const { isAuthenticated, logout } = useAuthStore()
   const router = useRouter()
   const { greed, fetchGrid } = usePopularScentsStore()
@@ -69,6 +85,7 @@ export default function ProfileIndex() {
   // --- Orders Logic States ---
   const [orders, setOrders] = useState<any[]>([])
   const [loadingOrders, setLoadingOrders] = useState(true)
+  const [ordersError, setOrdersError] = useState<string | null>(null)
 
   // --- Password Change Modal State ---
   const [passwordModalVisible, setPasswordModalVisible] = useState(false)
@@ -101,15 +118,23 @@ export default function ProfileIndex() {
   const fetchOrders = async () => {
     try {
       setLoadingOrders(true)
+      setOrdersError(null)
       console.log('Fetching orders...')
       
-      // Используем REST эндпоинт для получения только оформленных заказов
       const baseUrl = process.env.NEXT_PUBLIC_SALEOR_API_URL ?? ''
       const token = localStorage.getItem('token')
       
       if (!token) {
         console.warn('No token found, skipping orders fetch')
         setOrders([])
+        setOrdersError('Войдите в аккаунт, чтобы увидеть заказы.')
+        setLoadingOrders(false)
+        return
+      }
+      
+      if (!baseUrl) {
+        setOrders([])
+        setOrdersError('Не настроен адрес API. Обратитесь в поддержку.')
         setLoadingOrders(false)
         return
       }
@@ -129,11 +154,16 @@ export default function ProfileIndex() {
       const data = await response.json()
       console.log('Orders response data:', data)
       
+      if (response.status === 401) {
+        setOrders([])
+        setOrdersError('Сессия истекла. Войдите снова, чтобы увидеть заказы.')
+        return
+      }
+
       if (!response.ok || !data.ok) {
         throw new Error(data.error || 'Ошибка при загрузке заказов')
       }
       
-      // Преобразуем данные из REST API в формат компонента
       const transformedOrders = (data.orders || []).map((order: any) => {
         return {
           id: order.number || order.id,
@@ -144,7 +174,6 @@ export default function ProfileIndex() {
             const undiscountedPrice = line.undiscountedUnitPrice?.gross?.amount || unitPrice
             const variantName = line.variantName || '100 мл'
             
-            // Если цены одинаковые, не показываем старую цену
             const hasDiscount = undiscountedPrice > unitPrice && unitPrice > 0
             
             return {
@@ -165,6 +194,11 @@ export default function ProfileIndex() {
     } catch (error) {
       console.error('Error fetching orders:', error)
       setOrders([])
+      setOrdersError(
+        error instanceof Error
+          ? error.message
+          : 'Не удалось загрузить заказы. Попробуйте обновить страницу.',
+      )
     } finally {
       setLoadingOrders(false)
     }
@@ -175,6 +209,14 @@ export default function ProfileIndex() {
       fetchOrders()
     }
   }, [isAuthenticated])
+
+  useEffect(() => {
+    const nextTab = resolveProfileTab(tabFromUrl)
+    setActiveTab(nextTab)
+    if (nextTab === 'my-orders' && isAuthenticated) {
+      fetchOrders()
+    }
+  }, [tabFromUrl, isAuthenticated])
 
   useEffect(() => {
     // Wait a bit for checkAuth to complete before redirecting
@@ -383,13 +425,16 @@ export default function ProfileIndex() {
         {/* Empty header space for background image */}
       </section>
 
-      <Tabs defaultValue="global-info" onValueChange={(value) => {
-        // Перезагружаем заказы при переключении на вкладку "Заказы"
-        if (value === 'my-orders' && isAuthenticated) {
-          console.log('Switched to orders tab, fetching orders...')
-          fetchOrders()
-        }
-      }}>
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => {
+          const nextTab = resolveProfileTab(value)
+          setActiveTab(nextTab)
+          if (nextTab === 'my-orders' && isAuthenticated) {
+            fetchOrders()
+          }
+        }}
+      >
         {/* Main Content Container */}
         <section className="relative z-10 mt-2 sm:mt-10 container mx-auto px-2 sm:px-6 md:px-8 py-4 sm:py-6 md:py-12 flex flex-col lg:flex-row gap-4 sm:gap-8 lg:gap-24">
           {/* Sidebar / Navigation */}
@@ -566,6 +611,17 @@ export default function ProfileIndex() {
             <TabsContent value="my-orders" className="mt-0">
               {loadingOrders ? (
                 <p className="text-black/40">Загрузка заказов...</p>
+              ) : ordersError ? (
+                <div>
+                  <p className="text-red-500">{ordersError}</p>
+                  <button
+                    type="button"
+                    onClick={() => void fetchOrders()}
+                    className="mt-4 h-10 rounded-full border border-black px-6 hover:bg-black hover:text-white transition-colors text-sm font-medium"
+                  >
+                    Повторить
+                  </button>
+                </div>
               ) : orders.length === 0 ? (
                 <p className="text-black/40">У вас пока нет заказов</p>
               ) : (

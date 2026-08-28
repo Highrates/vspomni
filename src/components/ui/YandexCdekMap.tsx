@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Loader2, MapPin } from 'lucide-react'
 
 // Типы для Яндекс Карт
@@ -52,7 +52,6 @@ export default function YandexCdekMap({
   const [mapLoading, setMapLoading] = useState(true)
   const [mapReady, setMapReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [selectedPvz, setSelectedPvz] = useState<Pvz | null>(null)
 
   // Подгружаем скрипт Яндекса только когда блок с картой попадает в зону видимости — не тормозим первую отрисовку
   useEffect(() => {
@@ -205,23 +204,6 @@ export default function YandexCdekMap({
               ${pvz.phone ? `<div style="color: #888; font-size: 12px;">📞 ${pvz.phone}</div>` : ''}
             </div>
           `,
-          balloonContentFooter: `
-            <button 
-              onclick="window.selectCdekPvz && window.selectCdekPvz('${pvz.code}')"
-              style="
-                background: #16a34a; 
-                color: white; 
-                border: none; 
-                padding: 8px 16px; 
-                border-radius: 8px; 
-                cursor: pointer;
-                font-weight: 500;
-                width: 100%;
-              "
-            >
-              Выбрать этот пункт
-            </button>
-          `,
           hintContent: pvz.name || 'ПВЗ СДЭК',
         },
         {
@@ -230,9 +212,11 @@ export default function YandexCdekMap({
         }
       )
 
-      // Обработчик клика на метку
       placemark.events.add('click', () => {
-        setSelectedPvz(pvz)
+        onSelect(pvz)
+        if (mapRef.current) {
+          mapRef.current.balloon.close()
+        }
       })
 
       return placemark
@@ -250,33 +234,7 @@ export default function YandexCdekMap({
       })
     }
     console.log(`[YandexMap] Added ${placemarks.length} markers to map`)
-  }, [pvzList, mapReady])
-
-  // Обработчик выбора ПВЗ из баллуна
-  useEffect(() => {
-    (window as any).selectCdekPvz = (code: string) => {
-      const pvz = pvzList.find(p => p.code === code)
-      if (pvz) {
-        setSelectedPvz(pvz)
-        onSelect(pvz)
-        // Закрываем баллун
-        if (mapRef.current) {
-          mapRef.current.balloon.close()
-        }
-      }
-    }
-
-    return () => {
-      delete (window as any).selectCdekPvz
-    }
-  }, [pvzList, onSelect])
-
-  // Обработчик выбора ПВЗ
-  const handleSelect = useCallback(() => {
-    if (selectedPvz) {
-      onSelect(selectedPvz)
-    }
-  }, [selectedPvz, onSelect])
+  }, [pvzList, mapReady, onSelect])
 
   if (error) {
     return (
@@ -290,10 +248,13 @@ export default function YandexCdekMap({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
+      <p className="text-xs text-black/50">
+        Нажмите на метку на карте или выберите пункт в списке
+      </p>
       <div 
         ref={containerRef}
-        className="border border-black/10 rounded-xl overflow-hidden bg-gray-100 h-[400px] relative"
+        className="border border-black/10 rounded-xl overflow-hidden bg-gray-100 h-[240px] sm:h-[360px] relative"
       >
         {!scriptShouldLoad && (
           <div className="absolute inset-0 flex items-center justify-center text-black/40 text-sm">
@@ -325,42 +286,6 @@ export default function YandexCdekMap({
           </div>
         )}
       </div>
-
-      {/* Выбранный ПВЗ */}
-      {selectedPvz && (
-        <div className="border border-green-200 bg-green-50 rounded-xl p-4">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-green-100 rounded-lg shrink-0">
-              <MapPin className="w-5 h-5 text-green-600" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="font-semibold text-green-800">
-                {selectedPvz.name || 'ПВЗ СДЭК'}
-              </div>
-              <div className="text-sm text-green-700 mt-1">
-                {selectedPvz.address || selectedPvz.location?.address}
-              </div>
-              {selectedPvz.work_time && (
-                <div className="text-xs text-green-600 mt-1">
-                  Режим работы: {selectedPvz.work_time}
-                </div>
-              )}
-              {selectedPvz.phone && (
-                <div className="text-xs text-green-600 mt-1">
-                  Телефон: {selectedPvz.phone}
-                </div>
-              )}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleSelect}
-            className="w-full mt-3 h-10 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition"
-          >
-            Выбрать этот пункт
-          </button>
-        </div>
-      )}
     </div>
   )
 }

@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     // Выполняем запрос к кастомному REST endpoint в Saleor
     const response = await saleorRestRequest('/checkout/create-without-stock-check/', {
       channel,
-      email: userEmail,
+      email: userEmail?.trim().toLowerCase() || undefined,
       lines: lines.map((line: any) => ({
         variantId: line.variantId,
         quantity: line.quantity,

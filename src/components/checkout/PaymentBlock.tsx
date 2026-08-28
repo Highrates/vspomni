@@ -2,17 +2,24 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useUserStore } from '@/stores/useUser'
+import { useCheckoutStore } from '@/stores/useCheckout'
 import { useCartStore } from "@/stores/useCart"
 import YooKassaWidget from '@/components/ui/YooKassaWidget'
 import { createCart } from '@/graphql/queries/cart.service'
 import { getSingleProduct } from '@/graphql/queries/product.service'
 import { toast } from 'react-toastify'
 import { isValidRuPhone } from '@/lib/ruPhone'
+import { getAccountEmail } from '@/lib/auth/accountEmail'
+import {
+  buildCheckoutContact,
+  resolveCheckoutDeliveryAddress,
+} from '@/lib/checkout/deliveryAddress'
 import {
   isProductInStock,
   isSelectedVariantInStock,
   isVariantSellable,
 } from '@/lib/product/stock'
+import { stashPaymentForMetrika } from '@/lib/analytics/yandexMetrika'
 
 export default function PaymentBlock() {
   const [confirmationToken, setConfirmationToken] = useState<string | null>(null)
@@ -23,7 +30,86 @@ export default function PaymentBlock() {
   const [paymentCompleted, setPaymentCompleted] = useState(false)
   const paymentCompletedRef = useRef(false)
   const { user } = useUserStore()
-  const { items, totalPrice, appliedPromoCode, shippingPrice } = useCartStore()
+  const deliveryAddress = useCheckoutStore((s) => s.deliveryAddress)
+  const { items, totalPrice, appliedPromoCode, shippingPrice, shippingCarrier } = useCartStore()
+
+  const getCheckoutContact = useCallback(
+    () =>
+      buildCheckoutContact({
+        name: user.name,
+        familyName: user.familyName,
+        phone: user.phone,
+      }),
+    [user.name, user.familyName, user.phone],
+  )
+
+  const syncDeliveryToCheckout = useCallback(
+    async (checkoutToken: string) => {
+      const address = resolveCheckoutDeliveryAddress(
+        useCheckoutStore.getState().deliveryAddress,
+      )
+      if (!address) {
+        throw new Error('Выберите адрес доставки перед оплатой.')
+      }
+
+      const { syncCheckoutDeliveryAddress } = await import(
+        '@/graphql/queries/cart.service'
+      )
+      await syncCheckoutDeliveryAddress(
+        checkoutToken,
+        address,
+        getCheckoutContact(),
+      )
+    },
+    [getCheckoutContact],
+  )
+
+  const prepareCheckoutPayment = useCallback(
+    async (checkoutToken: string, saleorSubtotalAfterPromo?: number | null) => {
+      const { resolveCheckoutPaymentAmount } = await import(
+        '@/graphql/queries/cart.service'
+      )
+      const { shippingPrice: currentShipping, shippingCarrier: currentCarrier, totalPrice: cartTotal } =
+        useCartStore.getState()
+
+      return resolveCheckoutPaymentAmount(
+        checkoutToken,
+        currentShipping,
+        currentCarrier,
+        cartTotal,
+        saleorSubtotalAfterPromo,
+      )
+    },
+    [],
+  )
+
+  const persistPendingPaymentContext = useCallback(
+    (checkoutToken: string, amount: number, yookassaPaymentId?: string) => {
+      localStorage.setItem('pendingCheckoutId', checkoutToken)
+      localStorage.setItem('pendingPaymentAmount', amount.toString())
+      const { shippingPrice: currentShipping, shippingCarrier: currentCarrier } =
+        useCartStore.getState()
+      localStorage.setItem('pendingShippingAmount', String(currentShipping || 0))
+      localStorage.setItem('pendingShippingCarrier', currentCarrier || 'cdek')
+      if (yookassaPaymentId) {
+        localStorage.setItem('pendingPaymentId', yookassaPaymentId)
+      }
+    },
+    [],
+  )
+
+  const readPendingShipping = useCallback(() => {
+    const amountStr = localStorage.getItem('pendingShippingAmount')
+    const carrier = localStorage.getItem('pendingShippingCarrier') as
+      | 'cdek'
+      | 'yandex'
+      | 'ozon'
+      | null
+    return {
+      shippingAmount: amountStr ? parseFloat(amountStr) : useCartStore.getState().shippingPrice,
+      shippingCarrier: carrier || useCartStore.getState().shippingCarrier,
+    }
+  }, [])
 
   const redirectToSuccess = useCallback(() => {
     window.location.assign('/checkout/success')
@@ -36,41 +122,82 @@ export default function PaymentBlock() {
 
     const pendingCheckoutId = localStorage.getItem('pendingCheckoutId')
     const activeCheckoutId = pendingCheckoutId || checkoutId
+    const paymentAmountStr = localStorage.getItem('pendingPaymentAmount')
+    const paymentAmount = paymentAmountStr ? parseFloat(paymentAmountStr) : undefined
+    const storedPaymentId = localStorage.getItem('pendingPaymentId') || paymentId || undefined
+    const { shippingAmount, shippingCarrier: pendingCarrier } = readPendingShipping()
+    const accountEmail = getAccountEmail()
+    const resolvedDelivery = resolveCheckoutDeliveryAddress(deliveryAddress)
+    const checkoutContact = getCheckoutContact()
+
+    stashPaymentForMetrika({
+      paymentId: storedPaymentId,
+      revenue: paymentAmount,
+    })
 
     if (!activeCheckoutId) {
-      redirectToSuccess()
+      const lastOrder = localStorage.getItem('lastCompletedOrderNumber')
+      if (lastOrder) {
+        redirectToSuccess()
+        return
+      }
+      paymentCompletedRef.current = false
+      setPaymentCompleted(false)
+      toast.error('Не удалось найти заказ для подтверждения. Обратитесь в поддержку.')
       return
     }
 
     try {
       const { completeCheckout } = await import('@/graphql/queries/cart.service')
       const { clearCart } = useCartStore.getState()
-      const paymentAmountStr = localStorage.getItem('pendingPaymentAmount')
-      const paymentAmount = paymentAmountStr ? parseFloat(paymentAmountStr) : undefined
-      const storedPaymentId = localStorage.getItem('pendingPaymentId') || paymentId || undefined
+      const { clearCheckout } = useCheckoutStore.getState()
 
-      await completeCheckout(
+      const result = await completeCheckout(
         activeCheckoutId,
-        user.email,
+        accountEmail,
         paymentAmount,
         storedPaymentId,
+        resolvedDelivery,
+        checkoutContact,
+        shippingAmount,
+        pendingCarrier,
       )
+
+      if (result.order?.number || result.order?.id) {
+        localStorage.setItem(
+          'lastCompletedOrderNumber',
+          String(result.order.number || result.order.id),
+        )
+      }
 
       localStorage.removeItem('pendingCheckoutId')
       localStorage.removeItem('pendingPaymentId')
       localStorage.removeItem('pendingPaymentAmount')
+      localStorage.removeItem('pendingShippingAmount')
+      localStorage.removeItem('pendingShippingCarrier')
       clearCart()
+      clearCheckout()
+      redirectToSuccess()
     } catch (error) {
       console.error('Error completing checkout after payment:', error)
-      // Оставляем pendingCheckoutId — страница success повторит попытку
+      paymentCompletedRef.current = false
+      setPaymentCompleted(false)
+      toast.error(
+        'Оплата прошла, но заказ не оформился. Нажмите «Оплата прошла? Перейти к подтверждению заказа» или обновите страницу.',
+      )
     }
-
-    redirectToSuccess()
-  }, [checkoutId, paymentId, redirectToSuccess, user.email])
+  }, [checkoutId, paymentId, redirectToSuccess, deliveryAddress, getCheckoutContact, readPendingShipping])
 
   const handleCreateDraftOrder = async () => {
     try {
       setIsCreatingPayment(true)
+
+      const resolvedDelivery = resolveCheckoutDeliveryAddress(deliveryAddress)
+      if (!resolvedDelivery) {
+        toast.error('Выберите адрес доставки перед оплатой.')
+        setIsCreatingPayment(false)
+        return
+      }
 
       const checkoutLines = await Promise.all(
         items.map(async (item: any) => {
@@ -159,6 +286,7 @@ export default function PaymentBlock() {
       )
 
       try {
+        const accountEmail = getAccountEmail()
         const checkoutResponse = await fetch('/api/saleor/create-order', {
           method: 'POST',
           headers: {
@@ -166,7 +294,7 @@ export default function PaymentBlock() {
           },
           body: JSON.stringify({
             lines: checkoutLines,
-            userEmail: user.email,
+            userEmail: accountEmail,
             channel: 'vspomni-site',
           }),
         })
@@ -197,7 +325,13 @@ export default function PaymentBlock() {
 
           console.log('Setting checkoutId state to:', newCheckoutId)
           setCheckoutId(newCheckoutId)
-          const amountForPayment = checkoutTotalFromSaleor ?? totalPrice
+
+          await syncDeliveryToCheckout(newCheckoutId)
+
+          const amountForPayment = await prepareCheckoutPayment(
+            newCheckoutId,
+            checkoutTotalFromSaleor,
+          )
           console.log('Calling handleCreatePayment with:', { newCheckoutId, amountForPayment })
           await handleCreatePayment(newCheckoutId, amountForPayment)
           return
@@ -304,7 +438,13 @@ export default function PaymentBlock() {
 
       const checkoutId = newCheckoutId!
       setCheckoutId(checkoutId)
-      const amountForPayment = checkoutTotalFromSaleor ?? totalPrice
+
+      await syncDeliveryToCheckout(checkoutId)
+
+      const amountForPayment = await prepareCheckoutPayment(
+        checkoutId,
+        checkoutTotalFromSaleor,
+      )
       await handleCreatePayment(checkoutId, amountForPayment)
     } catch (error: any) {
       console.error('Error creating checkout:', error)
@@ -351,6 +491,7 @@ export default function PaymentBlock() {
       const description = `Заказ #${shortId} - ${items.length} товар(ов)`
 
       // Вызываем API для создания платежа
+      const accountEmail = getAccountEmail()
       const response = await fetch('/api/yookassa/create-payment', {
         method: 'POST',
         headers: {
@@ -361,14 +502,17 @@ export default function PaymentBlock() {
           currency: 'RUB',
           description: description,
           orderId: orderOrCheckoutId,
-          userEmail: user.email,
+          userEmail: accountEmail,
           shippingAmount: Number(shippingPrice) || 0,
           items: paymentItems,
           returnUrl: `${window.location.origin}/checkout/success`,
           metadata: {
-            userId: user.email,
+            userId: accountEmail,
+            userEmail: accountEmail,
             orderId: orderOrCheckoutId,
             itemsCount: items.length,
+            shippingAmount: String(Number(shippingPrice) || 0),
+            shippingCarrier: shippingCarrier || 'cdek',
           },
         }),
       })
@@ -384,13 +528,7 @@ export default function PaymentBlock() {
       }
 
       if (result.confirmationToken) {
-        // Сохраняем checkoutId и paymentId в localStorage для использования на странице success
-        // Используем orderOrCheckoutId, который передан в функцию
-        localStorage.setItem('pendingCheckoutId', orderOrCheckoutId)
-        if (result.paymentId) {
-          localStorage.setItem('pendingPaymentId', result.paymentId)
-          localStorage.setItem('pendingPaymentAmount', totalAmount.toString())
-        }
+        persistPendingPaymentContext(orderOrCheckoutId, totalAmount, result.paymentId)
         console.log('Saved checkoutId to localStorage:', orderOrCheckoutId)
         console.log('Saved paymentId to localStorage:', result.paymentId)
         console.log('Current checkoutId state:', checkoutId)
@@ -486,11 +624,11 @@ export default function PaymentBlock() {
         className="w-full h-12 sm:h-13 md:h-14 rounded-full bg-black text-white text-base sm:text-[17px] md:text-[18px] font-semibold hover:bg-[#3A7FE2] transition disabled:bg-gray-400"
         disabled={
           isCreatingPayment ||
+          !deliveryAddress ||
           !Boolean(
             user.name.trim().length >= 2 &&
             user.familyName.trim().length >= 1 &&
-            user.email.trim().length > 5 &&
-            user.email.includes('@') &&
+            getAccountEmail().length > 5 &&
             isValidRuPhone(user.phone),
           )
         }

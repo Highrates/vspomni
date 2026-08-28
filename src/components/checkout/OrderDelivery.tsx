@@ -45,7 +45,9 @@ import {
   formatDeliveryAddressSummary,
 } from '@/lib/addressVspMeta'
 import { useUserStore } from '@/stores/useUser'
+import { useCheckoutStore } from '@/stores/useCheckout'
 import { formatPhoneInputValue } from '@/lib/ruPhone'
+import { loadPersistedCheckoutDeliveryAddress } from '@/lib/checkout/deliveryAddress'
 
 /** Подставляем имя/фамилию/телефон из адреса доставки в форму checkout */
 function syncCheckoutUserFromAddress(addr: AddressInfo) {
@@ -73,6 +75,12 @@ export default function OrderDelivery() {
   const { calculateDelivery: calculateCdek } = useCdek()
   const { items, setShippingPrice, setShippingLoading, setShippingCarrier } =
     useCartStore()
+  const setDeliveryAddress = useCheckoutStore((s) => s.setDeliveryAddress)
+
+  const syncDeliveryAddress = (addr: AddressInfo) => {
+    syncCheckoutUserFromAddress(addr)
+    setDeliveryAddress(addr)
+  }
 
   const updateShippingPrice = async (address: AddressInfo) => {
     const carrier = getShippingCarrierFromAddress(address.streetAddress2)
@@ -322,17 +330,18 @@ export default function OrderDelivery() {
           setAddresses(data.addresses)
 
           if (data.addresses.length > 0) {
-            const def = data.addresses.find((a: AddressInfo) => a.isDefaultShippingAddress)
-            const id = def?.id || data.addresses[0].id
-            setSelected(id)
-
-            // Также рассчитаем доставку для адреса по умолчанию при загрузке
-            const currentAddr = data.addresses.find((a: AddressInfo) => a.id === id) || data.addresses[0]
-            if (currentAddr) {
-              syncCheckoutUserFromAddress(currentAddr)
-              console.log('Calculating shipping for initial address:', currentAddr.city)
-              updateShippingPrice(currentAddr)
-            }
+            const persisted = loadPersistedCheckoutDeliveryAddress()
+            const persistedMatch = persisted
+              ? data.addresses.find((a: AddressInfo) => a.id === persisted.id)
+              : null
+            const def = data.addresses.find(
+              (a: AddressInfo) => a.isDefaultShippingAddress,
+            )
+            const currentAddr = persistedMatch || def || data.addresses[0]
+            setSelected(currentAddr.id)
+            syncDeliveryAddress(currentAddr)
+            console.log('Calculating shipping for initial address:', currentAddr.city)
+            updateShippingPrice(currentAddr)
           }
         }
       })
@@ -360,7 +369,7 @@ export default function OrderDelivery() {
     setSelected(id)
     const addr = addresses.find(a => a.id === id)
     if (addr) {
-      syncCheckoutUserFromAddress(addr)
+      syncDeliveryAddress(addr)
       updateShippingPrice(addr)
     }
   }
@@ -372,7 +381,7 @@ export default function OrderDelivery() {
       setAddresses((prev) => [...prev, newAddress])
     }
     setSelected(newAddress.id)
-    syncCheckoutUserFromAddress(newAddress)
+    syncDeliveryAddress(newAddress)
     updateShippingPrice(newAddress)
   }
 
@@ -381,7 +390,7 @@ export default function OrderDelivery() {
       prev.map(addr => (addr.id === updatedAddress.id ? updatedAddress : addr)),
     )
     if (selected === updatedAddress.id) {
-      syncCheckoutUserFromAddress(updatedAddress)
+      syncDeliveryAddress(updatedAddress)
       updateShippingPrice(updatedAddress)
     }
   }
