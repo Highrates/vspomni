@@ -60,7 +60,7 @@ const CheckoutSuccessContent = () => {
         // Заказ уже оформлен в PaymentBlock — не вызываем complete повторно
         if (lastCompletedOrderNumber) {
           setOrderNumber(lastCompletedOrderNumber)
-          trackPaymentSuccess({ paymentId, revenue: paymentAmount })
+          void trackPaymentSuccess({ paymentId, revenue: paymentAmount })
           localStorage.removeItem('lastCompletedOrderNumber')
           clearPendingCheckoutStorage()
           clearCart()
@@ -110,7 +110,7 @@ const CheckoutSuccessContent = () => {
           setOrderNumber(number)
         }
 
-        trackPaymentSuccess({
+        void trackPaymentSuccess({
           paymentId,
           orderId: orderResult.order?.id,
           orderNumber: orderResult.order?.number,
