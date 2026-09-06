@@ -776,12 +776,18 @@ export async function finalizeCheckoutViaRest({
     throw new Error('Order was not created')
   }
 
+  const order = result.order as {
+    id?: string | number
+    number?: string | number
+    status?: string
+  }
+
   return {
     order: {
-      id: result.order.id,
-      number: result.order.number,
-      status: result.order.status,
-      statusDisplay: result.order.status,
+      id: order.id,
+      number: order.number,
+      status: order.status,
+      statusDisplay: order.status,
       created: new Date().toISOString(),
       total: {
         gross: { amount: 0, currency: 'RUB' },
