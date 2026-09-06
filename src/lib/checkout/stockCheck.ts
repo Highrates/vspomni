@@ -19,7 +19,7 @@ export async function checkCheckoutStockViaRest(
   checkoutId: string,
 ): Promise<StockCheckResult> {
   const baseUrl = getSaleorRestBaseUrl()
-  const response = await fetch(`${baseUrl}/checkout/check-stock/`, {
+  const response = await fetch(`${baseUrl}/api/checkout/check-stock/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ checkoutId }),
@@ -43,5 +43,8 @@ export async function checkCheckoutStockViaRest(
     }
   }
 
-  throw new Error(result.error || 'Failed to verify stock availability')
+  throw new Error(
+    result.error ||
+      `Failed to verify stock availability (HTTP ${response.status})`,
+  )
 }
