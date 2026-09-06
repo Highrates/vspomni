@@ -464,9 +464,12 @@ export default function PaymentBlock() {
   const handleCreatePayment = async (orderOrCheckoutId: string, amountOverride?: number) => {
     setIsCreatingPayment(true)
     try {
-      // Вычисляем общую сумму заказа: приоритетно берём сумму из checkout (amountOverride),
-      // чтобы она совпадала с тем, что знает Saleor
-      const totalAmount = Number(amountOverride ?? totalPrice)
+      const accountEmail = getAccountEmail()
+      const { shippingIsFree: payShippingIsFree, totalPrice: cartTotalPrice } =
+        useCartStore.getState()
+      const effectiveShipping = payShippingIsFree ? 0 : Number(shippingPrice) || 0
+
+      let totalAmount = Number(amountOverride ?? totalPrice)
       if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
         throw new Error('Некорректная сумма заказа. Обновите страницу и попробуйте снова.')
       }
@@ -483,14 +486,34 @@ export default function PaymentBlock() {
       if (paymentItems.length === 0) {
         throw new Error('Не удалось подготовить товары к оплате. Обновите корзину и попробуйте снова.')
       }
+
+      const catalogSubtotal = paymentItems.reduce(
+        (sum, item) => sum + item.price * item.quantity,
+        0,
+      )
+
+      if (
+        effectiveShipping > 0 &&
+        totalAmount <= effectiveShipping + 0.009 &&
+        catalogSubtotal > effectiveShipping + 0.01
+      ) {
+        const corrected = Math.max(cartTotalPrice, catalogSubtotal + effectiveShipping)
+        if (corrected > totalAmount + 0.01) {
+          console.warn('Correcting payment amount (Saleor total missing products):', {
+            from: totalAmount,
+            to: corrected,
+            catalogSubtotal,
+            effectiveShipping,
+          })
+          totalAmount = corrected
+        }
+      }
       const shortId = orderOrCheckoutId.length > 8
         ? orderOrCheckoutId.substring(orderOrCheckoutId.length - 8)
         : orderOrCheckoutId
       const description = `Заказ #${shortId} - ${items.length} товар(ов)`
 
       // Вызываем API для создания платежа
-      const accountEmail = getAccountEmail()
-      const { shippingIsFree: payShippingIsFree } = useCartStore.getState()
       const response = await fetch('/api/yookassa/create-payment', {
         method: 'POST',
         headers: {
@@ -502,7 +525,7 @@ export default function PaymentBlock() {
           description: description,
           orderId: orderOrCheckoutId,
           userEmail: accountEmail,
-          shippingAmount: Number(shippingPrice) || 0,
+          shippingAmount: effectiveShipping,
           allowFreeShipping: payShippingIsFree,
           items: paymentItems,
           returnUrl: `${window.location.origin}/checkout/success`,
@@ -511,7 +534,7 @@ export default function PaymentBlock() {
             userEmail: accountEmail,
             orderId: orderOrCheckoutId,
             itemsCount: items.length,
-            shippingAmount: String(Number(shippingPrice) || 0),
+            shippingAmount: String(effectiveShipping),
             shippingCarrier: shippingCarrier || 'cdek',
             allowFreeShipping: payShippingIsFree ? 'true' : 'false',
           },

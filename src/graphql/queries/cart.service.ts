@@ -312,8 +312,9 @@ export async function syncCheckoutExternalShipping(
 ): Promise<number | null> {
   const amount = Number(shippingAmount) || 0
   const allowFreeShipping = Boolean(options?.allowFreeShipping)
+  const effectiveAmount = allowFreeShipping ? 0 : amount
 
-  if (amount <= 0 && !allowFreeShipping) {
+  if (effectiveAmount <= 0 && !allowFreeShipping) {
     return getCheckoutTotal(checkoutId)
   }
 
@@ -323,7 +324,7 @@ export async function syncCheckoutExternalShipping(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       checkoutId,
-      shippingAmount: amount,
+      shippingAmount: effectiveAmount,
       shippingCarrier: shippingCarrier || 'cdek',
       allowFreeShipping,
     }),
@@ -368,9 +369,12 @@ export async function resolveCheckoutPaymentAmount(
 
   const saleorTotal = await getCheckoutTotal(checkoutId)
   if (saleorTotal != null && saleorTotal > 0) {
-    const shipping = Number(shippingPrice) || 0
-    if (shipping > 0 && saleorTotal < cartTotalPrice - 0.01) {
+    const shipping = allowFreeShipping ? 0 : (Number(shippingPrice) || 0)
+    if (shipping > 0 && saleorTotal + 0.01 < cartTotalPrice) {
       return saleorTotal + shipping
+    }
+    if (shipping > 0 && saleorTotal <= shipping + 0.009 && cartTotalPrice > saleorTotal + 0.01) {
+      return cartTotalPrice
     }
     return saleorTotal
   }

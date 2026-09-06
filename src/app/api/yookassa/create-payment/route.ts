@@ -196,10 +196,12 @@ export async function POST(request: NextRequest) {
       metadata?.allowFreeShipping === 'true'
     const validCarriers = new Set(['cdek', 'yandex', 'ozon'])
 
+    const effectiveShipping = allowFreeShipping ? 0 : normalizedShipping
+
     if (
       shippingCarrier &&
       validCarriers.has(String(shippingCarrier)) &&
-      normalizedShipping <= 0 &&
+      effectiveShipping <= 0 &&
       !allowFreeShipping
     ) {
       return createResponse(
@@ -208,9 +210,33 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (normalizedShipping > 0 && normalizedAmount <= normalizedShipping) {
+    if (effectiveShipping > 0 && normalizedAmount + 0.009 < effectiveShipping) {
       return createResponse(
-        { error: 'Order amount must include product total in addition to shipping' },
+        { error: 'Order amount is less than shipping cost' },
+        400,
+      )
+    }
+
+    const catalogSubtotal = (items as Array<{ price?: number; quantity?: number }>).reduce(
+      (sum, item) => {
+        const price = Number(item.price)
+        const qty = Math.max(1, Number(item.quantity) || 1)
+        return sum + (Number.isFinite(price) && price > 0 ? price * qty : 0)
+      },
+      0,
+    )
+
+    if (
+      effectiveShipping > 0 &&
+      normalizedAmount <= effectiveShipping + 0.009 &&
+      catalogSubtotal > effectiveShipping + 0.01
+    ) {
+      return createResponse(
+        {
+          error:
+            'Order amount must include product total in addition to shipping. Refresh checkout and try again.',
+          code: 'PAYMENT_AMOUNT_MISMATCH',
+        },
         400,
       )
     }
@@ -240,7 +266,7 @@ export async function POST(request: NextRequest) {
           customer: {
             email: userEmail,
           },
-          items: buildReceiptItems(items, normalizedAmount, shippingAmount, currency),
+          items: buildReceiptItems(items, normalizedAmount, effectiveShipping, currency),
         }
       } catch (receiptError: unknown) {
         const message =
