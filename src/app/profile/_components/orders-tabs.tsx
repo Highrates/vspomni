@@ -114,18 +114,20 @@ export default function OrdersTabs({
         ) : (
           filteredOrders.map((order) => (
             <article key={order.orderId} className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                <div className="space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                <div className="min-w-0 flex-1 space-y-2">
                   <p className="font-semibold text-black text-lg sm:text-xl">{order.date}</p>
                   <p className="text-textgrey text-sm">
                     Заказ №{order.id}
                     {order.carrierLabel ? ` · ${order.carrierLabel}` : ''}
                   </p>
                   {order.deliverySummary ? (
-                    <p className="text-sm text-black/60 max-w-xl">{order.deliverySummary}</p>
+                    <p className="text-sm text-black/60 leading-relaxed break-words whitespace-pre-wrap">
+                      {order.deliverySummary}
+                    </p>
                   ) : null}
                 </div>
-                <div className="flex flex-col items-start sm:items-end gap-2">
+                <div className="flex flex-col items-start sm:items-end gap-2 shrink-0 sm:max-w-[240px]">
                   <span
                     className={`inline-flex rounded-full px-3 py-1 text-sm font-semibold ${orderStatusBadgeClass(order.statusCode)}`}
                   >
