@@ -155,9 +155,9 @@ async function finalizeOrderViaApi(
     body: JSON.stringify({ paymentId }),
   })
 
-  const data = await response.json()
+  const data = await response.json().catch(() => null)
 
-  if (response.status === 409 && data.code) {
+  if (data && response.status === 409 && data.code) {
     const requiresRefund = Boolean(data.requiresRefund)
     const userMessage =
       data.code === 'INSUFFICIENT_STOCK'
@@ -179,8 +179,8 @@ async function finalizeOrderViaApi(
     }
   }
 
-  if (!response.ok || !data.success) {
-    throw new Error(data.error || 'Failed to finalize order')
+  if (!response.ok || !data?.success) {
+    throw new Error(data?.error || 'Failed to finalize order')
   }
 
   const orderNumber = String(data.order?.number || data.order?.id || '')

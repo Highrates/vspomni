@@ -730,7 +730,17 @@ export async function finalizeCheckoutViaRest({
     }),
   })
 
-  const result = await response.json()
+  const responseText = await response.text()
+  let result: Record<string, unknown> = {}
+  try {
+    result = responseText ? (JSON.parse(responseText) as Record<string, unknown>) : {}
+  } catch {
+    throw new Error(
+      response.ok
+        ? 'Invalid response from order server'
+        : `Order server error (HTTP ${response.status})`,
+    )
+  }
 
   if (response.status === 409 && result.code === 'INSUFFICIENT_STOCK') {
     throw new InsufficientStockError(
