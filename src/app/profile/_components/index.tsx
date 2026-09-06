@@ -17,6 +17,9 @@ import Link from 'next/link'
 import PhoneInput from '@/components/ui/PhoneInput'
 import { isValidRuPhone } from '@/lib/ruPhone'
 import OrdersTabs from './orders-tabs'
+import { fetchUserOrders } from '@/lib/order/api'
+import { transformOrderListItem } from '@/lib/order/transform'
+import type { OrderListItem, OrdersPagination } from '@/lib/order/types'
 
 // --- Imports from OrderDelivery logic ---
 import { getMeInfo } from '@/graphql/queries/auth.service'
@@ -46,7 +49,6 @@ import AddressModal from '@/components/modals/AddressModal'
 import PasswordChangeModal from '@/components/modals/PasswordChangeModal'
 import ProductCard from '@/components/home/ProductCard'
 import { usePopularScentsStore } from '@/stores/usePopularScents'
-import { formatDate } from '@/lib/functions'
 import {
   displayStreetAddress2Comment,
   formatDeliveryAddressSummary,
@@ -83,10 +85,43 @@ export default function ProfileIndex() {
   const [editingAddress, setEditingAddress] = useState<AddressInfo | null>(null)
 
   // --- Orders Logic States ---
-  const [orders, setOrders] = useState<any[]>([])
+  const [orders, setOrders] = useState<OrderListItem[]>([])
+  const [ordersPagination, setOrdersPagination] = useState<OrdersPagination>({
+    page: 1,
+    pageSize: 10,
+    total: 0,
+    hasNext: false,
+    hasPrevious: false,
+  })
+  const [ordersPage, setOrdersPage] = useState(1)
   const [loadingOrders, setLoadingOrders] = useState(true)
   const [ordersError, setOrdersError] = useState<string | null>(null)
 
+  const fetchOrders = async (page = ordersPage) => {
+    try {
+      setLoadingOrders(true)
+      setOrdersError(null)
+
+      const { orders: apiOrders, pagination } = await fetchUserOrders({
+        page,
+        pageSize: 10,
+      })
+
+      setOrders(apiOrders.map(transformOrderListItem))
+      setOrdersPagination(pagination)
+      setOrdersPage(pagination.page)
+    } catch (error) {
+      console.error('Error fetching orders:', error)
+      setOrders([])
+      setOrdersError(
+        error instanceof Error
+          ? error.message
+          : 'Не удалось загрузить заказы. Попробуйте обновить страницу.',
+      )
+    } finally {
+      setLoadingOrders(false)
+    }
+  }
   // --- Password Change Modal State ---
   const [passwordModalVisible, setPasswordModalVisible] = useState(false)
 
@@ -114,99 +149,9 @@ export default function ProfileIndex() {
     })
   }, [])
 
-  // Fetch Orders Logic
-  const fetchOrders = async () => {
-    try {
-      setLoadingOrders(true)
-      setOrdersError(null)
-      console.log('Fetching orders...')
-      
-      const baseUrl = process.env.NEXT_PUBLIC_SALEOR_API_URL ?? ''
-      const token = localStorage.getItem('token')
-      
-      if (!token) {
-        console.warn('No token found, skipping orders fetch')
-        setOrders([])
-        setOrdersError('Войдите в аккаунт, чтобы увидеть заказы.')
-        setLoadingOrders(false)
-        return
-      }
-      
-      if (!baseUrl) {
-        setOrders([])
-        setOrdersError('Не настроен адрес API. Обратитесь в поддержку.')
-        setLoadingOrders(false)
-        return
-      }
-      
-      console.log('Fetching orders from:', `${baseUrl}/auth/orders/`)
-      
-      const response = await fetch(`${baseUrl}/auth/orders/`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      })
-      
-      console.log('Orders response status:', response.status)
-      
-      const data = await response.json()
-      console.log('Orders response data:', data)
-      
-      if (response.status === 401) {
-        setOrders([])
-        setOrdersError('Сессия истекла. Войдите снова, чтобы увидеть заказы.')
-        return
-      }
-
-      if (!response.ok || !data.ok) {
-        throw new Error(data.error || 'Ошибка при загрузке заказов')
-      }
-      
-      const transformedOrders = (data.orders || []).map((order: any) => {
-        return {
-          id: order.number || order.id,
-          date: formatDate(order.created),
-          status: order.statusDisplay || order.status,
-          items: (order.lines || []).map((line: any, index: number) => {
-            const unitPrice = line.unitPrice?.gross?.amount || 0
-            const undiscountedPrice = line.undiscountedUnitPrice?.gross?.amount || unitPrice
-            const variantName = line.variantName || '100 мл'
-            
-            const hasDiscount = undiscountedPrice > unitPrice && unitPrice > 0
-            
-            return {
-              id: index + 1,
-              title: line.productName || 'Товар',
-              volume: variantName,
-              qty: line.quantity || 1,
-              oldPrice: hasDiscount ? Math.round(undiscountedPrice / 100) : 0,
-              price: Math.round(unitPrice / 100) || 0,
-              img: line.thumbnail?.url || '/images/product1.png',
-            }
-          }),
-        }
-      })
-      
-      console.log('Transformed orders:', transformedOrders)
-      setOrders(transformedOrders)
-    } catch (error) {
-      console.error('Error fetching orders:', error)
-      setOrders([])
-      setOrdersError(
-        error instanceof Error
-          ? error.message
-          : 'Не удалось загрузить заказы. Попробуйте обновить страницу.',
-      )
-    } finally {
-      setLoadingOrders(false)
-    }
-  }
-  
   useEffect(() => {
     if (isAuthenticated) {
-      fetchOrders()
+      void fetchOrders(1)
     }
   }, [isAuthenticated])
 
@@ -214,7 +159,7 @@ export default function ProfileIndex() {
     const nextTab = resolveProfileTab(tabFromUrl)
     setActiveTab(nextTab)
     if (nextTab === 'my-orders' && isAuthenticated) {
-      fetchOrders()
+      void fetchOrders(ordersPage)
     }
   }, [tabFromUrl, isAuthenticated])
 
@@ -609,23 +554,26 @@ export default function ProfileIndex() {
             </TabsContent>
 
             <TabsContent value="my-orders" className="mt-0">
-              {loadingOrders ? (
-                <p className="text-black/40">Загрузка заказов...</p>
-              ) : ordersError ? (
+              {ordersError ? (
                 <div>
                   <p className="text-red-500">{ordersError}</p>
                   <button
                     type="button"
-                    onClick={() => void fetchOrders()}
+                    onClick={() => void fetchOrders(ordersPage)}
                     className="mt-4 h-10 rounded-full border border-black px-6 hover:bg-black hover:text-white transition-colors text-sm font-medium"
                   >
                     Повторить
                   </button>
                 </div>
-              ) : orders.length === 0 ? (
+              ) : orders.length === 0 && !loadingOrders ? (
                 <p className="text-black/40">У вас пока нет заказов</p>
               ) : (
-                <OrdersTabs orders={orders} />
+                <OrdersTabs
+                  orders={orders}
+                  pagination={ordersPagination}
+                  loading={loadingOrders}
+                  onPageChange={(page) => void fetchOrders(page)}
+                />
               )}
             </TabsContent>
 

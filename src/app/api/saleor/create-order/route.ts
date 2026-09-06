@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { validateDeliveryAddressForCheckout } from '@/lib/checkout/deliveryAddress'
 
 // ============================================
 // Saleor Custom Checkout Creation API
@@ -71,6 +72,15 @@ export async function POST(request: NextRequest) {
         { error: 'Lines are required and must be a non-empty array' },
         400
       )
+    }
+
+    if (!address) {
+      return createResponse({ error: 'address is required' }, 400)
+    }
+
+    const addressError = validateDeliveryAddressForCheckout(address)
+    if (addressError) {
+      return createResponse({ error: addressError }, 400)
     }
 
     console.log('Creating checkout without stock check:', {

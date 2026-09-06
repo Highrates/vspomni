@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCheckoutSuccessUrl } from '@/lib/siteUrl'
+import { checkCheckoutStockViaRest } from '@/lib/checkout/stockCheck'
 
 // ============================================
 // YooKassa API Route Handler
@@ -184,11 +186,52 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Формируем URL для возврата после оплаты
-    const defaultReturnUrl = returnUrl ||
-      (typeof window !== 'undefined'
-        ? `${window.location.origin}/checkout/success`
-        : `${request.headers.get('origin') || 'http://localhost:3000'}/checkout/success`)
+    const normalizedShipping = Number(shippingAmount) || 0
+    const shippingCarrier =
+      (metadata?.shippingCarrier as string | undefined) ||
+      (body.shippingCarrier as string | undefined)
+    const allowFreeShipping =
+      body.allowFreeShipping === true ||
+      metadata?.allowFreeShipping === true ||
+      metadata?.allowFreeShipping === 'true'
+    const validCarriers = new Set(['cdek', 'yandex', 'ozon'])
+
+    if (
+      shippingCarrier &&
+      validCarriers.has(String(shippingCarrier)) &&
+      normalizedShipping <= 0 &&
+      !allowFreeShipping
+    ) {
+      return createResponse(
+        { error: 'Shipping amount must be greater than zero when a carrier is selected' },
+        400,
+      )
+    }
+
+    if (normalizedShipping > 0 && normalizedAmount <= normalizedShipping) {
+      return createResponse(
+        { error: 'Order amount must include product total in addition to shipping' },
+        400,
+      )
+    }
+
+    if (orderId) {
+      const stock = await checkCheckoutStockViaRest(String(orderId))
+      if (!stock.available) {
+        return createResponse(
+          {
+            error: stock.message,
+            message: stock.message,
+            code: 'INSUFFICIENT_STOCK',
+            items: stock.items,
+          },
+          409,
+        )
+      }
+    }
+
+    const defaultReturnUrl =
+      returnUrl || getCheckoutSuccessUrl(request.headers.get('origin'))
 
     let receipt = null
     if (userEmail && items.length > 0) {
@@ -223,7 +266,9 @@ export async function POST(request: NextRequest) {
       description: description,
       metadata: {
         orderId: orderId || '',
+        checkoutId: orderId || '',
         ...metadata,
+        allowFreeShipping: allowFreeShipping ? 'true' : 'false',
       },
     }
 

@@ -22,7 +22,7 @@ import {
   type VspAddressMeta,
 } from '@/lib/addressVspMeta'
 import { yandexPickupCityArea } from '@/lib/yandexPickupCityArea'
-import { inferRuCountryAreaFromYandexPvz } from '@/lib/ruAddressRegion'
+import { inferRuCountryAreaFromYandexPvz, sanitizeRuCountryAreaForSaleor } from '@/lib/ruAddressRegion'
 import { yandexPointIdForCargoOffers } from '@/lib/yandexPickupPointId'
 import { extractRuPostalCode } from '@/lib/extractRuPostalCode'
 import { reverseGeocodeRuPostalCode } from '@/lib/reverseGeocodeRuPostalCode'
@@ -392,7 +392,15 @@ export default function AddressModal({
         lastName: formData.lastName,
         phone: formData.phone,
         country: formData.country,
-        countryArea: formData.countryArea,
+        countryArea:
+          formData.country === 'RU'
+            ? sanitizeRuCountryAreaForSaleor({
+                city: formData.city,
+                region: formData.countryArea,
+                addressLine: formData.streetAddress1,
+                postalCode: formData.postalCode,
+              })
+            : formData.countryArea,
         city: formData.city,
         cityArea: formData.cityArea,
         streetAddress1: formData.streetAddress1,
@@ -462,7 +470,14 @@ export default function AddressModal({
     setFormData((prev) => ({
       ...prev,
       country: 'RU',
-      countryArea: pvz.region || prev.countryArea,
+      countryArea: pvz.region
+        ? sanitizeRuCountryAreaForSaleor({
+            city: pvz.cityName,
+            region: pvz.region,
+            addressLine: pvz.address,
+            postalCode: pvz.postalCode,
+          })
+        : prev.countryArea,
       city: pvz.cityName || prev.city,
       cityArea: pvz.cityArea || prev.cityArea,
       streetAddress1: pvz.address || prev.streetAddress1,
@@ -516,13 +531,26 @@ export default function AddressModal({
 
   const handleCourierMapChoose = (r: CourierMapResult) => {
     setCourierCoords({ lon: r.lon, lat: r.lat })
+    const countryArea = sanitizeRuCountryAreaForSaleor({
+      city: r.city,
+      region: r.region,
+      addressLine: r.addressLine,
+      postalCode: r.postalCode,
+    })
     setFormData((prev) => ({
       ...prev,
       country: 'RU',
-      countryArea: r.region || prev.countryArea,
+      countryArea,
       city: r.city || prev.city,
       streetAddress1: r.addressLine || prev.streetAddress1,
       postalCode: r.postalCode || prev.postalCode,
+    }))
+    setErrors((prev) => ({
+      ...prev,
+      countryArea: '',
+      city: '',
+      streetAddress1: '',
+      postalCode: '',
     }))
     if (deliveryService === 'yandex') {
       setYandexDropoff('courier')
@@ -550,7 +578,13 @@ export default function AddressModal({
     setFormData((prev) => ({
       ...prev,
       country: 'RU',
-      countryArea: pvz.address.region || prev.countryArea,
+      countryArea: pvz.address.region
+        ? sanitizeRuCountryAreaForSaleor({
+            city: pvz.address.city,
+            region: pvz.address.region,
+            addressLine: pvz.address.fullAddress || pvz.address.address,
+          })
+        : prev.countryArea,
       city: pvz.address.city || prev.city,
       streetAddress1: pvz.address.address || pvz.address.fullAddress || prev.streetAddress1,
       postalCode: postalFromAddress || prev.postalCode,

@@ -18,13 +18,19 @@ export async function signUpService(
   phone?: string
 ) {
   const mutation = `
-   mutation  signUp($email: String!, $password: String!, $firstName: String, $lastName: String){
+   mutation signUp(
+     $email: String!
+     $password: String!
+     $firstName: String
+     $lastName: String
+     $redirectUrl: String!
+   ) {
   accountRegister(input: {
     email: $email, 
     password: $password
     firstName: $firstName
     lastName: $lastName
-    redirectUrl: "https://vspomni.store/graphql"
+    redirectUrl: $redirectUrl
   }) {
     requiresConfirmation
   
@@ -36,7 +42,11 @@ export async function signUpService(
 }
   `
 
-  const variables: any = { email, password }
+  const variables: Record<string, string> = {
+    email,
+    password,
+    redirectUrl: RedirectUrl,
+  }
   if (firstName) variables.firstName = firstName
   if (lastName) variables.lastName = lastName
 

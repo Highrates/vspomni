@@ -73,8 +73,37 @@ export default function OrderDelivery() {
   const [modalVisible, setModalVisible] = useState(false)
   const [editingAddress, setEditingAddress] = useState<AddressInfo | null>(null)
   const { calculateDelivery: calculateCdek } = useCdek()
-  const { items, setShippingPrice, setShippingLoading, setShippingCarrier } =
+  const { items, setShippingPrice, setShippingLoading, setShippingCarrier, setShippingError, setShippingIsFree } =
     useCartStore()
+
+  const failShipping = (
+    message: string,
+    carrier: 'cdek' | 'yandex' | 'ozon' | null,
+  ) => {
+    setShippingCarrier(carrier)
+    setShippingError(message)
+    setShippingIsFree(false)
+    setShippingPrice(0)
+  }
+
+  const succeedShipping = (
+    price: number,
+    carrier: 'cdek' | 'yandex' | 'ozon',
+  ) => {
+    if (!Number.isFinite(price) || price < 0) {
+      failShipping('Не удалось рассчитать стоимость доставки', carrier)
+      return
+    }
+    setShippingCarrier(carrier)
+    setShippingError(null)
+    if (price === 0) {
+      setShippingIsFree(true)
+      setShippingPrice(0)
+      return
+    }
+    setShippingIsFree(false)
+    setShippingPrice(Math.round(price))
+  }
   const setDeliveryAddress = useCheckoutStore((s) => s.setDeliveryAddress)
 
   const syncDeliveryAddress = (addr: AddressInfo) => {
@@ -86,12 +115,12 @@ export default function OrderDelivery() {
     const carrier = getShippingCarrierFromAddress(address.streetAddress2)
     try {
       setShippingLoading(true)
+      setShippingError(null)
 
       // Если нет города, не пытаемся считать
       if (!address.city) {
         console.warn('Skipping shipping calculation: City is missing')
-        setShippingPrice(0)
-        setShippingCarrier(carrier)
+        failShipping('Укажите город в адресе доставки', carrier)
         return
       }
 
@@ -137,15 +166,13 @@ export default function OrderDelivery() {
           )
           if (cheapest?.price?.total_price != null) {
             const sum = parseYandexOfferPrice(cheapest.price.total_price)
-            setShippingCarrier('yandex')
-            setShippingPrice(sum > 0 ? Math.round(sum) : 0)
+            succeedShipping(sum, 'yandex')
             return
           }
         } catch (yErr) {
           console.error('Yandex shipping calculation failed:', yErr)
         }
-        setShippingCarrier('yandex')
-        setShippingPrice(0)
+        failShipping('Не удалось рассчитать доставку Яндекс', 'yandex')
         return
       }
 
@@ -181,8 +208,7 @@ export default function OrderDelivery() {
               ...(shipmentLines.length > 0 ? { shipmentLines } : {}),
             })
             const amount = parseOzonAmount(res.amount)
-            setShippingCarrier('ozon')
-            setShippingPrice(amount > 0 ? Math.round(amount) : 0)
+            succeedShipping(amount, 'ozon')
             return
           }
 
@@ -199,15 +225,13 @@ export default function OrderDelivery() {
               ...(shipmentLines.length > 0 ? { shipmentLines } : {}),
             })
             const amount = parseOzonAmount(res.amount)
-            setShippingCarrier('ozon')
-            setShippingPrice(amount > 0 ? Math.round(amount) : 0)
+            succeedShipping(amount, 'ozon')
             return
           }
         } catch (ozErr) {
           console.error('Ozon shipping calculation failed:', ozErr)
         }
-        setShippingCarrier('ozon')
-        setShippingPrice(0)
+        failShipping('Не удалось рассчитать доставку Ozon', 'ozon')
         return
       }
 
@@ -305,19 +329,16 @@ export default function OrderDelivery() {
             tariffPool[0],
           )
           const sum = Number(cheapest.delivery_sum)
-          setShippingCarrier('cdek')
-          setShippingPrice(Number.isFinite(sum) && sum > 0 ? sum : 0)
+          succeedShipping(sum, 'cdek')
           return
         }
       }
 
       console.warn('CDEK: no city or tariffs found for', address.city)
-      setShippingCarrier('cdek')
-      setShippingPrice(0)
+      failShipping('Не удалось рассчитать доставку СДЭК', 'cdek')
     } catch (e) {
       console.error('Failed to calculate shipping:', e)
-      setShippingCarrier(carrier)
-      setShippingPrice(0)
+      failShipping('Ошибка расчёта доставки. Попробуйте позже', carrier)
     } finally {
       setShippingLoading(false)
     }

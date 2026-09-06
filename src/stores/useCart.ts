@@ -17,9 +17,13 @@ interface CartState {
   totalPrice: number
   discount: number              // Скидка в процентах (для процентных ваучеров)
   discountAmount?: number       // Фиксированная сумма скидки (для FIXED ваучеров)
-  discountType?: 'PERCENTAGE' | 'FIXED'
+  discountType?: 'PERCENTAGE' | 'FIXED' | 'SHIPPING'
   shippingPrice: number
   shippingLoading: boolean
+  /** Ошибка расчёта доставки — блокирует оплату */
+  shippingError: string | null
+  /** Легитимная бесплатная доставка (промо / carrier=0), не ошибка расчёта */
+  shippingIsFree: boolean
   /** Как считалась доставка на checkout (по метке в адресе) */
   shippingCarrier: 'cdek' | 'yandex' | 'ozon' | null
   appliedPromoCode: string | null
@@ -36,12 +40,14 @@ interface CartState {
   clearCart: () => void
   setShippingPrice: (price: number) => void
   setShippingLoading: (loading: boolean) => void
+  setShippingError: (message: string | null) => void
+  setShippingIsFree: (isFree: boolean) => void
   setShippingCarrier: (carrier: 'cdek' | 'yandex' | 'ozon' | null) => void
   applyPromoCode: (
     code: string,
     discountPercent: number,
     discountAmount?: number,
-    discountType?: 'PERCENTAGE' | 'FIXED',
+    discountType?: 'PERCENTAGE' | 'FIXED' | 'SHIPPING',
   ) => void
   removePromoCode: () => void
 }
@@ -96,6 +102,8 @@ export const useCartStore = create<CartState>()(
       discountType: undefined,
       shippingPrice: 0,
       shippingLoading: false,
+      shippingError: null,
+      shippingIsFree: false,
       shippingCarrier: null,
       appliedPromoCode: null,
 
@@ -200,10 +208,21 @@ export const useCartStore = create<CartState>()(
       setShippingPrice: (price) => {
         const { items, discount, discountAmount } = get()
         const totals = calcTotals(items, discount, discountAmount, price)
-        set({ shippingPrice: price, shippingLoading: false, ...totals })
+        set({
+          shippingPrice: price,
+          shippingLoading: false,
+          shippingError: price > 0 ? null : get().shippingError,
+          shippingIsFree: price === 0 ? get().shippingIsFree : false,
+          ...totals,
+        })
       },
 
       setShippingLoading: (loading) => set({ shippingLoading: loading }),
+
+      setShippingError: (message) =>
+        set({ shippingError: message, shippingIsFree: message ? false : get().shippingIsFree }),
+
+      setShippingIsFree: (isFree) => set({ shippingIsFree: isFree }),
 
       setShippingCarrier: (carrier) => set({ shippingCarrier: carrier }),
 
@@ -215,6 +234,7 @@ export const useCartStore = create<CartState>()(
           discount: discountPercent,
           discountAmount: discountAmount,
           discountType,
+          shippingIsFree: discountType === 'SHIPPING' ? true : get().shippingIsFree,
           ...totals
         })
       },
@@ -227,6 +247,7 @@ export const useCartStore = create<CartState>()(
           discount: 0,
           discountAmount: undefined,
           discountType: undefined,
+          shippingIsFree: false,
           ...totals
         })
       },
@@ -239,12 +260,26 @@ export const useCartStore = create<CartState>()(
         discountAmount: undefined,
         discountType: undefined,
         shippingPrice: 0,
+        shippingError: null,
+        shippingIsFree: false,
         shippingCarrier: null,
         appliedPromoCode: null,
       }),
     }),
     {
       name: 'cart-storage',
+      partialize: (state) => ({
+        items: state.items,
+        totalItems: state.totalItems,
+        totalPrice: state.totalPrice,
+        discount: state.discount,
+        discountAmount: state.discountAmount,
+        discountType: state.discountType,
+        shippingPrice: state.shippingPrice,
+        shippingCarrier: state.shippingCarrier,
+        shippingIsFree: state.shippingIsFree,
+        appliedPromoCode: state.appliedPromoCode,
+      }),
       onRehydrateStorage: () => (state) => {
         if (!state?.items?.length) return
         const clamped = clampCartItems(state.items)

@@ -9,7 +9,7 @@ export interface VoucherInfo {
   code: string;
   discountPercent: number;
   discountAmount?: number;
-  discountType?: "PERCENTAGE" | "FIXED";
+  discountType?: "PERCENTAGE" | "FIXED" | "SHIPPING";
 }
 
 // Преобразование checkout token -> GraphQL ID (Checkout:token -> base64)
@@ -55,9 +55,7 @@ export async function validatePromoCode(
       const itemId = item.variantId || item.id;
       if (!itemId) continue;
       variantIds.push(itemId);
-      // Для валидации промокода не даём больше 1 позиции на товар,
-      // чтобы не ловить ошибку Saleor \"Cannot add more than 1 times this item\"
-      quantities.push(1);
+      quantities.push(Math.max(1, Math.floor(item.quantity) || 1));
     }
 
     if (variantIds.length === 0) {
@@ -92,7 +90,10 @@ export async function validatePromoCode(
     }
 
     let discountPercent = 0;
-    if (data.discountType === "PERCENTAGE") {
+    let discountType = data.discountType as VoucherInfo["discountType"];
+    if (data.discountType === "SHIPPING") {
+      discountType = "SHIPPING";
+    } else if (data.discountType === "PERCENTAGE") {
       discountPercent = data.discountPercent || 0;
     } else if (data.discountType === "FIXED") {
       const subtotal = items.reduce(
@@ -108,7 +109,7 @@ export async function validatePromoCode(
       code: data.code || trimmedCode,
       discountPercent,
       discountAmount: data.discountAmount,
-      discountType: data.discountType,
+      discountType,
     };
   } catch (error: any) {
     console.error("Error validating promo code:", error);

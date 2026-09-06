@@ -1,4 +1,5 @@
 import { useAuthStore } from "@/stores/useAuth";
+import { getEmailConfirmationRedirectUrl } from "@/lib/siteUrl";
 
 export interface GraphQLError {
   message: string
@@ -12,7 +13,7 @@ export interface GraphQLResponse<T> {
   errors?: GraphQLError[]
 }
 export const CHANNEL = 'vspomni-site'
-export const RedirectUrl = 'http://localhost:3000/email-confirmation'
+export const RedirectUrl = getEmailConfirmationRedirectUrl()
 
 
 export interface GraphQLRequestOptions {

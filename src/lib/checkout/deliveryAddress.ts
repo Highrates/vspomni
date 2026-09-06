@@ -81,6 +81,27 @@ export function resolveCheckoutDeliveryAddress(
   return deliveryAddress ?? loadPersistedCheckoutDeliveryAddress()
 }
 
+/** Возвращает текст ошибки или null, если адрес годится для checkout/Saleor. */
+export function validateDeliveryAddressForCheckout(
+  address: Partial<AddressInfo> | null | undefined,
+): string | null {
+  if (!address) {
+    return 'Выберите адрес доставки'
+  }
+
+  const street = (address.streetAddress1 || '').trim()
+  const city = (address.city || '').trim()
+  const phone = (address.phone || '').trim()
+  const postal = (address.postalCode || '').trim()
+
+  if (!street) return 'Укажите адрес доставки'
+  if (!city) return 'Укажите город'
+  if (!phone) return 'Укажите телефон'
+  if (!postal) return 'Укажите почтовый индекс'
+
+  return null
+}
+
 /** Контактные данные из формы checkout (имя, телефон). */
 export function buildCheckoutContact(input: {
   name?: string

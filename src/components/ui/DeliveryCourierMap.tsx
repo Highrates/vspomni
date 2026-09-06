@@ -39,7 +39,13 @@ function parseGeoObject(geoObject: any): CourierMapResult | null {
       const components = meta.Components || []
       for (const c of components) {
         if (c.kind === 'locality') city = c.name || city
-        if (c.kind === 'province' || c.kind === 'area') region = c.name || region
+      }
+      for (const c of components) {
+        if (c.kind !== 'province' && c.kind !== 'area') continue
+        const name = String(c.name || '').trim()
+        if (!name || /федеральный\s+округ/i.test(name)) continue
+        region = name
+        break
       }
     }
   } catch {

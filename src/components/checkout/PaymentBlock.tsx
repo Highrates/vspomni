@@ -21,7 +21,10 @@ import {
   isSelectedVariantInStock,
   isVariantSellable,
 } from '@/lib/product/stock'
-import { stashPaymentForMetrika } from '@/lib/analytics/yandexMetrika'
+import {
+  fetchPaymentStatus,
+  persistPendingPaymentStorage,
+} from '@/lib/checkout/postPayment'
 
 export default function PaymentBlock() {
   const [confirmationToken, setConfirmationToken] = useState<string | null>(null)
@@ -33,7 +36,7 @@ export default function PaymentBlock() {
   const paymentCompletedRef = useRef(false)
   const { user } = useUserStore()
   const deliveryAddress = useCheckoutStore((s) => s.deliveryAddress)
-  const { items, totalPrice, appliedPromoCode, shippingPrice, shippingCarrier } = useCartStore()
+  const { items, totalPrice, appliedPromoCode, shippingPrice, shippingCarrier, shippingLoading, shippingError, shippingIsFree } = useCartStore()
 
   const getCheckoutContact = useCallback(
     () =>
@@ -71,7 +74,7 @@ export default function PaymentBlock() {
       const { resolveCheckoutPaymentAmount } = await import(
         '@/graphql/queries/cart.service'
       )
-      const { shippingPrice: currentShipping, shippingCarrier: currentCarrier, totalPrice: cartTotal } =
+      const { shippingPrice: currentShipping, shippingCarrier: currentCarrier, totalPrice: cartTotal, shippingIsFree: currentShippingIsFree } =
         useCartStore.getState()
 
       return resolveCheckoutPaymentAmount(
@@ -80,38 +83,11 @@ export default function PaymentBlock() {
         currentCarrier,
         cartTotal,
         saleorSubtotalAfterPromo,
+        { allowFreeShipping: currentShippingIsFree },
       )
     },
     [],
   )
-
-  const persistPendingPaymentContext = useCallback(
-    (checkoutToken: string, amount: number, yookassaPaymentId?: string) => {
-      localStorage.setItem('pendingCheckoutId', checkoutToken)
-      localStorage.setItem('pendingPaymentAmount', amount.toString())
-      const { shippingPrice: currentShipping, shippingCarrier: currentCarrier } =
-        useCartStore.getState()
-      localStorage.setItem('pendingShippingAmount', String(currentShipping || 0))
-      localStorage.setItem('pendingShippingCarrier', currentCarrier || 'cdek')
-      if (yookassaPaymentId) {
-        localStorage.setItem('pendingPaymentId', yookassaPaymentId)
-      }
-    },
-    [],
-  )
-
-  const readPendingShipping = useCallback(() => {
-    const amountStr = localStorage.getItem('pendingShippingAmount')
-    const carrier = localStorage.getItem('pendingShippingCarrier') as
-      | 'cdek'
-      | 'yandex'
-      | 'ozon'
-      | null
-    return {
-      shippingAmount: amountStr ? parseFloat(amountStr) : useCartStore.getState().shippingPrice,
-      shippingCarrier: carrier || useCartStore.getState().shippingCarrier,
-    }
-  }, [])
 
   const redirectToSuccess = useCallback(() => {
     window.location.assign('/checkout/success')
@@ -122,77 +98,50 @@ export default function PaymentBlock() {
     paymentCompletedRef.current = true
     setPaymentCompleted(true)
 
-    const pendingCheckoutId = localStorage.getItem('pendingCheckoutId')
-    const activeCheckoutId = pendingCheckoutId || checkoutId
-    const paymentAmountStr = localStorage.getItem('pendingPaymentAmount')
-    const paymentAmount = paymentAmountStr ? parseFloat(paymentAmountStr) : undefined
-    const storedPaymentId = localStorage.getItem('pendingPaymentId') || paymentId || undefined
-    const { shippingAmount, shippingCarrier: pendingCarrier } = readPendingShipping()
-    const accountEmail = getAccountEmail()
-    const resolvedDelivery = resolveCheckoutDeliveryAddress(deliveryAddress)
-    const checkoutContact = getCheckoutContact()
-
-    stashPaymentForMetrika({
-      paymentId: storedPaymentId,
-      revenue: paymentAmount,
-    })
-
-    if (!activeCheckoutId) {
-      const lastOrder = localStorage.getItem('lastCompletedOrderNumber')
-      if (lastOrder) {
-        redirectToSuccess()
-        return
-      }
-      paymentCompletedRef.current = false
-      setPaymentCompleted(false)
-      toast.error('Не удалось найти заказ для подтверждения. Обратитесь в поддержку.')
-      return
+    const storedPaymentId =
+      localStorage.getItem('pendingPaymentId') || paymentId || undefined
+    if (storedPaymentId && !localStorage.getItem('pendingPaymentId')) {
+      localStorage.setItem('pendingPaymentId', storedPaymentId)
     }
 
-    try {
-      const { completeCheckout } = await import('@/graphql/queries/cart.service')
-      const { clearCart } = useCartStore.getState()
-      const { clearCheckout } = useCheckoutStore.getState()
-
-      const result = await completeCheckout(
-        activeCheckoutId,
-        accountEmail,
-        paymentAmount,
-        storedPaymentId,
-        resolvedDelivery,
-        checkoutContact,
-        shippingAmount,
-        pendingCarrier,
-      )
-
-      if (result.order?.number || result.order?.id) {
-        localStorage.setItem(
-          'lastCompletedOrderNumber',
-          String(result.order.number || result.order.id),
-        )
-      }
-
-      localStorage.removeItem('pendingCheckoutId')
-      localStorage.removeItem('pendingPaymentId')
-      localStorage.removeItem('pendingPaymentAmount')
-      localStorage.removeItem('pendingShippingAmount')
-      localStorage.removeItem('pendingShippingCarrier')
-      clearCart()
-      clearCheckout()
-      redirectToSuccess()
-    } catch (error) {
-      console.error('Error completing checkout after payment:', error)
-      paymentCompletedRef.current = false
-      setPaymentCompleted(false)
-      toast.error(
-        'Оплата прошла, но заказ не оформился. Нажмите «Оплата прошла? Перейти к подтверждению заказа» или обновите страницу.',
-      )
-    }
-  }, [checkoutId, paymentId, redirectToSuccess, deliveryAddress, getCheckoutContact, readPendingShipping])
+    redirectToSuccess()
+  }, [paymentId, redirectToSuccess])
 
   const handleCreateDraftOrder = async () => {
     try {
       setIsCreatingPayment(true)
+
+      const {
+        shippingPrice: currentShippingPrice,
+        shippingLoading: isShippingLoading,
+        shippingError: currentShippingError,
+        shippingCarrier: currentShippingCarrier,
+        shippingIsFree: currentShippingIsFree,
+      } = useCartStore.getState()
+
+      if (isShippingLoading) {
+        toast.error('Подождите, идёт расчёт стоимости доставки.')
+        setIsCreatingPayment(false)
+        return
+      }
+
+      if (currentShippingError) {
+        toast.error(currentShippingError)
+        setIsCreatingPayment(false)
+        return
+      }
+
+      if (
+        currentShippingCarrier &&
+        currentShippingPrice <= 0 &&
+        !currentShippingIsFree
+      ) {
+        toast.error(
+          'Не удалось рассчитать доставку. Проверьте адрес или попробуйте позже.',
+        )
+        setIsCreatingPayment(false)
+        return
+      }
 
       const resolvedDelivery = resolveCheckoutDeliveryAddress(deliveryAddress)
       if (!resolvedDelivery) {
@@ -541,6 +490,7 @@ export default function PaymentBlock() {
 
       // Вызываем API для создания платежа
       const accountEmail = getAccountEmail()
+      const { shippingIsFree: payShippingIsFree } = useCartStore.getState()
       const response = await fetch('/api/yookassa/create-payment', {
         method: 'POST',
         headers: {
@@ -553,6 +503,7 @@ export default function PaymentBlock() {
           orderId: orderOrCheckoutId,
           userEmail: accountEmail,
           shippingAmount: Number(shippingPrice) || 0,
+          allowFreeShipping: payShippingIsFree,
           items: paymentItems,
           returnUrl: `${window.location.origin}/checkout/success`,
           metadata: {
@@ -562,6 +513,7 @@ export default function PaymentBlock() {
             itemsCount: items.length,
             shippingAmount: String(Number(shippingPrice) || 0),
             shippingCarrier: shippingCarrier || 'cdek',
+            allowFreeShipping: payShippingIsFree ? 'true' : 'false',
           },
         }),
       })
@@ -577,7 +529,14 @@ export default function PaymentBlock() {
       }
 
       if (result.confirmationToken) {
-        persistPendingPaymentContext(orderOrCheckoutId, totalAmount, result.paymentId)
+        const { shippingPrice: currentShipping, shippingCarrier: currentCarrier } =
+          useCartStore.getState()
+        persistPendingPaymentStorage(
+          orderOrCheckoutId,
+          totalAmount,
+          result.paymentId,
+          { amount: currentShipping || 0, carrier: currentCarrier },
+        )
         console.log('Saved checkoutId to localStorage:', orderOrCheckoutId)
         console.log('Saved paymentId to localStorage:', result.paymentId)
         console.log('Current checkoutId state:', checkoutId)
@@ -614,12 +573,8 @@ export default function PaymentBlock() {
   const checkPaymentStatus = useCallback(async () => {
     if (!paymentId || paymentCompletedRef.current) return false
     try {
-      const response = await fetch(
-        `/api/yookassa/payment-status?paymentId=${encodeURIComponent(paymentId)}`,
-      )
-      if (!response.ok) return false
-      const data = await response.json()
-      if (data.status === 'succeeded' || data.paid) {
+      const data = await fetchPaymentStatus(paymentId)
+      if (data?.status === 'succeeded' || data?.paid) {
         await handleYooKassaSuccess()
         return true
       }
@@ -668,11 +623,20 @@ export default function PaymentBlock() {
       )}
 
       {!showYooKassaWidget && !paymentId && (
+      <>
+      {shippingError ? (
+        <p className="mb-3 text-sm text-red-600">{shippingError}</p>
+      ) : shippingLoading ? (
+        <p className="mb-3 text-sm text-black/50">Расчёт доставки…</p>
+      ) : null}
       <button
         type="button"
         className="w-full h-12 sm:h-13 md:h-14 rounded-full bg-black text-white text-base sm:text-[17px] md:text-[18px] font-semibold hover:bg-[#3A7FE2] transition disabled:bg-gray-400"
         disabled={
           isCreatingPayment ||
+          shippingLoading ||
+          Boolean(shippingError) ||
+          Boolean(shippingCarrier && shippingPrice <= 0 && !shippingIsFree) ||
           !deliveryAddress ||
           !Boolean(
             user.name.trim().length >= 2 &&
@@ -685,6 +649,7 @@ export default function PaymentBlock() {
       >
         {isCreatingPayment ? 'Создание платежа...' : 'Оплатить'}
       </button>
+      </>
       )}
     </section>
   )

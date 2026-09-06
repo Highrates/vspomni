@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
       status: payment.status,
       paid: payment.paid || payment.status === 'succeeded',
       amount: payment.amount,
+      metadata: payment.metadata || {},
     })
   } catch (error: unknown) {
     const message =

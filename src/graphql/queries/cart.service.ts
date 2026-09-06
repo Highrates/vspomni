@@ -5,6 +5,7 @@ import {
   mergeCheckoutContact,
   resolveCheckoutDeliveryAddress,
   toSaleorDeliveryAddress,
+  validateDeliveryAddressForCheckout,
 } from "@/lib/checkout/deliveryAddress";
 import type { AddressInfo } from "@/graphql/types/auth.types";
 import {
@@ -307,9 +308,12 @@ export async function syncCheckoutExternalShipping(
   checkoutId: string,
   shippingAmount: number,
   shippingCarrier?: ShippingCarrier | null,
+  options?: { allowFreeShipping?: boolean },
 ): Promise<number | null> {
   const amount = Number(shippingAmount) || 0
-  if (amount <= 0) {
+  const allowFreeShipping = Boolean(options?.allowFreeShipping)
+
+  if (amount <= 0 && !allowFreeShipping) {
     return getCheckoutTotal(checkoutId)
   }
 
@@ -321,6 +325,7 @@ export async function syncCheckoutExternalShipping(
       checkoutId,
       shippingAmount: amount,
       shippingCarrier: shippingCarrier || 'cdek',
+      allowFreeShipping,
     }),
   })
 
@@ -344,12 +349,15 @@ export async function resolveCheckoutPaymentAmount(
   shippingCarrier: ShippingCarrier | null | undefined,
   cartTotalPrice: number,
   saleorSubtotalAfterPromo?: number | null,
+  options?: { allowFreeShipping?: boolean },
 ): Promise<number> {
+  const allowFreeShipping = Boolean(options?.allowFreeShipping)
   try {
     const totalFromShipping = await syncCheckoutExternalShipping(
       checkoutId,
       shippingPrice,
       shippingCarrier,
+      { allowFreeShipping },
     )
     if (totalFromShipping != null && totalFromShipping > 0) {
       return totalFromShipping
@@ -375,6 +383,11 @@ export async function resolveCheckoutPaymentAmount(
 }
 
 function addressToCheckoutInput(address: Partial<AddressInfo> & Record<string, unknown>) {
+  const validationError = validateDeliveryAddressForCheckout(address as AddressInfo)
+  if (validationError) {
+    throw new Error(validationError)
+  }
+
   const countryRaw = address.country
   const countryCode =
     typeof countryRaw === 'object' && countryRaw !== null && 'code' in countryRaw
@@ -386,10 +399,11 @@ function addressToCheckoutInput(address: Partial<AddressInfo> & Record<string, u
   const addressInput: Record<string, string> = {
     firstName: (address.firstName || '').trim() || 'Пользователь',
     lastName: (address.lastName || '').trim() || '',
-    streetAddress1: (address.streetAddress1 || '').trim() || 'Адрес не указан',
-    city: (address.city || '').trim() || 'Москва',
-    postalCode: (address.postalCode || '').trim() || '000000',
+    streetAddress1: (address.streetAddress1 || '').trim(),
+    city: (address.city || '').trim(),
+    postalCode: (address.postalCode || '').trim(),
     country: countryCode,
+    phone: (address.phone || '').trim(),
   };
 
   if (address.streetAddress2) {
@@ -398,25 +412,12 @@ function addressToCheckoutInput(address: Partial<AddressInfo> & Record<string, u
   if (address.countryArea) {
     addressInput.countryArea = String(address.countryArea).trim();
   }
-  if (address.phone) {
-    addressInput.phone = String(address.phone).trim();
-  }
   if (address.companyName) {
     addressInput.companyName = String(address.companyName).trim();
   }
 
   return addressInput;
 }
-
-const MINIMAL_CHECKOUT_ADDRESS: Partial<AddressInfo> = {
-  firstName: 'Пользователь',
-  lastName: '',
-  streetAddress1: 'Адрес не указан',
-  city: 'Москва',
-  postalCode: '000000',
-  country: { code: 'RU', country: 'Russia' },
-  phone: '',
-};
 
 async function setCheckoutBillingAddress(checkoutId: string, address: Partial<AddressInfo>): Promise<void> {
   const graphqlCheckoutId = tokenToGraphQLId(checkoutId);
@@ -496,25 +497,18 @@ async function applyCheckoutAddresses(
         if (contact) {
           address = mergeCheckoutContact(address as AddressInfo, contact);
         }
-      } else if (meInfo) {
-        address = {
-          firstName: contact?.firstName || meInfo.firstName || 'Пользователь',
-          lastName: contact?.lastName || meInfo.lastName || '',
-          streetAddress1: 'Адрес не указан',
-          city: 'Москва',
-          postalCode: '000000',
-          country: { code: 'RU', country: 'Russia' },
-          phone: contact?.phone || '',
-        };
       }
     } catch (error) {
       console.warn('Could not load profile address for checkout:', error);
     }
   }
 
-  const resolved = toSaleorDeliveryAddress(
-    (address || MINIMAL_CHECKOUT_ADDRESS) as AddressInfo,
-  );
+  const validationError = validateDeliveryAddressForCheckout(address as AddressInfo | null)
+  if (validationError) {
+    throw new Error(validationError)
+  }
+
+  const resolved = toSaleorDeliveryAddress(address as AddressInfo)
   try {
     await setCheckoutBillingAddress(checkoutId, resolved);
     await setCheckoutShippingAddress(checkoutId, resolved);
@@ -540,7 +534,7 @@ async function applyCheckoutAddresses(
 
 /**
  * Прокинуть выбранный адрес доставки в Saleor checkout (billing + shipping).
- * Вызывать после создания checkout и перед completeCheckout.
+ * Вызывать после создания checkout и перед оплатой.
  */
 export async function syncCheckoutDeliveryAddress(
   checkoutId: string,
@@ -649,7 +643,55 @@ export type FinalizeCheckoutParams = {
   paymentId?: string
   shippingAmount?: number
   shippingCarrier?: ShippingCarrier | null
+  allowFreeShipping?: boolean
   address?: Partial<AddressInfo> | null
+}
+
+export type InsufficientStockItem = {
+  variantId?: string
+  productName?: string
+  requested?: number
+  available?: number
+}
+
+export type CheckoutFinalizeErrorDetails = {
+  code: string
+  requiresRefund?: boolean
+  items?: InsufficientStockItem[]
+  expectedTotal?: number
+  paidAmount?: number
+}
+
+export class CheckoutFinalizeError extends Error {
+  readonly code: string
+  readonly requiresRefund?: boolean
+  readonly items?: InsufficientStockItem[]
+  readonly expectedTotal?: number
+  readonly paidAmount?: number
+
+  constructor(message: string, details: CheckoutFinalizeErrorDetails) {
+    super(message)
+    this.name = 'CheckoutFinalizeError'
+    this.code = details.code
+    this.requiresRefund = details.requiresRefund
+    this.items = details.items
+    this.expectedTotal = details.expectedTotal
+    this.paidAmount = details.paidAmount
+  }
+}
+
+export class InsufficientStockError extends CheckoutFinalizeError {
+  constructor(
+    message: string,
+    details?: { items?: InsufficientStockItem[]; requiresRefund?: boolean },
+  ) {
+    super(message, {
+      code: 'INSUFFICIENT_STOCK',
+      items: details?.items,
+      requiresRefund: details?.requiresRefund,
+    })
+    this.name = 'InsufficientStockError'
+  }
 }
 
 /**
@@ -663,6 +705,7 @@ export async function finalizeCheckoutViaRest({
   paymentId,
   shippingAmount,
   shippingCarrier,
+  allowFreeShipping,
   address,
 }: FinalizeCheckoutParams): Promise<{ order: any; errors: any[] }> {
   const normalizedEmail = (userEmail?.trim() || '').toLowerCase()
@@ -679,11 +722,35 @@ export async function finalizeCheckoutViaRest({
       userEmail: normalizedEmail || undefined,
       shippingAmount,
       shippingCarrier,
+      allowFreeShipping,
       address: address || undefined,
     }),
   })
 
   const result = await response.json()
+
+  if (response.status === 409 && result.code === 'INSUFFICIENT_STOCK') {
+    throw new InsufficientStockError(
+      result.message || result.error || 'Insufficient stock',
+      {
+        items: Array.isArray(result.items) ? result.items : undefined,
+        requiresRefund: Boolean(result.requiresRefund),
+      },
+    )
+  }
+
+  if (response.status === 409 && result.code) {
+    throw new CheckoutFinalizeError(
+      result.message || result.error || 'Checkout finalize failed',
+      {
+        code: String(result.code),
+        requiresRefund: Boolean(result.requiresRefund),
+        expectedTotal:
+          result.expectedTotal != null ? Number(result.expectedTotal) : undefined,
+        paidAmount: result.paidAmount != null ? Number(result.paidAmount) : undefined,
+      },
+    )
+  }
 
   if (!response.ok) {
     throw new Error(result.error || 'Failed to complete checkout')
@@ -705,144 +772,5 @@ export async function finalizeCheckoutViaRest({
       },
     },
     errors: [],
-  }
-}
-
-export async function completeCheckout(
-  checkoutId: string,
-  userEmail?: string,
-  paymentAmount?: number,
-  paymentId?: string,
-  deliveryAddress?: AddressInfo | null,
-  contact?: CheckoutContact,
-  shippingAmount?: number,
-  shippingCarrier?: ShippingCarrier | null,
-): Promise<{ order: any; errors: any[] }> {
-  const normalizedEmail = (
-    userEmail?.trim() ||
-    (typeof window !== 'undefined' ? getAccountEmail() : '')
-  ).toLowerCase();
-
-  console.log('completeCheckout called with:', {
-    checkoutId,
-    userEmail: normalizedEmail,
-    paymentAmount,
-    paymentId,
-    shippingAmount,
-    shippingCarrier,
-    hasDeliveryAddress: Boolean(deliveryAddress),
-  });
-
-  // Преобразуем token в GraphQL ID
-  const graphqlCheckoutId = tokenToGraphQLId(checkoutId);
-  console.log('Converted checkoutId to GraphQL ID:', { original: checkoutId, graphql: graphqlCheckoutId });
-
-  // Transaction создаётся на бэкенде в complete-without-stock-check (HANDLE_PAYMENTS не нужен на фронте)
-
-  const isBrowser = typeof window !== 'undefined'
-
-  // GraphQL-подготовка только в браузере (JWT, sessionStorage). Webhook идёт сразу в REST.
-  if (isBrowser) {
-    if (normalizedEmail) {
-      try {
-        console.log('Attaching checkout to customer:', normalizedEmail)
-        await attachCheckoutToCustomer(checkoutId, normalizedEmail)
-        console.log('Checkout attached to customer successfully')
-      } catch (error) {
-        console.warn('Failed to attach checkout to customer:', error)
-      }
-    }
-
-    try {
-      await applyCheckoutAddresses(checkoutId, deliveryAddress, contact)
-      console.log('Checkout shipping/billing addresses set successfully')
-    } catch (addressError: unknown) {
-      const message =
-        addressError instanceof Error ? addressError.message : 'Неизвестная ошибка'
-      console.error('Failed to set checkout addresses:', addressError)
-      throw new Error(`Не удалось установить адрес для заказа: ${message}`)
-    }
-  }
-
-  console.log('Calling complete checkout REST endpoint')
-  console.log('Checkout token:', checkoutId)
-
-  try {
-    return await finalizeCheckoutViaRest({
-      checkoutId,
-      userEmail: normalizedEmail,
-      paymentAmount,
-      paymentId,
-      shippingAmount,
-      shippingCarrier,
-      address: deliveryAddress
-        ? toSaleorDeliveryAddress(
-            contact
-              ? mergeCheckoutContact(deliveryAddress as AddressInfo, contact)
-              : (deliveryAddress as AddressInfo),
-          )
-        : undefined,
-    })
-  } catch (error: unknown) {
-    console.error('Error in completeCheckout via REST:', error)
-
-    // Если REST endpoint не работает, пробуем GraphQL как fallback
-    console.log('Falling back to GraphQL checkoutComplete...');
-
-    const mutation = `
-      mutation CheckoutComplete($checkoutId: ID!) {
-        checkoutComplete(id: $checkoutId) {
-          order {
-            id
-            number
-            status
-            statusDisplay
-            created
-            total {
-              gross {
-                amount
-                currency
-              }
-            }
-          }
-          errors {
-            message
-            field
-            code
-          }
-        }
-      }
-    `;
-
-    const variables = { checkoutId: graphqlCheckoutId };
-
-    try {
-      const graphqlResult = await graphqlRequest<{
-        checkoutComplete: {
-          order: any | null;
-          errors: Array<{ message: string; field: string; code: string }>;
-        };
-      }>(mutation, variables);
-
-      console.log('checkoutComplete GraphQL result:', graphqlResult);
-
-      if (graphqlResult.checkoutComplete.errors?.length > 0) {
-        const errorMessages = graphqlResult.checkoutComplete.errors.map((e) => e.message).join(', ');
-        console.error('checkoutComplete GraphQL errors:', graphqlResult.checkoutComplete.errors);
-        throw new Error(errorMessages);
-      }
-
-      if (!graphqlResult.checkoutComplete.order) {
-        throw new Error('Order was not created');
-      }
-
-      return {
-        order: graphqlResult.checkoutComplete.order,
-        errors: graphqlResult.checkoutComplete.errors || [],
-      };
-    } catch (graphqlError: any) {
-      console.error('Error in GraphQL checkoutComplete fallback:', graphqlError);
-      throw graphqlError;
-    }
   }
 }
