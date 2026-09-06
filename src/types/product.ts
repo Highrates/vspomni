@@ -77,6 +77,8 @@ export interface ProductCardItem {
   height?: number; // высота в мм
   /** Единый флаг наличия (остаток + канал); false → не добавлять в корзину */
   inStock?: boolean
+  /** Остаток на складе (Saleor quantityAvailable); null/undefined = неизвестно */
+  quantityAvailable?: number | null
   /** Saleor quantityLimitPerCustomer; null/undefined = без лимита */
   quantityLimitPerCustomer?: number | null
 }

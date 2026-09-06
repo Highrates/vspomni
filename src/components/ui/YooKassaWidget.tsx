@@ -19,6 +19,41 @@ export interface YooKassaPaymentResult {
   }
 }
 
+/** Цвета под UI Vspomni (кнопка «Оплатить» = чёрная, фон блоков #FAFAFA). */
+export const VSPOMNI_YOOKASSA_COLORS = {
+  control_primary: '#000000',
+  control_primary_content: '#FFFFFF',
+  background: '#FAFAFA',
+  text: '#111111',
+  border: '#E8E8E8',
+  control_secondary: '#F0F0F0',
+} as const
+
+/**
+ * Предпочтительный порядок: СБП выше ЮMoney.
+ * Для одного метода в iframe нужен payment_methods (разрешает менеджер ЮKassa).
+ * Без разрешения — показываем полный виджет с теми же colors.
+ */
+export const VSPOMNI_PAYMENT_METHOD_ORDER = [
+  'sbp',
+  'bank_card',
+  'sberbank',
+  'tinkoff_bank',
+  'mir_pay',
+  'yoo_money',
+] as const
+
+type YooPaymentMethod = (typeof VSPOMNI_PAYMENT_METHOD_ORDER)[number]
+
+const METHOD_LABELS: Record<YooPaymentMethod, string> = {
+  sbp: 'СБП',
+  bank_card: 'Карта',
+  sberbank: 'SberPay',
+  tinkoff_bank: 'T-Pay',
+  mir_pay: 'Mir Pay',
+  yoo_money: 'ЮMoney',
+}
+
 interface YooKassaWidgetProps {
   confirmationToken: string
   paymentId?: string | null
@@ -28,8 +63,28 @@ interface YooKassaWidgetProps {
   modal?: boolean
   customization?: {
     modal?: boolean
+    colors?: Record<string, string>
+    payment_methods?: string[]
     [key: string]: any
   }
+}
+
+function getErrorBlob(err: unknown): string {
+  if (!err) return ''
+  if (typeof err === 'string') return err
+  if (typeof err === 'object') {
+    const o = err as Record<string, unknown>
+    return [o.error, o.code, o.message].filter(Boolean).join(' ')
+  }
+  return String(err)
+}
+
+function isMethodsNotAllowedError(err: unknown): boolean {
+  return /customization_of_payment_methods_not_allowed/i.test(getErrorBlob(err))
+}
+
+function isNoMethodsToDisplayError(err: unknown): boolean {
+  return /no_payment_methods_to_display/i.test(getErrorBlob(err))
 }
 
 export default function YooKassaWidget({
@@ -50,6 +105,12 @@ export default function YooKassaWidget({
   const paymentIdRef = useRef(paymentId)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  /** null = полный список способов (fallback без payment_methods) */
+  const [selectedMethod, setSelectedMethod] = useState<YooPaymentMethod | null>(
+    'sbp',
+  )
+  const [methodsCustomizationAllowed, setMethodsCustomizationAllowed] =
+    useState(true)
 
   onSuccessRef.current = onSuccess
   onErrorRef.current = onError
@@ -110,6 +171,16 @@ export default function YooKassaWidget({
 
   const handleError = useCallback((err: any) => {
     console.error('YooKassa Widget error:', err)
+    if (isMethodsNotAllowedError(err)) {
+      setMethodsCustomizationAllowed(false)
+      setSelectedMethod(null)
+      return
+    }
+    if (isNoMethodsToDisplayError(err)) {
+      // Способ недоступен (например Mir Pay не на Android) — карта как запасной
+      setSelectedMethod((prev) => (prev === 'bank_card' ? null : 'bank_card'))
+      return
+    }
     setError(err?.message || 'Ошибка при обработке платежа')
     onErrorRef.current?.(err)
   }, [])
@@ -122,6 +193,7 @@ export default function YooKassaWidget({
     }
 
     paymentHandledRef.current = false
+    let cancelled = false
 
     const loadWidget = async () => {
       setLoading(true)
@@ -133,7 +205,8 @@ export default function YooKassaWidget({
           if (!existingScript) {
             const script = document.createElement('script')
             script.id = 'YooMoneyCheckoutWidget'
-            script.src = 'https://yookassa.ru/checkout-widget/v1/checkout-widget.js'
+            script.src =
+              'https://yookassa.ru/checkout-widget/v1/checkout-widget.js'
             script.charset = 'utf-8'
             script.async = true
 
@@ -160,6 +233,8 @@ export default function YooKassaWidget({
           }
         }
 
+        if (cancelled) return
+
         if (!modal) {
           let containerAttempts = 0
           while (!containerRef.current && containerAttempts < 10) {
@@ -178,31 +253,64 @@ export default function YooKassaWidget({
           } catch {
             // ignore
           }
+          widgetRef.current = null
         }
 
-        // return_url намеренно не передаём: с ним ЮKassa не шлёт success/complete/fail,
-        // а редирект в embedded-режиме остаётся внутри iframe виджета.
-        const config: any = {
+        if (containerRef.current && !modal) {
+          containerRef.current.innerHTML = ''
+        }
+
+        const colors = {
+          ...VSPOMNI_YOOKASSA_COLORS,
+          ...customization?.colors,
+        }
+
+        const useMethodFilter =
+          methodsCustomizationAllowed &&
+          selectedMethod != null &&
+          !customization?.payment_methods
+
+        const config: Record<string, unknown> = {
           confirmation_token: confirmationToken,
-          error_callback: handleError,
-        }
-
-        if (customization || modal) {
-          config.customization = {
+          error_callback: (err: unknown) => {
+            if (isMethodsNotAllowedError(err)) {
+              setMethodsCustomizationAllowed(false)
+              setSelectedMethod(null)
+              return
+            }
+            if (isNoMethodsToDisplayError(err)) {
+              setSelectedMethod((prev) =>
+                prev === 'bank_card' ? null : 'bank_card',
+              )
+              return
+            }
+            handleError(err)
+          },
+          customization: {
             modal: modal || customization?.modal || false,
-            ...customization,
-          }
+            colors,
+            ...(useMethodFilter ? { payment_methods: [selectedMethod] } : {}),
+            ...(customization?.payment_methods
+              ? { payment_methods: customization.payment_methods }
+              : {}),
+            ...Object.fromEntries(
+              Object.entries(customization || {}).filter(
+                ([key]) =>
+                  key !== 'colors' &&
+                  key !== 'modal' &&
+                  key !== 'payment_methods',
+              ),
+            ),
+          },
         }
 
         widgetRef.current = new window.YooMoneyCheckoutWidget(config)
 
         widgetRef.current.on('success', (result: YooKassaPaymentResult) => {
-          console.log('YooKassa Widget success event:', result)
           finishWithSuccess(result)
         })
 
         widgetRef.current.on('complete', () => {
-          console.log('YooKassa Widget complete event')
           void verifyPaymentStatusWithRetry()
         })
 
@@ -223,11 +331,22 @@ export default function YooKassaWidget({
 
         await widgetRef.current.render(renderTarget)
 
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       } catch (err: any) {
         console.error('YooKassa Widget error:', err)
-        setError(err.message || 'Ошибка загрузки виджета')
-        setLoading(false)
+        if (isMethodsNotAllowedError(err)) {
+          setMethodsCustomizationAllowed(false)
+          setSelectedMethod(null)
+          return
+        }
+        if (isNoMethodsToDisplayError(err)) {
+          setSelectedMethod((prev) => (prev === 'bank_card' ? null : 'bank_card'))
+          return
+        }
+        if (!cancelled) {
+          setError(err.message || 'Ошибка загрузки виджета')
+          setLoading(false)
+        }
       }
     }
 
@@ -241,6 +360,7 @@ export default function YooKassaWidget({
     }, 100)
 
     return () => {
+      cancelled = true
       clearTimeout(timer)
       if (widgetRef.current) {
         try {
@@ -254,6 +374,8 @@ export default function YooKassaWidget({
     confirmationToken,
     modal,
     customization,
+    selectedMethod,
+    methodsCustomizationAllowed,
     handleError,
     finishWithSuccess,
     verifyPaymentStatusWithRetry,
@@ -261,18 +383,18 @@ export default function YooKassaWidget({
 
   if (error) {
     return (
-      <div className="border border-black/10 rounded-xl p-4 bg-gray-50">
+      <div className="rounded-2xl border border-black/10 bg-[#FAFAFA] p-4 sm:p-5">
         <div className="text-center space-y-3">
           <CreditCard className="w-8 h-8 mx-auto text-black/30" />
           <div className="text-sm text-black/60">
-            Не удалось загрузить виджет ЮKassa
+            Не удалось загрузить виджет оплаты
           </div>
           <div className="text-xs text-black/40">{error}</div>
           <a
             href="https://yookassa.ru"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
+            className="inline-flex items-center gap-2 text-sm text-[#3A7FE2] hover:underline"
           >
             <ExternalLink className="w-4 h-4" />
             Перейти на сайт ЮKassa
@@ -287,20 +409,52 @@ export default function YooKassaWidget({
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="border border-black/10 rounded-xl overflow-hidden bg-white min-h-[400px] relative"
-    >
-      {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-10">
-          <div className="flex flex-col items-center gap-3">
-            <Loader2 className="w-8 h-8 animate-spin text-green-600" />
-            <span className="text-sm text-black/60">
-              Загрузка формы оплаты ЮKassa...
-            </span>
+    <div className="space-y-3 sm:space-y-4">
+      {methodsCustomizationAllowed && (
+        <div className="space-y-2">
+          <p className="text-sm text-black/50">Способ оплаты</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {VSPOMNI_PAYMENT_METHOD_ORDER.filter((method) => {
+              if (method !== 'mir_pay') return true
+              if (typeof navigator === 'undefined') return false
+              return /Android/i.test(navigator.userAgent)
+            }).map((method) => {
+              const active = selectedMethod === method
+              return (
+                <button
+                  key={method}
+                  type="button"
+                  onClick={() => setSelectedMethod(method)}
+                  className={`h-10 sm:h-11 rounded-full text-sm font-semibold transition border ${
+                    active
+                      ? 'bg-black text-white border-black'
+                      : 'bg-white text-black/70 border-black/15 hover:border-black/40 hover:text-black'
+                  }`}
+                >
+                  {METHOD_LABELS[method]}
+                </button>
+              )
+            })}
           </div>
         </div>
       )}
+
+      <div
+        className="rounded-2xl border border-black/10 overflow-hidden bg-[#FAFAFA] min-h-[360px] relative"
+      >
+        <div
+          ref={containerRef}
+          className="min-h-[360px] w-full [&_iframe]:min-h-[360px]"
+        />
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-[#FAFAFA]/90 z-10">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="w-8 h-8 animate-spin text-black" />
+              <span className="text-sm text-black/60">Загрузка формы оплаты…</span>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

@@ -6,8 +6,8 @@ import { useCartStore } from '@/stores/useCart'
 import { toast } from 'react-toastify'
 import { ProductCardItem } from '@/types/product'
 import {
-  formatQuantityLimitMessage,
-  normalizeQuantityLimit,
+  effectiveMaxQuantity,
+  formatMaxQuantityMessage,
 } from '@/lib/product/quantityLimit'
 
 interface AddCartBtnProps {
@@ -30,7 +30,10 @@ export default function AddCartBtn({ product, size, variantId, mobileRow }: AddC
   const resolvedSize = size || product.size || '100 мл'
   const resolvedVariantId = variantId || product.variantId || undefined
   const inStock = product.inStock !== false
-  const maxQty = normalizeQuantityLimit(product.quantityLimitPerCustomer)
+  const maxQty = effectiveMaxQuantity(
+    product.quantityLimitPerCustomer,
+    product.quantityAvailable,
+  )
   const atLimit = maxQty != null && quantity >= maxQty
 
   const handleAddFirst = (e: React.MouseEvent) => {
@@ -58,7 +61,13 @@ export default function AddCartBtn({ product, size, variantId, mobileRow }: AddC
     e.preventDefault()
     e.stopPropagation()
     if (atLimit && maxQty != null) {
-      toast.error(formatQuantityLimitMessage(maxQty))
+      toast.error(
+        formatMaxQuantityMessage(
+          maxQty,
+          product.quantityLimitPerCustomer,
+          product.quantityAvailable,
+        ),
+      )
       return
     }
     const result = increaseQuantity(lineId)
@@ -92,7 +101,11 @@ export default function AddCartBtn({ product, size, variantId, mobileRow }: AddC
             type="button"
             aria-label={
               plusDisabled && maxQty != null
-                ? formatQuantityLimitMessage(maxQty)
+                ? formatMaxQuantityMessage(
+                    maxQty,
+                    product.quantityLimitPerCustomer,
+                    product.quantityAvailable,
+                  )
                 : 'Увеличить количество'
             }
             disabled={plusDisabled}
@@ -126,7 +139,11 @@ export default function AddCartBtn({ product, size, variantId, mobileRow }: AddC
           type="button"
           aria-label={
             plusDisabled && maxQty != null
-              ? formatQuantityLimitMessage(maxQty)
+              ? formatMaxQuantityMessage(
+                  maxQty,
+                  product.quantityLimitPerCustomer,
+                  product.quantityAvailable,
+                )
               : 'Увеличить количество'
           }
           disabled={plusDisabled}

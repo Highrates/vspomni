@@ -371,6 +371,13 @@ function mapNodeToProductCard(
         ? null
         : undefined
 
+  const quantityAvailable =
+    typeof variant.quantityAvailable === 'number'
+      ? variant.quantityAvailable
+      : variant.quantityAvailable === null
+        ? null
+        : undefined
+
   return {
     id: variant.id,
     name: node.name,
@@ -392,6 +399,7 @@ function mapNodeToProductCard(
     height,
     inStock,
     quantityLimitPerCustomer,
+    quantityAvailable,
   }
 }
 

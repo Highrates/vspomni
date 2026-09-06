@@ -4,8 +4,8 @@ import Image from "next/image";
 import { useCartStore } from "@/stores/useCart";
 import { toast } from "react-toastify";
 import {
-  formatQuantityLimitMessage,
-  normalizeQuantityLimit,
+  effectiveMaxQuantity,
+  formatMaxQuantityMessage,
 } from "@/lib/product/quantityLimit";
 
 interface CartCardProps {
@@ -47,13 +47,22 @@ export default function CartCard({
     : priceWithProductDiscount
   const showOldPrice = hasProductDiscount || hasPromoDiscount
 
-  const maxQty = normalizeQuantityLimit(product?.quantityLimitPerCustomer)
+  const maxQty = effectiveMaxQuantity(
+    product?.quantityLimitPerCustomer,
+    product?.quantityAvailable,
+  )
   const atLimit = maxQty != null && quantity >= maxQty
   const lineId = String(product?.variantId || product?.id || '')
 
   const handleIncrease = () => {
     if (atLimit && maxQty != null) {
-      toast.error(formatQuantityLimitMessage(maxQty))
+      toast.error(
+        formatMaxQuantityMessage(
+          maxQty,
+          product?.quantityLimitPerCustomer,
+          product?.quantityAvailable,
+        ),
+      )
       return
     }
     if (lineId) {
@@ -138,7 +147,11 @@ export default function CartCard({
                 disabled={atLimit}
                 title={
                   atLimit && maxQty != null
-                    ? formatQuantityLimitMessage(maxQty)
+                    ? formatMaxQuantityMessage(
+                        maxQty,
+                        product?.quantityLimitPerCustomer,
+                        product?.quantityAvailable,
+                      )
                     : 'Увеличить количество'
                 }
               >

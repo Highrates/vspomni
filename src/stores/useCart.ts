@@ -3,8 +3,8 @@ import { persist } from 'zustand/middleware'
 import { CartItem } from '@/types/cart'
 import { ProductCardItem } from '@/types/product'
 import {
-  formatQuantityLimitMessage,
-  normalizeQuantityLimit,
+  effectiveMaxQuantity,
+  formatMaxQuantityMessage,
 } from '@/lib/product/quantityLimit'
 
 export type CartQuantityResult =
@@ -74,19 +74,30 @@ const calcTotals = (items: CartItem[], discount: number = 0, discountAmount?: nu
   }
 }
 
+function resolveItemMaxQuantity(product?: ProductCardItem): number | null {
+  return effectiveMaxQuantity(
+    product?.quantityLimitPerCustomer,
+    product?.quantityAvailable,
+  )
+}
+
 function clampCartItems(items: CartItem[]): CartItem[] {
   return items.map((item) => {
-    const max = normalizeQuantityLimit(item.product?.quantityLimitPerCustomer)
+    const max = resolveItemMaxQuantity(item.product)
     if (max == null || item.quantity <= max) return item
     return { ...item, quantity: max }
   })
 }
 
-function limitFailure(max: number): CartQuantityResult {
+function limitFailure(product: ProductCardItem, max: number): CartQuantityResult {
   return {
     ok: false,
     reason: 'limit',
-    message: formatQuantityLimitMessage(max),
+    message: formatMaxQuantityMessage(
+      max,
+      product.quantityLimitPerCustomer,
+      product.quantityAvailable,
+    ),
     maxQuantity: max,
   }
 }
@@ -113,31 +124,34 @@ export const useCartStore = create<CartState>()(
         const items = [...get().items]
         const existingIndex = items.findIndex((item) => item.id === id)
         const currentQty = existingIndex >= 0 ? items[existingIndex].quantity : 0
-        const max = normalizeQuantityLimit(
-          product.quantityLimitPerCustomer ??
-            (existingIndex >= 0
-              ? items[existingIndex].product?.quantityLimitPerCustomer
-              : undefined),
-        )
+        const mergedProduct: ProductCardItem =
+          existingIndex >= 0
+            ? {
+                ...items[existingIndex].product,
+                ...product,
+                quantityLimitPerCustomer:
+                  product.quantityLimitPerCustomer ??
+                  items[existingIndex].product.quantityLimitPerCustomer,
+                quantityAvailable:
+                  product.quantityAvailable ??
+                  items[existingIndex].product.quantityAvailable,
+              }
+            : product
+        const max = resolveItemMaxQuantity(mergedProduct)
 
         if (max != null && currentQty + addBy > max) {
           if (currentQty < max && existingIndex >= 0) {
             items[existingIndex] = {
               ...items[existingIndex],
               quantity: max,
-              product: {
-                ...items[existingIndex].product,
-                ...product,
-                quantityLimitPerCustomer: max,
-              },
+              product: mergedProduct,
             }
             const { discount, discountAmount, shippingPrice } = get()
             set({ items, ...calcTotals(items, discount, discountAmount, shippingPrice) })
           } else if (currentQty === 0 && max >= 1) {
-            // first add but requested more than limit — add up to max
             items.push({
               id,
-              product: { ...product, quantityLimitPerCustomer: max },
+              product: mergedProduct,
               quantity: max,
               size,
               variantId,
@@ -145,20 +159,14 @@ export const useCartStore = create<CartState>()(
             const { discount, discountAmount, shippingPrice } = get()
             set({ items, ...calcTotals(items, discount, discountAmount, shippingPrice) })
           }
-          return limitFailure(max)
+          return limitFailure(mergedProduct, max)
         }
 
         if (existingIndex >= 0) {
           items[existingIndex] = {
             ...items[existingIndex],
             quantity: currentQty + addBy,
-            product: {
-              ...items[existingIndex].product,
-              ...product,
-              quantityLimitPerCustomer:
-                product.quantityLimitPerCustomer ??
-                items[existingIndex].product.quantityLimitPerCustomer,
-            },
+            product: mergedProduct,
           }
         } else {
           items.push({ id, product, quantity: addBy, size, variantId })
@@ -183,9 +191,9 @@ export const useCartStore = create<CartState>()(
         if (index < 0) return { ok: true }
 
         const item = items[index]
-        const max = normalizeQuantityLimit(item.product?.quantityLimitPerCustomer)
+        const max = resolveItemMaxQuantity(item.product)
         if (max != null && item.quantity >= max) {
-          return limitFailure(max)
+          return limitFailure(item.product, max)
         }
 
         items[index] = { ...item, quantity: item.quantity + 1 }

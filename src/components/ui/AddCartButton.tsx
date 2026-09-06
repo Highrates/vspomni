@@ -6,8 +6,8 @@ import { useCartUiStore } from "@/stores/useCartUiStore";
 import { ProductCardItem } from "@/types/product";
 import { toast } from "react-toastify";
 import {
-  formatQuantityLimitMessage,
-  normalizeQuantityLimit,
+  effectiveMaxQuantity,
+  formatMaxQuantityMessage,
 } from "@/lib/product/quantityLimit";
 
 interface AddCartButtonProps {
@@ -38,8 +38,11 @@ export default function AddCartButton({
     );
 
   const canAdd = Boolean(product && size && inStock);
-  const maxQty = normalizeQuantityLimit(product?.quantityLimitPerCustomer);
-  const atLimit = maxQty != null && quantity >= maxQty;
+  const maxQty = effectiveMaxQuantity(
+    product?.quantityLimitPerCustomer,
+    product?.quantityAvailable,
+  )
+  const atLimit = maxQty != null && quantity >= maxQty
 
   const handleAddFirst = () => {
     if (!inStock) {
@@ -64,8 +67,14 @@ export default function AddCartButton({
 
   const handleInc = () => {
     if (!inStock) return;
-    if (atLimit && maxQty != null) {
-      toast.error(formatQuantityLimitMessage(maxQty));
+    if (atLimit && maxQty != null && product) {
+      toast.error(
+        formatMaxQuantityMessage(
+          maxQty,
+          product.quantityLimitPerCustomer,
+          product.quantityAvailable,
+        ),
+      );
       return;
     }
     if (!lineId) return;
@@ -105,8 +114,12 @@ export default function AddCartButton({
           <button
             type="button"
             aria-label={
-              atLimit && maxQty != null
-                ? formatQuantityLimitMessage(maxQty)
+              atLimit && maxQty != null && product
+                ? formatMaxQuantityMessage(
+                    maxQty,
+                    product.quantityLimitPerCustomer,
+                    product.quantityAvailable,
+                  )
                 : "Увеличить количество"
             }
             disabled={atLimit}

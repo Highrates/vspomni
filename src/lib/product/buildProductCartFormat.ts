@@ -65,6 +65,10 @@ export function buildProductCartFormat(
     width: ship.width,
     height: ship.height,
     inStock: isProductInStock(data),
+    quantityAvailable:
+      typeof firstVariant.quantityAvailable === 'number'
+        ? firstVariant.quantityAvailable
+        : firstVariant.quantityAvailable ?? null,
     quantityLimitPerCustomer:
       typeof firstVariant.quantityLimitPerCustomer === 'number'
         ? firstVariant.quantityLimitPerCustomer
