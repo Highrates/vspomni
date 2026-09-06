@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { fetchUserOrderDetail } from '@/lib/order/api'
 import { orderStatusBadgeClass } from '@/lib/order/status'
+import { OrderTrackingInfo } from '@/lib/order/tracking'
 import { formatOrderDate, transformOrderDetail } from '@/lib/order/transform'
 import type { OrderDetail } from '@/lib/order/types'
 import { useAuthStore } from '@/stores/useAuth'
@@ -136,6 +137,12 @@ export default function OrderDetailClient({ orderRef }: { orderRef: string }) {
           )}
           {order.shippingMethodName ? (
             <p className="text-sm text-black/50">Способ: {order.shippingMethodName}</p>
+          ) : null}
+          {order.trackingNumber ? (
+            <div className="pt-1">
+              <p className="text-sm text-black/50 mb-1">Отслеживание</p>
+              <OrderTrackingInfo trackingNumber={order.trackingNumber} />
+            </div>
           ) : null}
         </div>
 

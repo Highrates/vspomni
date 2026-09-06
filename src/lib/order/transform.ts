@@ -48,6 +48,8 @@ export function transformOrderListItem(order: OrderApi): OrderListItem {
     deliverySummary: order.deliverySummary,
     shippingAmount: kopecksToRubles(order.shipping?.gross?.amount),
     totalAmount: kopecksToRubles(order.total?.gross?.amount),
+    trackingNumber: order.trackingNumber ?? order.trackingNumbers?.[0] ?? null,
+    trackingNumbers: order.trackingNumbers ?? [],
     items: (order.lines || []).map(transformLine),
   }
 }

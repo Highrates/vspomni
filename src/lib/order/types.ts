@@ -40,6 +40,13 @@ export type OrderAddressApi = {
   comment?: string
 }
 
+export type OrderFulfillmentApi = {
+  id: string
+  trackingNumber: string
+  isTrackingUrl: boolean
+  created: string
+}
+
 export type OrderApi = {
   id: string
   number: string | number
@@ -64,6 +71,9 @@ export type OrderApi = {
   }
   total: { gross: MoneyAmount }
   lines: OrderLineApi[]
+  fulfillments?: OrderFulfillmentApi[]
+  trackingNumbers?: string[]
+  trackingNumber?: string | null
   metadata?: Record<string, string>
 }
 
@@ -99,6 +109,8 @@ export type OrderListItem = {
   deliverySummary: string | null
   shippingAmount: number
   totalAmount: number
+  trackingNumber: string | null
+  trackingNumbers: string[]
   items: OrderItem[]
 }
 

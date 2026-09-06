@@ -4,6 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useState } from 'react'
 import { isActiveOrderStatus, orderStatusBadgeClass } from '@/lib/order/status'
+import { OrderTrackingInfo } from '@/lib/order/tracking'
 import type { OrderListItem, OrdersPagination } from '@/lib/order/types'
 
 interface Props {
@@ -125,6 +126,9 @@ export default function OrdersTabs({
                     <p className="text-sm text-black/60 leading-relaxed break-words whitespace-pre-wrap">
                       {order.deliverySummary}
                     </p>
+                  ) : null}
+                  {order.trackingNumber ? (
+                    <OrderTrackingInfo trackingNumber={order.trackingNumber} />
                   ) : null}
                 </div>
                 <div className="flex flex-col items-start sm:items-end gap-2 shrink-0 sm:max-w-[240px]">
