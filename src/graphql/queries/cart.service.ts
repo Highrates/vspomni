@@ -742,9 +742,12 @@ export async function finalizeCheckoutViaRest({
     )
   }
 
+  const resultMessage = (value: unknown, fallback: string) =>
+    typeof value === 'string' && value.trim() ? value : fallback
+
   if (response.status === 409 && result.code === 'INSUFFICIENT_STOCK') {
     throw new InsufficientStockError(
-      result.message || result.error || 'Insufficient stock',
+      resultMessage(result.message, resultMessage(result.error, 'Insufficient stock')),
       {
         items: Array.isArray(result.items) ? result.items : undefined,
         requiresRefund: Boolean(result.requiresRefund),
@@ -754,7 +757,7 @@ export async function finalizeCheckoutViaRest({
 
   if (response.status === 409 && result.code) {
     throw new CheckoutFinalizeError(
-      result.message || result.error || 'Checkout finalize failed',
+      resultMessage(result.message, resultMessage(result.error, 'Checkout finalize failed')),
       {
         code: String(result.code),
         requiresRefund: Boolean(result.requiresRefund),
@@ -766,7 +769,7 @@ export async function finalizeCheckoutViaRest({
   }
 
   if (!response.ok) {
-    throw new Error(result.error || 'Failed to complete checkout')
+    throw new Error(resultMessage(result.error, 'Failed to complete checkout'))
   }
 
   if (!result.success || !result.order) {
