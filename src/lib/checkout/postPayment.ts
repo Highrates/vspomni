@@ -142,9 +142,10 @@ async function finalizeOrderViaApi(
   | { ok: true; orderNumber: string; orderId?: string }
   | {
       ok: false
-      stockFailure: true
+      stockFailure: boolean
       refunded?: boolean
       error: string
+      code?: string
     }
   | never
 > {
@@ -227,38 +228,40 @@ export async function resolveOrderAfterPayment(): Promise<PostPaymentResult> {
     }
   }
 
+  const paymentId = ctx.paymentId
+
   if (!ctx.checkoutId) {
-    const recovered = await enrichPendingPaymentFromYookassa(ctx.paymentId)
+    const recovered = await enrichPendingPaymentFromYookassa(paymentId)
     ctx = { ...ctx, ...recovered }
   }
 
-  const paid = await waitForPaymentSucceeded(ctx.paymentId)
+  const paid = await waitForPaymentSucceeded(paymentId)
   if (!paid) {
     return {
       ok: false,
       error: 'Оплата ещё не подтверждена. Подождите и обновите страницу.',
-      paymentId: ctx.paymentId,
+      paymentId,
       paymentAmount: ctx.paymentAmount,
     }
   }
 
   stashPaymentForMetrika({
-    paymentId: ctx.paymentId,
+    paymentId,
     revenue: ctx.paymentAmount,
   })
 
   await sleep(WEBHOOK_GRACE_MS)
 
   try {
-    const order = await finalizeOrderViaApi(ctx.paymentId)
+    const order = await finalizeOrderViaApi(paymentId)
     if (!order.ok) {
       clearPendingPaymentStorage()
       return {
         ok: false,
-        stockFailure: true,
+        stockFailure: Boolean(order.stockFailure),
         refunded: order.refunded,
         error: order.error,
-        paymentId: ctx.paymentId,
+        paymentId,
         paymentAmount: ctx.paymentAmount,
       }
     }
@@ -267,7 +270,7 @@ export async function resolveOrderAfterPayment(): Promise<PostPaymentResult> {
       orderNumber: order.orderNumber,
       orderId: order.orderId,
       paymentAmount: ctx.paymentAmount,
-      paymentId: ctx.paymentId,
+      paymentId,
     }
   } catch (error) {
     const message =

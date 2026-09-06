@@ -203,8 +203,7 @@ export async function verifyYookassaSucceededPayment(
     | 'yandex'
     | 'ozon'
     | undefined
-  const allowFreeShipping =
-    metadata.allowFreeShipping === 'true' || metadata.allowFreeShipping === true
+  const allowFreeShipping = String(metadata.allowFreeShipping ?? '') === 'true'
 
   if (
     shippingCarrier &&
