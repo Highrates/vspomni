@@ -44,6 +44,17 @@ export const useAuthStore = create<AuthState>()(
           localStorage.setItem('token', result.token)
           localStorage.setItem('refreshToken', result.refreshToken || '')
 
+          // Сброс профиля при смене аккаунта (persist мог держать чужой телефон)
+          const prevEmail = get().email
+          if (
+            !prevEmail ||
+            prevEmail.toLowerCase() !== email.trim().toLowerCase()
+          ) {
+            void import('@/stores/useUser').then(({ useUserStore }) => {
+              useUserStore.getState().clearUser()
+            })
+          }
+
           set({
             isAuthenticated: true,
             email: email,
@@ -56,8 +67,15 @@ export const useAuthStore = create<AuthState>()(
       logout: () => {
         localStorage.removeItem('token')
         localStorage.removeItem('refreshToken')
+        localStorage.removeItem('registration_phone')
 
         set({ isAuthenticated: false, email: null })
+
+        // Сбрасываем persist профиля, иначе после новой регистрации
+        // остаётся телефон/имя предыдущего пользователя
+        void import('@/stores/useUser').then(({ useUserStore }) => {
+          useUserStore.getState().clearUser()
+        })
       },
       signUp: async (email, password) => {
         // В текущей схеме регистрация всегда через подтверждение email,

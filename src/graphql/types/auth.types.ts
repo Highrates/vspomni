@@ -73,6 +73,7 @@ export interface MeInfo {
   isActive: boolean
   isConfirmed: boolean
   lastName: string
+  metadata?: Array<{ key: string; value: string }>
   addresses: AddressInfo[]
   giftCards: { totalCount: number }
   avatar: ProfileAvatar | null

@@ -8,33 +8,42 @@ import { useAuthStore } from '@/stores/useAuth'
 interface AuthState {
   user: User
   setUser: (user: User) => void
+  clearUser: () => void
   fetchUser: () => void
+}
+
+const emptyUser = (): User => ({
+  userId: '0',
+  name: '',
+  familyName: '',
+  email: '',
+  phone: '',
+})
+
+function phoneFromMetadata(
+  metadata?: Array<{ key: string; value: string }> | null,
+): string {
+  if (!metadata?.length) return ''
+  return metadata.find((m) => m.key === 'phone')?.value?.trim() || ''
 }
 
 export const useUserStore = create<AuthState>()(
   persist(
     (set) => ({
-      user: {
-        userId: "0",
-        name: '',
-        familyName: '',
-        email: '',
-        phone: '',
-      },
+      user: emptyUser(),
       setUser: (user: User) => {
-        set({
-          user: user,
-        })
+        set({ user })
+      },
+      clearUser: () => {
+        set({ user: emptyUser() })
       },
       fetchUser: async () => {
         try {
           const meInfo = await getMeInfo()
           if (!meInfo) {
-            // fallback: используем email из auth‑store, чтобы в ЛК хотя бы отображался email
             const authEmail = useAuthStore.getState().email || ''
             set((state) => ({
               user: {
-                // сохраняем уже введённый пользователем телефон, если он есть
                 userId: '0',
                 name: state.user.name || '',
                 familyName: state.user.familyName || '',
@@ -45,18 +54,28 @@ export const useUserStore = create<AuthState>()(
             return
           }
 
-          const defaultAddress = meInfo.addresses?.find(
-            addr => addr.isDefaultShippingAddress || addr.isDefaultBillingAddress,
-          ) || meInfo.addresses?.[0]
+          const defaultAddress =
+            meInfo.addresses?.find(
+              (addr) =>
+                addr.isDefaultShippingAddress || addr.isDefaultBillingAddress,
+            ) || meInfo.addresses?.[0]
 
-          const phoneFromAddress = defaultAddress?.phone || ''
+          const phoneFromAddress = defaultAddress?.phone?.trim() || ''
+          const phoneFromMeta = phoneFromMetadata(meInfo.metadata)
 
-          set(state => {
-            // локально сохранённый телефон (то, что ввёл пользователь и мы уже положили в store)
-            const localPhone = state.user.phone || ''
-            // если бэкенд вернул телефон и локально он ещё пустой → берём бэкенд
-            // если локально уже что‑то есть → НЕ затираем его старым значением с бэка
-            const rawPhone = localPhone || phoneFromAddress || ''
+          set((state) => {
+            const sameIdentity =
+              Boolean(state.user.userId) &&
+              state.user.userId !== '0' &&
+              state.user.userId === meInfo.id &&
+              (!state.user.email ||
+                state.user.email.toLowerCase() ===
+                  (meInfo.email || '').toLowerCase())
+
+            // Бэкенд (metadata / адрес) важнее persist — иначе после
+            // перерегистрации остаётся телефон прошлого пользователя.
+            const backendPhone = phoneFromMeta || phoneFromAddress || ''
+            const rawPhone = backendPhone || (sameIdentity ? state.user.phone : '') || ''
             const finalPhone = rawPhone ? formatPhoneInputValue(rawPhone) : ''
 
             const nameFromAddr = defaultAddress?.firstName?.trim() || ''
@@ -65,16 +84,15 @@ export const useUserStore = create<AuthState>()(
             return {
               user: {
                 userId: meInfo.id || '0',
-                // Профиль → адрес доставки → уже введённое локально
                 name:
                   meInfo.firstName?.trim() ||
                   nameFromAddr ||
-                  state.user.name ||
+                  (sameIdentity ? state.user.name : '') ||
                   '',
                 familyName:
                   meInfo.lastName?.trim() ||
                   familyFromAddr ||
-                  state.user.familyName ||
+                  (sameIdentity ? state.user.familyName : '') ||
                   '',
                 email: meInfo.email || '',
                 phone: finalPhone,

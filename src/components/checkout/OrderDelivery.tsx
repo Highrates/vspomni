@@ -195,12 +195,18 @@ export default function OrderDelivery() {
           )
           const estimatedPrice = Math.max(1000, Math.round(cartSubtotal))
 
-          const usePvz =
-            meta?.dropoff === 'pvz' ||
-            (meta?.dropoff !== 'courier' && Boolean(meta?.ozonPvzId?.trim()))
           const ozonPvzId = meta?.ozonPvzId?.trim()
+          const isCourier = meta?.dropoff === 'courier'
+          const isPvz =
+            meta?.dropoff === 'pvz' ||
+            (!isCourier && Boolean(ozonPvzId))
 
-          if (usePvz && ozonPvzId) {
+          // Не считаем, пока не выбран ПВЗ или полный адрес курьера
+          if (isPvz) {
+            if (!ozonPvzId) {
+              failShipping('Выберите пункт выдачи Ozon', 'ozon')
+              return
+            }
             const res = await calculateOzonDelivery({
               deliveryVariantId: ozonPvzId,
               weightG: 0,
@@ -212,13 +218,16 @@ export default function OrderDelivery() {
             return
           }
 
-          const addrLine = [
-            address.city?.trim(),
-            address.streetAddress1?.trim(),
-          ]
-            .filter(Boolean)
-            .join(', ')
-          if (addrLine) {
+          if (isCourier) {
+            const street = address.streetAddress1?.trim() || ''
+            // Только city без улицы — ещё не адрес доставки
+            if (street.length < 5) {
+              failShipping('Укажите адрес доставки Ozon', 'ozon')
+              return
+            }
+            const addrLine = [address.city?.trim(), street]
+              .filter(Boolean)
+              .join(', ')
             const res = await calculateOzonDeliveryByAddress({
               address: addrLine,
               estimatedPrice,
@@ -228,6 +237,9 @@ export default function OrderDelivery() {
             succeedShipping(amount, 'ozon')
             return
           }
+
+          failShipping('Выберите ПВЗ или адрес курьера Ozon', 'ozon')
+          return
         } catch (ozErr) {
           console.error('Ozon shipping calculation failed:', ozErr)
         }

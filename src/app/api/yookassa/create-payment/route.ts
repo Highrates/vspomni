@@ -210,37 +210,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (effectiveShipping > 0 && normalizedAmount + 0.009 < effectiveShipping) {
-      return createResponse(
-        { error: 'Order amount is less than shipping cost' },
-        400,
-      )
-    }
-
-    const catalogSubtotal = (items as Array<{ price?: number; quantity?: number }>).reduce(
-      (sum, item) => {
-        const price = Number(item.price)
-        const qty = Math.max(1, Number(item.quantity) || 1)
-        return sum + (Number.isFinite(price) && price > 0 ? price * qty : 0)
-      },
-      0,
-    )
-
-    if (
-      effectiveShipping > 0 &&
-      normalizedAmount <= effectiveShipping + 0.009 &&
-      catalogSubtotal > effectiveShipping + 0.01
-    ) {
-      return createResponse(
-        {
-          error:
-            'Order amount must include product total in addition to shipping. Refresh checkout and try again.',
-          code: 'PAYMENT_AMOUNT_MISMATCH',
-        },
-        400,
-      )
-    }
-
     if (orderId) {
       const stock = await checkCheckoutStockViaRest(String(orderId))
       if (!stock.available) {

@@ -199,6 +199,18 @@ export default function ProfileIndex() {
       
       // Обновляем имя и фамилию (передаём токен явно для надёжности после OAuth)
       await updateAccount(user.name, user.familyName, token)
+
+      // Телефон в metadata пользователя (источник правды без адреса)
+      if (user.userId && user.userId !== '0') {
+        try {
+          const { updateUserPhoneMetadata } = await import(
+            '@/graphql/queries/auth.service'
+          )
+          await updateUserPhoneMetadata(user.userId, user.phone || '', token)
+        } catch (metaErr) {
+          console.warn('Не удалось сохранить телефон в metadata:', metaErr)
+        }
+      }
       
       // Обновляем телефон в адресе (если есть адрес и он полный)
       if (user.phone) {

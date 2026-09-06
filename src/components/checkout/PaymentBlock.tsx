@@ -469,11 +469,6 @@ export default function PaymentBlock() {
         useCartStore.getState()
       const effectiveShipping = payShippingIsFree ? 0 : Number(shippingPrice) || 0
 
-      let totalAmount = Number(amountOverride ?? totalPrice)
-      if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
-        throw new Error('Некорректная сумма заказа. Обновите страницу и попробуйте снова.')
-      }
-
       const paymentItems = items
         .filter((item: any) => item?.product?.name && Number(item.product.price) > 0)
         .map((item: any) => ({
@@ -487,26 +482,33 @@ export default function PaymentBlock() {
         throw new Error('Не удалось подготовить товары к оплате. Обновите корзину и попробуйте снова.')
       }
 
-      const catalogSubtotal = paymentItems.reduce(
-        (sum, item) => sum + item.price * item.quantity,
-        0,
-      )
+      // Сумма к оплате = то, что видит пользователь в корзине (товары − скидка + доставка).
+      // Saleor иногда возвращает только subtotal без доставки — не используем его напрямую.
+      const saleorAmount = Number(amountOverride ?? 0)
+      let totalAmount = cartTotalPrice
+      if (
+        Number.isFinite(saleorAmount) &&
+        saleorAmount > 0 &&
+        saleorAmount > cartTotalPrice + 0.01
+      ) {
+        totalAmount = saleorAmount
+      }
+
+      if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+        throw new Error('Некорректная сумма заказа. Обновите страницу и попробуйте снова.')
+      }
 
       if (
-        effectiveShipping > 0 &&
-        totalAmount <= effectiveShipping + 0.009 &&
-        catalogSubtotal > effectiveShipping + 0.01
+        Number.isFinite(saleorAmount) &&
+        saleorAmount > 0 &&
+        Math.abs(saleorAmount - totalAmount) > 0.02
       ) {
-        const corrected = Math.max(cartTotalPrice, catalogSubtotal + effectiveShipping)
-        if (corrected > totalAmount + 0.01) {
-          console.warn('Correcting payment amount (Saleor total missing products):', {
-            from: totalAmount,
-            to: corrected,
-            catalogSubtotal,
-            effectiveShipping,
-          })
-          totalAmount = corrected
-        }
+        console.warn('Payment amount: cart vs Saleor', {
+          cartTotalPrice,
+          saleorAmount,
+          using: totalAmount,
+          effectiveShipping,
+        })
       }
       const shortId = orderOrCheckoutId.length > 8
         ? orderOrCheckoutId.substring(orderOrCheckoutId.length - 8)

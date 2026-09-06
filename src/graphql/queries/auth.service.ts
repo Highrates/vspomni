@@ -231,6 +231,10 @@ export async function getMeInfo() {
           lastName
           isActive
           isConfirmed
+          metadata {
+            key
+            value
+          }
           addresses {
             city
             cityArea
@@ -398,6 +402,39 @@ export async function updateAccount(
   }
 
   return result.accountUpdate.user
+}
+
+/** Сохранить телефон в metadata пользователя (без создания адреса). */
+export async function updateUserPhoneMetadata(
+  userId: string,
+  phone: string,
+  token?: string | null,
+) {
+  const mutation = `
+    mutation UpdateUserPhone($id: ID!, $input: [MetadataInput!]!) {
+      updateMetadata(id: $id, input: $input) {
+        errors {
+          field
+          message
+          code
+        }
+      }
+    }
+  `
+  const result = await graphqlRequest<{
+    updateMetadata: {
+      errors?: Array<{ field?: string; message?: string }>
+    }
+  }>(mutation, {
+    id: userId,
+    input: [{ key: 'phone', value: phone }],
+  }, { token })
+
+  if (result.updateMetadata.errors?.length) {
+    throw new Error(
+      result.updateMetadata.errors.map((e) => e.message).join(', '),
+    )
+  }
 }
 
 // ID плагина Яндекс OAuth (должен быть настроен на бэкенде)

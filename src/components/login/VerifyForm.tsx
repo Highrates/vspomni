@@ -6,6 +6,8 @@ import Image from "next/image"
 import { toast } from "react-toastify"
 import { useRouter } from "next/navigation"
 import { useAuthStore } from '@/stores/useAuth'
+import { useUserStore } from '@/stores/useUser'
+import { formatPhoneInputValue } from '@/lib/ruPhone'
 
 interface TProps {
   email: string
@@ -105,10 +107,21 @@ const VerifyForm = ({ email, onChangeEmail, onBack }: TProps) => {
         localStorage.setItem('refreshToken', data.refreshToken)
       }
 
-      // Обновляем Zustand‑хранилище
+      // Обновляем Zustand‑хранилище (не тянем телефон предыдущего пользователя из persist)
       useAuthStore.setState({
         isAuthenticated: true,
         email,
+      })
+      const phoneFromApi =
+        (typeof data.user?.phone === 'string' && data.user.phone) ||
+        registrationPhone ||
+        ''
+      useUserStore.getState().setUser({
+        userId: data.user?.id ? String(data.user.id) : '0',
+        name: data.user?.firstName || '',
+        familyName: data.user?.lastName || '',
+        email,
+        phone: phoneFromApi ? formatPhoneInputValue(phoneFromApi) : '',
       })
 
       toast.success('Email успешно подтвержден!')
@@ -143,7 +156,7 @@ const VerifyForm = ({ email, onChangeEmail, onBack }: TProps) => {
         </div>
         <h2 className="text-2xl font-semibold mb-4">Подтверждение почты</h2>
         <p className="text-black/40 text-sm leading-relaxed">
-          Мы отправили 'Одноразовый код доступа' на указанный вами бизнес-адрес электронной почты.
+          Мы отправили одноразовый код на {email}
         </p>
       </div>
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -151,7 +164,9 @@ const VerifyForm = ({ email, onChangeEmail, onBack }: TProps) => {
           <label className="block text-sm text-gray-600 mb-1">Код</label>
           <input
             type="text"
-            placeholder={email}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="000000"
             value={code}
             onChange={(e) => setCode(e.target.value)}
             className="w-full px-4 py-3 bg-gray-100 border-0 rounded"

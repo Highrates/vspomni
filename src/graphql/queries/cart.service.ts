@@ -360,20 +360,19 @@ export async function resolveCheckoutPaymentAmount(
       shippingCarrier,
       { allowFreeShipping },
     )
-    if (totalFromShipping != null && totalFromShipping > 0) {
-      return totalFromShipping
+  if (totalFromShipping != null && totalFromShipping > 0) {
+    if (cartTotalPrice > totalFromShipping + 0.01) {
+      return cartTotalPrice
     }
+    return totalFromShipping
+  }
   } catch (error) {
     console.warn('syncCheckoutExternalShipping failed, falling back:', error)
   }
 
   const saleorTotal = await getCheckoutTotal(checkoutId)
   if (saleorTotal != null && saleorTotal > 0) {
-    const shipping = allowFreeShipping ? 0 : (Number(shippingPrice) || 0)
-    if (shipping > 0 && saleorTotal + 0.01 < cartTotalPrice) {
-      return saleorTotal + shipping
-    }
-    if (shipping > 0 && saleorTotal <= shipping + 0.009 && cartTotalPrice > saleorTotal + 0.01) {
+    if (cartTotalPrice > saleorTotal + 0.01) {
       return cartTotalPrice
     }
     return saleorTotal
