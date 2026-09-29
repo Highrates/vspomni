@@ -157,6 +157,12 @@ export default function OrderDetailClient({ orderRef }: { orderRef: string }) {
               <dt className="text-black/50">Товары</dt>
               <dd>{order.subtotalAmount.toLocaleString('ru-RU')} ₽</dd>
             </div>
+            {order.voucherCode && order.promoDiscountAmount > 0 && (
+              <div className="flex justify-between gap-4 text-xs text-black/50">
+                <dt>в т.ч. промокод {order.voucherCode}</dt>
+                <dd>−{order.promoDiscountAmount.toLocaleString('ru-RU')} ₽</dd>
+              </div>
+            )}
             <div className="flex justify-between gap-4">
               <dt className="text-black/50">Доставка</dt>
               <dd>{order.shippingAmount.toLocaleString('ru-RU')} ₽</dd>

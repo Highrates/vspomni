@@ -64,6 +64,8 @@ export async function POST(request: NextRequest) {
       channel = 'vspomni-site',
       address,
       promoCode,
+      shippingAmount,
+      shippingCarrier,
     } = body
 
     // Валидация обязательных полей
@@ -101,6 +103,8 @@ export async function POST(request: NextRequest) {
       })),
       address: address || undefined,
       promoCode: promoCode || undefined,
+      shippingAmount: Number(shippingAmount) > 0 ? Number(shippingAmount) : undefined,
+      shippingCarrier: shippingCarrier || undefined,
     })
 
     // Проверяем content-type перед парсингом JSON
@@ -155,6 +159,7 @@ export async function POST(request: NextRequest) {
       return createResponse(
         { 
           error: result.error || 'Failed to create checkout',
+          code: result.code,
           details: result,
         },
         response.status

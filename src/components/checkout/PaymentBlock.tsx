@@ -5,9 +5,9 @@ import { useUserStore } from '@/stores/useUser'
 import { useCheckoutStore } from '@/stores/useCheckout'
 import { useCartStore } from "@/stores/useCart"
 import YooKassaWidget from '@/components/ui/YooKassaWidget'
-import { createCart } from '@/graphql/queries/cart.service'
 import { getSingleProduct } from '@/graphql/queries/product.service'
 import { toast } from 'react-toastify'
+import { formatCurrency } from '@/lib/functions'
 import { isValidRuPhone } from '@/lib/ruPhone'
 import { getAccountEmail } from '@/lib/auth/accountEmail'
 import {
@@ -69,25 +69,20 @@ export default function PaymentBlock() {
     [getCheckoutContact],
   )
 
-  const prepareCheckoutPayment = useCallback(
-    async (checkoutToken: string, saleorSubtotalAfterPromo?: number | null) => {
-      const { resolveCheckoutPaymentAmount } = await import(
-        '@/graphql/queries/cart.service'
-      )
-      const { shippingPrice: currentShipping, shippingCarrier: currentCarrier, totalPrice: cartTotal, shippingIsFree: currentShippingIsFree } =
-        useCartStore.getState()
+  const prepareCheckoutPayment = useCallback(async (checkoutToken: string) => {
+    const { resolveCheckoutPaymentAmount } = await import(
+      '@/graphql/queries/cart.service'
+    )
+    const {
+      shippingPrice: currentShipping,
+      shippingCarrier: currentCarrier,
+      shippingIsFree: currentShippingIsFree,
+    } = useCartStore.getState()
 
-      return resolveCheckoutPaymentAmount(
-        checkoutToken,
-        currentShipping,
-        currentCarrier,
-        cartTotal,
-        saleorSubtotalAfterPromo,
-        { allowFreeShipping: currentShippingIsFree },
-      )
-    },
-    [],
-  )
+    return resolveCheckoutPaymentAmount(checkoutToken, currentShipping, currentCarrier, {
+      allowFreeShipping: currentShippingIsFree,
+    })
+  }, [])
 
   const redirectToSuccess = useCallback(() => {
     window.location.assign('/checkout/success')
@@ -256,37 +251,28 @@ export default function PaymentBlock() {
             channel: 'vspomni-site',
             address: saleorAddress,
             promoCode: appliedPromoCode || undefined,
+            shippingAmount: currentShippingIsFree ? 0 : currentShippingPrice,
+            shippingCarrier: currentShippingCarrier || undefined,
           }),
         })
 
         const checkoutResult = await checkoutResponse.json()
 
+        if (checkoutResult.code === 'PROMO_CODE_NOT_APPLIED') {
+          const reason = checkoutResult.error || 'промокод не подходит для этого заказа'
+          useCartStore
+            .getState()
+            .removePromoCode(`Промокод ${appliedPromoCode ?? ''} снят: ${reason}`)
+          toast.error(
+            `Промокод не применён: ${reason}. Итог пересчитан — проверьте сумму и нажмите «Оплатить» ещё раз.`,
+          )
+          setIsCreatingPayment(false)
+          return
+        }
+
         if (checkoutResponse.ok && checkoutResult.checkout) {
-          // Checkout создан успешно без проверки наличия
-          console.log('Checkout created via custom API:', checkoutResult.checkout)
-          const newCheckoutId = checkoutResult.checkout.token as string
-
           // Промокод и адрес уже применены на бэке (без quantity limit GraphQL)
-          let checkoutTotalFromSaleor: number | null =
-            checkoutResult.total?.amount != null
-              ? Number(checkoutResult.total.amount)
-              : null
-
-          // Fallback: если бэк не применил промо — пробуем GraphQL (не блокируем оплату)
-          if (appliedPromoCode && checkoutTotalFromSaleor == null) {
-            try {
-              const { addPromoCodeService } = await import('@/graphql/queries/promocode.service')
-              const checkoutWithPromo = await addPromoCodeService(
-                appliedPromoCode,
-                newCheckoutId,
-              )
-              if (checkoutWithPromo?.totalPrice?.gross?.amount != null) {
-                checkoutTotalFromSaleor = checkoutWithPromo.totalPrice.gross.amount
-              }
-            } catch (promoError: any) {
-              console.error('Failed to attach promo code to custom checkout:', promoError)
-            }
-          }
+          const newCheckoutId = checkoutResult.checkout.token as string
 
           console.log('Setting checkoutId state to:', newCheckoutId)
           setCheckoutId(newCheckoutId)
@@ -326,10 +312,7 @@ export default function PaymentBlock() {
             }
           }
 
-          const amountForPayment = await prepareCheckoutPayment(
-            newCheckoutId,
-            checkoutTotalFromSaleor,
-          )
+          const amountForPayment = await prepareCheckoutPayment(newCheckoutId)
           console.log('Calling handleCreatePayment with:', { newCheckoutId, amountForPayment })
           await handleCreatePayment(newCheckoutId, amountForPayment)
           return
@@ -366,84 +349,6 @@ export default function PaymentBlock() {
         console.error('Custom checkout creation error:', customError)
         throw customError
       }
-
-      // Fallback: создаём checkout стандартным способом
-      console.log('Creating checkout with:', {
-        lines: checkoutLines,
-        itemsCount: items.length
-      })
-
-      const checkoutResponse = await createCart(checkoutLines)
-      const createdCheckout = checkoutResponse.checkoutCreate.checkout!
-      if (
-        checkoutResponse.checkoutCreate.errors &&
-        checkoutResponse.checkoutCreate.errors.length > 0
-      ) {
-        const error = checkoutResponse.checkoutCreate.errors[0]
-        console.error('Checkout creation error:', {
-          message: error.message,
-          code: error.code,
-          field: error.field,
-          fullError: error,
-          allErrors: checkoutResponse.checkoutCreate.errors
-        })
-
-        let errorMessage = error.message || 'Failed to create checkout'
-
-        if (errorMessage.includes('Only 0 remaining in stock') ||
-          errorMessage.includes('remaining in stock') ||
-          error.code === 'INSUFFICIENT_STOCK') {
-          errorMessage = `Проблема с наличием товара в Saleor. ` +
-            `В админ-панели Saleor проверьте:\n` +
-            `1. Склад "Default Warehouse" привязан к каналу "vspomni-site"\n` +
-            `2. Shipping zone включает нужную страну и привязан к каналу\n` +
-            `3. Товар доступен для продажи в канале "vspomni-site"\n\n` +
-            `Ошибка от Saleor: ${error.message}`
-        }
-
-        throw new Error(errorMessage)
-      }
-
-      const rawCheckoutId = createdCheckout.id
-      if (!rawCheckoutId) {
-        throw new Error('Checkout ID not received')
-      }
-      const newCheckoutId: string = rawCheckoutId
-
-      let checkoutTotalFromSaleor: number | null =
-        createdCheckout.totalPrice?.gross?.amount ?? null
-
-      // Если есть применённый промокод — синхронизируем его с реальным checkout в Saleor
-      if (appliedPromoCode) {
-        try {
-          const { addPromoCodeService } = (await import(
-            '@/graphql/queries/promocode.service'
-          )) as any
-          const checkoutWithPromo = await addPromoCodeService(
-            appliedPromoCode,
-            newCheckoutId,
-          )
-          const promoTotal =
-            checkoutWithPromo?.totalPrice?.gross?.amount ?? null
-          if (promoTotal !== null) {
-            checkoutTotalFromSaleor = promoTotal
-          }
-        } catch (promoError: any) {
-          console.error('Failed to attach promo code to checkout:', promoError)
-          // продолжаем без промокода, чтобы не падать перед оплатой
-        }
-      }
-
-      const checkoutId = newCheckoutId!
-      setCheckoutId(checkoutId)
-
-      await syncDeliveryToCheckout(checkoutId)
-
-      const amountForPayment = await prepareCheckoutPayment(
-        checkoutId,
-        checkoutTotalFromSaleor,
-      )
-      await handleCreatePayment(checkoutId, amountForPayment)
     } catch (error: any) {
       console.error('Error creating checkout:', error)
       let errorMessage = error.message || 'Ошибка создания заказа'
@@ -465,9 +370,13 @@ export default function PaymentBlock() {
     setIsCreatingPayment(true)
     try {
       const accountEmail = getAccountEmail()
-      const { shippingIsFree: payShippingIsFree, totalPrice: cartTotalPrice } =
-        useCartStore.getState()
+      const {
+        shippingIsFree: payShippingIsFree,
+        totalPrice: cartTotalPrice,
+        promoShippingDiscount,
+      } = useCartStore.getState()
       const effectiveShipping = payShippingIsFree ? 0 : Number(shippingPrice) || 0
+      const receiptShipping = Math.max(0, effectiveShipping - (promoShippingDiscount || 0))
 
       const paymentItems = items
         .filter((item: any) => item?.product?.name && Number(item.product.price) > 0)
@@ -482,33 +391,19 @@ export default function PaymentBlock() {
         throw new Error('Не удалось подготовить товары к оплате. Обновите корзину и попробуйте снова.')
       }
 
-      // Сумма к оплате = то, что видит пользователь в корзине (товары − скидка + доставка).
-      // Saleor иногда возвращает только subtotal без доставки — не используем его напрямую.
-      const saleorAmount = Number(amountOverride ?? 0)
-      let totalAmount = cartTotalPrice
-      if (
-        Number.isFinite(saleorAmount) &&
-        saleorAmount > 0 &&
-        saleorAmount > cartTotalPrice + 0.01
-      ) {
-        totalAmount = saleorAmount
-      }
-
+      // Complete сверяет оплату с итогом Saleor, поэтому списываем ровно его.
+      const totalAmount = Number(amountOverride ?? 0)
       if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
         throw new Error('Некорректная сумма заказа. Обновите страницу и попробуйте снова.')
       }
 
-      if (
-        Number.isFinite(saleorAmount) &&
-        saleorAmount > 0 &&
-        Math.abs(saleorAmount - totalAmount) > 0.02
-      ) {
+      if (Math.abs(totalAmount - cartTotalPrice) >= 1) {
         console.warn('Payment amount: cart vs Saleor', {
           cartTotalPrice,
-          saleorAmount,
-          using: totalAmount,
+          saleorAmount: totalAmount,
           effectiveShipping,
         })
+        toast.info(`Итог пересчитан магазином: ${formatCurrency(totalAmount)} ₽`)
       }
       const shortId = orderOrCheckoutId.length > 8
         ? orderOrCheckoutId.substring(orderOrCheckoutId.length - 8)
@@ -528,6 +423,7 @@ export default function PaymentBlock() {
           orderId: orderOrCheckoutId,
           userEmail: accountEmail,
           shippingAmount: effectiveShipping,
+          receiptShippingAmount: receiptShipping,
           allowFreeShipping: payShippingIsFree,
           items: paymentItems,
           returnUrl: `${window.location.origin}/checkout/success`,

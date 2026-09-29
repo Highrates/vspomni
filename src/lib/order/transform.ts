@@ -60,6 +60,8 @@ export function transformOrderDetail(order: OrderApi): OrderDetail {
     ...base,
     created: order.created,
     subtotalAmount: kopecksToRubles(order.subtotal?.gross?.amount),
+    voucherCode: order.voucherCode ?? null,
+    promoDiscountAmount: kopecksToRubles(order.promoDiscount?.gross?.amount),
     shippingAddress: order.shippingAddress,
     billingAddress: order.billingAddress,
     shippingMethodName: order.shippingMethodName,

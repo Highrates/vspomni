@@ -5,32 +5,32 @@ import { formatCurrency } from '@/lib/functions'
 type SummaryProps = {
   total: number
   subtotal: number
-  discount: number
-  promoDiscount: number
-  appliedPromoCode: string | null
-  discountPercent: number
+  itemsDiscount: number
+  shippingDiscount: number
+  /** Описание применённого промокода, пустая строка — промокода нет */
+  promoLabel: string
+  isShippingPromo: boolean
   totalItems: number
   shipping: number
   shippingLoading: boolean
   /** null / неизвестно — показываем как СДЭК (старые адреса без метки) */
   shippingCarrier?: 'cdek' | 'yandex' | 'ozon' | null
-  discountType?: 'PERCENTAGE' | 'FIXED' | 'SHIPPING'
 }
 
 export const Summary = ({
   total,
   subtotal,
-  discount,
-  promoDiscount,
-  appliedPromoCode,
-  discountPercent,
+  itemsDiscount,
+  shippingDiscount,
+  promoLabel,
+  isShippingPromo,
   totalItems,
   shipping,
   shippingLoading,
   shippingCarrier = null,
-  discountType,
 }: SummaryProps) => {
-  const hasDiscount = discount > 0 || discountType === 'SHIPPING'
+  const promoDiscount = itemsDiscount + shippingDiscount
+  const shippingPending = isShippingPromo && !(shipping > 0)
   const deliveryLabel =
     shippingCarrier === 'yandex'
       ? 'Доставка Яндекс:'
@@ -52,30 +52,14 @@ export const Summary = ({
       </div>
 
       {/* Блок скидок / промокода */}
-      {hasDiscount && (
+      {promoLabel && (promoDiscount > 0 || shippingPending) && (
         <div className="space-y-1.5 mb-3">
           <div className="flex justify-between gap-3 text-[15px] font-medium text-gray-600 min-w-0">
-            <span className="min-w-0 break-words">
-              Скидка
-              {appliedPromoCode && (
-                <>
-                  {' '}
-                  ({appliedPromoCode}
-                  {discountType === 'PERCENTAGE' && discountPercent
-                    ? ` -${discountPercent}%`
-                    : ''}
-                  {discountType === 'FIXED' && discount
-                    ? ` -${formatCurrency(discount)} ₽`
-                    : ''}
-                  {discountType === 'SHIPPING' ? ' — бесплатная доставка' : ''}
-                  )
-                </>
-              )}
-            </span>
+            <span className="min-w-0 break-words">Скидка ({promoLabel})</span>
             <span className="shrink-0 text-red">
-              {discountType === 'SHIPPING'
-                ? 'Бесплатно'
-                : `−${formatCurrency(discount)} ₽`}
+              {shippingPending
+                ? 'после расчёта доставки'
+                : `−${formatCurrency(promoDiscount)} ₽`}
             </span>
           </div>
         </div>

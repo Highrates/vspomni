@@ -2,62 +2,27 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { useCartStore } from '@/stores/useCart'
-import { validatePromoCode } from '@/graphql/queries/promocode.service'
+import { usePromoCode } from '@/lib/checkout/usePromoCode'
 
 export const CartPromoCode = () => {
-  const [promoCode, setPromoCode] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [isExpanded, setIsExpanded] = useState(false)
-  const { appliedPromoCode, applyPromoCode, removePromoCode, discount } = useCartStore()
+  const [expandedByUser, setIsExpanded] = useState<boolean | null>(null)
+  const {
+    promoCode,
+    setPromoCode,
+    isLoading,
+    error,
+    appliedPromoCode,
+    appliedText,
+    apply,
+    remove,
+  } = usePromoCode()
 
-  const handleApplyPromoCode = async () => {
-    if (!promoCode.trim()) {
-      setError('Введите промокод')
-      return
-    }
-
-    if (appliedPromoCode) {
-      setError('Промокод уже применен. Сначала удалите текущий промокод.')
-      return
-    }
-
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      console.log('Attempting to validate promo code:', promoCode)
-      const voucher = await validatePromoCode(promoCode)
-      
-      if (!voucher) {
-        setError('Промокод не найден. Проверьте правильность ввода.')
-        setIsLoading(false)
-        return
-      }
-
-      console.log('Promo code validated successfully:', voucher)
-      applyPromoCode(voucher.code, voucher.discountPercent, voucher.discountAmount)
-      setPromoCode('')
-      setError(null)
-    } catch (err) {
-      console.error('Error applying promo code:', err)
-      const errorMessage = err instanceof Error ? err.message : 'Не удалось применить промокод'
-      setError(errorMessage)
-    } finally {
-      setIsLoading(false)
-    } 
-  }
-
-  const handleRemovePromoCode = () => {
-    removePromoCode()
-    setError(null)
-  }
+  const isExpanded = expandedByUser ?? Boolean(error)
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !isLoading && promoCode.trim()) {
       e.preventDefault()
-      handleApplyPromoCode()
+      void apply()
     }
   }
 
@@ -96,13 +61,11 @@ export const CartPromoCode = () => {
                 <p className="text-sm font-medium text-green-800">
                   Промокод применён
                 </p>
-                <p className="text-xs text-green-600 mt-1">
-                  {appliedPromoCode} - {discount > 0 ? `${discount}% скидка` : 'скидка применена'}
-                </p>
+                <p className="text-xs text-green-600 mt-1">{appliedText}</p>
               </div>
               <button
                 className="text-red-600 hover:text-red-800 font-medium text-sm disabled:opacity-50"
-                onClick={handleRemovePromoCode}
+                onClick={remove}
                 disabled={isLoading}
               >
                 Удалить
@@ -114,12 +77,11 @@ export const CartPromoCode = () => {
                 type="text"
                 name="promoCode"
                 placeholder="Введите код"
+                autoComplete="off"
+                autoCapitalize="characters"
                 className="font-medium border-[0.5px] border-black/8 bg-[#FAFAFA] rounded-sm p-2 flex-1 h-10 focus:outline-none focus:border-black/20"
                 value={promoCode}
-                onChange={(e) => {
-                  setPromoCode(e.target.value)
-                  setError(null)
-                }}
+                onChange={(e) => setPromoCode(e.target.value)}
                 onKeyDown={handleKeyDown}
                 disabled={isLoading}
               />
@@ -130,7 +92,7 @@ export const CartPromoCode = () => {
                     : 'bg-black hover:bg-gray-800'
                 } text-white p-2 rounded-sm w-10 h-10 flex items-center justify-center transition-colors disabled:opacity-50`}
                 disabled={!promoCode.trim() || isLoading}
-                onClick={handleApplyPromoCode}
+                onClick={() => void apply()}
               >
                 {isLoading ? (
                   <span className="animate-spin">⟳</span>
@@ -151,4 +113,3 @@ export const CartPromoCode = () => {
     </div>
   )
 }
-

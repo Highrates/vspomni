@@ -70,6 +70,8 @@ export type OrderApi = {
     carrierLabel: string
   }
   total: { gross: MoneyAmount }
+  voucherCode?: string | null
+  promoDiscount?: { gross: MoneyAmount }
   lines: OrderLineApi[]
   fulfillments?: OrderFulfillmentApi[]
   trackingNumbers?: string[]
@@ -117,6 +119,8 @@ export type OrderListItem = {
 export type OrderDetail = OrderListItem & {
   created: string
   subtotalAmount: number
+  voucherCode: string | null
+  promoDiscountAmount: number
   shippingAddress: OrderAddressApi | null
   billingAddress: OrderAddressApi | null
   shippingMethodName: string | null

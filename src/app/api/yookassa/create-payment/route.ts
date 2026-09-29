@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCheckoutSuccessUrl } from '@/lib/siteUrl'
 import { checkCheckoutStockViaRest } from '@/lib/checkout/stockCheck'
+import { fetchSaleorCheckoutTotal } from '@/lib/checkout/paymentAmount'
 
 // ============================================
 // YooKassa API Route Handler
@@ -173,6 +174,7 @@ export async function POST(request: NextRequest) {
       userEmail,
       items = [], // Список товаров из корзины
       shippingAmount = 0,
+      receiptShippingAmount,
       metadata = {},
     } = body
 
@@ -211,6 +213,25 @@ export async function POST(request: NextRequest) {
     }
 
     if (orderId) {
+      // GraphQL total can miss REST-assigned shipping, so only underpayment is rejected here;
+      // the exact match is enforced on complete.
+      const checkoutTotal = await fetchSaleorCheckoutTotal(String(orderId))
+      if (checkoutTotal != null && normalizedAmount < checkoutTotal - 0.01) {
+        console.error('YooKassa amount does not match Saleor checkout total', {
+          orderId,
+          amount: normalizedAmount,
+          checkoutTotal,
+        })
+        return createResponse(
+          {
+            error: 'Сумма заказа изменилась. Обновите страницу и попробуйте снова.',
+            message: 'Сумма заказа изменилась. Обновите страницу и попробуйте снова.',
+            code: 'AMOUNT_MISMATCH',
+          },
+          409,
+        )
+      }
+
       const stock = await checkCheckoutStockViaRest(String(orderId))
       if (!stock.available) {
         return createResponse(
@@ -235,7 +256,14 @@ export async function POST(request: NextRequest) {
           customer: {
             email: userEmail,
           },
-          items: buildReceiptItems(items, normalizedAmount, effectiveShipping, currency),
+          items: buildReceiptItems(
+            items,
+            normalizedAmount,
+            receiptShippingAmount != null
+              ? Math.min(effectiveShipping, Math.max(0, Number(receiptShippingAmount) || 0))
+              : effectiveShipping,
+            currency,
+          ),
         }
       } catch (receiptError: unknown) {
         const message =

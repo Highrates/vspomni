@@ -23,7 +23,7 @@ export default function ModalCart({ visible, onClose }: ModalCartProps) {
     items,
     totalItems,
     totalPrice,
-    discount,
+    promoItemsDiscount,
     appliedPromoCode,
     decreaseQuantity,
     increaseQuantity,
@@ -109,11 +109,11 @@ export default function ModalCart({ visible, onClose }: ModalCartProps) {
         </div>
 
         <div className="max-sm:p-4 p-8 border-t border-black/10 shrink-0">
-          {appliedPromoCode && discount > 0 && (
+          {appliedPromoCode && promoItemsDiscount > 0 && (
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-gray-600">Скидка ({appliedPromoCode})</span>
               <span className="text-sm text-red-600 font-semibold">
-                -{formatCurrency((items.reduce((sum, i) => sum + i.product.price * i.quantity, 0) * discount) / 100)} ₽
+                −{formatCurrency(promoItemsDiscount)} ₽
               </span>
             </div>
           )}

@@ -27,7 +27,10 @@ export default function CartCard({
   onRemove,
   outStock,
 }: CartCardProps) {
-  const discountPercent = useCartStore((state) => state.discount)
+  // Цену строки со скидкой показываем, только когда процент действует на весь заказ.
+  const discountPercent = useCartStore((state) =>
+    state.discountType === 'PERCENTAGE' && state.promoScope === 'ORDER' ? state.discount : 0,
+  )
   const increaseQuantity = useCartStore((state) => state.increaseQuantity)
   const sizeStr = size ?? ''
   const sizeHasMl = sizeStr.toLowerCase().includes('мл')

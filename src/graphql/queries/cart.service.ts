@@ -9,7 +9,6 @@ import {
 } from "@/lib/checkout/deliveryAddress";
 import type { AddressInfo } from "@/graphql/types/auth.types";
 import {
-  computeCheckoutPaymentAmount,
   getSaleorRestBaseUrl,
   type ShippingCarrier,
 } from "@/lib/checkout/paymentAmount";
@@ -343,46 +342,32 @@ export async function syncCheckoutExternalShipping(
 
 /**
  * Итог к оплате: синхронизирует доставку в Saleor и берёт total оттуда.
+ * Complete сверяет оплату с этим итогом, поэтому сумму корзины не подставляем.
  */
 export async function resolveCheckoutPaymentAmount(
   checkoutId: string,
   shippingPrice: number,
   shippingCarrier: ShippingCarrier | null | undefined,
-  cartTotalPrice: number,
-  saleorSubtotalAfterPromo?: number | null,
   options?: { allowFreeShipping?: boolean },
 ): Promise<number> {
   const allowFreeShipping = Boolean(options?.allowFreeShipping)
+  let total: number | null = null
   try {
-    const totalFromShipping = await syncCheckoutExternalShipping(
+    total = await syncCheckoutExternalShipping(
       checkoutId,
       shippingPrice,
       shippingCarrier,
       { allowFreeShipping },
     )
-  if (totalFromShipping != null && totalFromShipping > 0) {
-    if (cartTotalPrice > totalFromShipping + 0.01) {
-      return cartTotalPrice
-    }
-    return totalFromShipping
-  }
   } catch (error) {
-    console.warn('syncCheckoutExternalShipping failed, falling back:', error)
+    console.error('syncCheckoutExternalShipping failed:', error)
+    throw new Error('Не удалось рассчитать итог заказа. Попробуйте ещё раз.')
   }
 
-  const saleorTotal = await getCheckoutTotal(checkoutId)
-  if (saleorTotal != null && saleorTotal > 0) {
-    if (cartTotalPrice > saleorTotal + 0.01) {
-      return cartTotalPrice
-    }
-    return saleorTotal
+  if (total == null || !(total > 0)) {
+    throw new Error('Не удалось рассчитать итог заказа. Попробуйте ещё раз.')
   }
-
-  return computeCheckoutPaymentAmount(
-    saleorSubtotalAfterPromo,
-    shippingPrice,
-    cartTotalPrice,
-  )
+  return total
 }
 
 function addressToCheckoutInput(address: Partial<AddressInfo> & Record<string, unknown>) {

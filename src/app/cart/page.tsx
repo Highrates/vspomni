@@ -16,7 +16,7 @@ export default function CartPage() {
     items,
     totalItems,
     totalPrice,
-    discount,
+    promoItemsDiscount,
     appliedPromoCode,
     decreaseQuantity,
     increaseQuantity,
@@ -63,17 +63,11 @@ export default function CartPage() {
 
       {items.length > 0 ? (
         <div className="rounded-2xl border border-black/10 p-4 sm:p-6 space-y-4">
-          {appliedPromoCode && discount > 0 ? (
+          {appliedPromoCode && promoItemsDiscount > 0 ? (
             <div className="flex items-center justify-between text-sm">
               <span className="text-gray-600">Скидка ({appliedPromoCode})</span>
               <span className="text-red-600 font-semibold">
-                -
-                {formatCurrency(
-                  (items.reduce((sum, i) => sum + i.product.price * i.quantity, 0) *
-                    discount) /
-                    100,
-                )}{' '}
-                ₽
+                −{formatCurrency(promoItemsDiscount)} ₽
               </span>
             </div>
           ) : null}

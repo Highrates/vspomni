@@ -4,6 +4,7 @@ import { PromoCodeInput } from './PromoCodeInput'
 import { Summary } from './Summary'
 import { useCartStore } from '@/stores/useCart'
 import CartCard from '../cart/CartCard'
+import { cartSubtotal, describePromo } from '@/lib/promo'
 
 
 export default function OrderSummary() {
@@ -11,10 +12,13 @@ export default function OrderSummary() {
     items,
     totalItems,
     totalPrice,
-    discount,
-    discountAmount,
     discountType,
+    discountValueType,
+    discountValue,
+    promoScope,
     appliedPromoCode,
+    promoItemsDiscount,
+    promoShippingDiscount,
     shippingPrice,
     shippingLoading,
     shippingCarrier,
@@ -23,17 +27,14 @@ export default function OrderSummary() {
     removeItem,
   } = useCartStore()
 
-  const subtotal = items.reduce(
-    (sum, item) => sum + item.product.price * item.quantity,
-    0,
-  )
-
-  const effectiveDiscountAmount =
-    typeof discountAmount === 'number'
-      ? discountAmount
-      : discount > 0
-        ? (subtotal * discount) / 100
-        : 0
+  const subtotal = cartSubtotal(items)
+  const promoLabel = describePromo({
+    appliedPromoCode,
+    discountType,
+    discountValueType,
+    discountValue,
+    promoScope,
+  })
 
   return (
     <section className="select-none">
@@ -60,20 +61,19 @@ export default function OrderSummary() {
         )}
       </div>
 
-      <PromoCodeInput checkoutId='sample-checkout-id' />
+      <PromoCodeInput />
 
       <Summary
         total={totalPrice}
         subtotal={subtotal}
-        discount={effectiveDiscountAmount}
-        promoDiscount={effectiveDiscountAmount}
-        appliedPromoCode={appliedPromoCode}
-        discountPercent={discount}
+        itemsDiscount={promoItemsDiscount}
+        shippingDiscount={promoShippingDiscount}
+        promoLabel={promoLabel}
+        isShippingPromo={discountType === 'SHIPPING'}
         totalItems={totalItems}
         shipping={shippingPrice}
         shippingLoading={shippingLoading}
         shippingCarrier={shippingCarrier ?? null}
-        discountType={discountType}
       />
     </section>
   )
