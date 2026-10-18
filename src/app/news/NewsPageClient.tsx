@@ -49,7 +49,7 @@ export default function NewsPageClient({ initialArticles = [] }: Props) {
   }, [initialArticles.length])
 
   return (
-    <div className="px-3 sm:px-4 md:px-0 pt-2 sm:pt-3">
+    <div className="px-0 sm:px-4 md:px-0 pt-2 sm:pt-3">
       <div className="container">
         <BackButton />
       </div>

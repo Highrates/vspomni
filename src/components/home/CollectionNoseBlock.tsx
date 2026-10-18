@@ -38,7 +38,7 @@ export default function CollectionNoseBlock() {
 
   if (loading) {
     return (
-      <section className="mt-4 sm:mt-6 md:mt-8 lg:mt-10 mb-4 sm:mb-6 md:mb-8 lg:mb-10 px-2 py-2">
+      <section className="mt-4 sm:mt-6 md:mt-8 lg:mt-10 mb-4 sm:mb-6 md:mb-8 lg:mb-10 px-0 py-2">
         <h2 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none mb-4 sm:mb-6">
           {TITLE}
         </h2>
@@ -57,7 +57,7 @@ export default function CollectionNoseBlock() {
   if (products.length === 0) return null
 
   return (
-    <section className="mt-4 sm:mt-6 md:mt-8 lg:mt-10 mb-4 sm:mb-6 md:mb-8 lg:mb-10 px-2 py-2">
+    <section className="mt-4 sm:mt-6 md:mt-8 lg:mt-10 mb-4 sm:mb-6 md:mb-8 lg:mb-10 px-0 py-2">
       <h2 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none mb-4 sm:mb-5 md:mb-6">
         {TITLE}
       </h2>

@@ -75,7 +75,7 @@ export default function StoryBlock() {
     return (
       <section className="mt-4 mb-4 px-0 sm:mt-5 sm:mb-5 sm:px-6 md:mt-6 md:mb-6 md:px-8 lg:mt-8">
         <div className="flex justify-center">
-          <div className="flex gap-3 overflow-x-auto px-4 sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex gap-3 overflow-x-auto px-0 sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} className="flex shrink-0 flex-col items-center gap-2">
                 <div className="h-[70px] w-[70px] animate-pulse rounded-full bg-neutral-200 sm:h-20 sm:w-20 md:h-[88px] md:w-[88px] lg:h-24 lg:w-24" />
@@ -141,7 +141,7 @@ export default function StoryBlock() {
     <>
       <section className="mt-4 mb-4 px-0 sm:mt-5 sm:mb-5 sm:px-6 md:mt-6 md:mb-6 md:px-8 lg:mt-8">
         {/* Mobile: горизонтальный скролл */}
-        <div className="flex gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:hidden">
+        <div className="flex gap-3 overflow-x-auto px-0 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:hidden">
           {renderCircles('m')}
         </div>
 

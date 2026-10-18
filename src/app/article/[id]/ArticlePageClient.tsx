@@ -65,7 +65,7 @@ export default function ArticlePageClient({
 
   if (loading) {
     return (
-      <article className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-0">
+      <article className="max-w-3xl mx-auto px-0 sm:px-6 lg:px-0">
         <BackButton />
         <div className="animate-pulse">
           <div className="h-8 bg-gray-200 rounded mb-10"></div>
@@ -78,7 +78,7 @@ export default function ArticlePageClient({
 
   if (!article) {
     return (
-      <article className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-0">
+      <article className="max-w-3xl mx-auto px-0 sm:px-6 lg:px-0">
         <BackButton />
         <h1 className="mb-10 sm:mb-14 font-semibold text-2xl sm:text-3xl select-none">
           Статья не найдена
@@ -91,7 +91,7 @@ export default function ArticlePageClient({
   const imageUrl = article.imageUrl?.trim()
 
   return (
-    <article className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-0">
+    <article className="max-w-3xl mx-auto px-0 sm:px-6 lg:px-0">
       <BackButton />
       <h1 className="mb-10 sm:mb-14 font-semibold text-2xl sm:text-3xl select-none">
         {article.title}

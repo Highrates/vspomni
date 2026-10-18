@@ -21,7 +21,7 @@ export default function CandlesSoonBanner({ imageUrl, bannerText }: CandlesSoonB
   const text = (bannerText || DEFAULT_TEXT).trim()
 
   return (
-    <section className="relative w-full overflow-hidden px-2 mt-4 sm:mt-6 md:mt-8 lg:mt-10 mb-4 sm:mb-6 md:mb-8 lg:mb-10">
+    <section className="relative w-full overflow-hidden px-0 mt-4 sm:mt-6 md:mt-8 lg:mt-10 mb-4 sm:mb-6 md:mb-8 lg:mb-10">
       <div className="relative w-full h-[170px] sm:h-[240px] md:h-[300px] lg:h-[340px] overflow-hidden rounded-[16px]">
         <Image
           src={src}

@@ -12,7 +12,7 @@ export default function ArticlePageNoscript({ article }: Props) {
 
   return (
     <noscript>
-      <article className="max-w-3xl mx-auto px-4 py-6">
+      <article className="max-w-3xl mx-auto px-2 py-6">
         <h1>{article.title}</h1>
         {mainText ? <p>{mainText}</p> : null}
         {bodyText ? <p>{bodyText}</p> : null}

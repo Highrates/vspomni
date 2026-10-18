@@ -41,7 +41,7 @@ const scents = [
 export default function PopularScents() {
   const isClient = useIsClient()
   return (
-    <section className="mt-12 sm:mt-16 md:mt-20 lg:mt-24 mb-16 sm:mb-20 md:mb-24 lg:mb-32 overflow-hidden px-4 sm:px-6 md:px-8">
+    <section className="mt-12 sm:mt-16 md:mt-20 lg:mt-24 mb-16 sm:mb-20 md:mb-24 lg:mb-32 overflow-hidden px-0 sm:px-6 md:px-8">
       <div>
         {/* Заголовок */}
         <motion.div

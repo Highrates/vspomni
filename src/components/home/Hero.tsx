@@ -352,7 +352,7 @@ export default function Hero() {
 
   if (loading) {
     return (
-      <section className="relative w-full overflow-hidden px-2">
+      <section className="relative w-full overflow-hidden px-0">
         <div
           className="h-[70vh] w-full animate-pulse rounded-[12px] bg-gray-200 sm:h-[80vh] sm:rounded-2xl md:h-[85vh] md:rounded-[20px] lg:h-[90vh]"
           aria-hidden
@@ -362,7 +362,7 @@ export default function Hero() {
   }
 
   return (
-    <section className="relative w-full overflow-hidden px-2">
+    <section className="relative w-full overflow-hidden px-0">
       <HeroSwiper
         key={isMdUp ? 'desktop' : 'mobile'}
         slides={slides}

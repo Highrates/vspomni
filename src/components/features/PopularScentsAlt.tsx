@@ -26,7 +26,7 @@ export default function PopularScentsAlt({
   }, [])
 
   return (
-    <section className="mb-4 mt-4 px-4 py-2 sm:mb-6 sm:mt-6 sm:px-6 md:mb-8 md:mt-8 md:px-8 lg:mb-10 lg:mt-10">
+    <section className="mb-4 mt-4 px-0 py-2 sm:mb-6 sm:mt-6 sm:px-6 md:mb-8 md:mt-8 md:px-8 lg:mb-10 lg:mt-10">
       <div className="mb-4 flex items-center justify-between gap-3 sm:mb-5 md:mb-6">
         <Heading className="min-w-0 flex-1 text-[22px] font-semibold leading-tight select-none sm:text-[36px] md:text-[42px] lg:text-[48px]">
           {title}

@@ -46,7 +46,7 @@ export default function GiftPackagesUpsellSection({
   if (skip || (!loading && items.length === 0)) return null
 
   return (
-    <section className="relative z-10 px-4 sm:px-0 my-[40px]">
+    <section className="relative z-10 px-0 my-[40px]">
       <h2 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold text-black mb-4 sm:mb-5 md:mb-6">
         Добавьте подарочный пакет
       </h2>
