@@ -4,7 +4,7 @@ import { ArrowUpRight } from 'lucide-react'
 
 export default function HistoryLine() {
   return (
-    <section className="relative mt-4 mb-4 w-full px-2 sm:mt-6 sm:mb-6 md:mt-8 md:mb-8 lg:mt-10 lg:mb-10">
+    <section className="relative mt-4 mb-4 w-full px-0 sm:mt-6 sm:mb-6 md:mt-8 md:mb-8 lg:mt-10 lg:mb-10">
       <Link
         href="https://t.me/vspomni_nice"
         target="_blank"

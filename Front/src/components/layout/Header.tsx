@@ -132,7 +132,7 @@ export default function Header({ variant = 'default' }: HeaderProps) {
         className={`fixed top-0 left-0 z-50 w-full overflow-visible py-4 transition-all duration-300 ${getHeaderStyles()}`}
         style={{ height: '80px' }}
       >
-        <div className="container flex h-full items-center justify-between overflow-visible px-4 sm:px-6 md:px-[33px]">
+        <div className="container flex h-full items-center justify-between overflow-visible sm:px-6 md:px-[33px]">
           {isHome ? (
             <span className="text-base sm:text-[18px] font-semibold tracking-wide inline-flex shrink-0">
               <Image
@@ -281,7 +281,7 @@ export default function Header({ variant = 'default' }: HeaderProps) {
               transition={{ duration: 0.25 }}
               className="absolute top-full left-0 w-full bg-white border-t border-black/10 shadow-md mt-px"
             >
-              <div className="container px-4 sm:px-6 md:px-8 py-4 relative z-50">
+              <div className="container sm:px-6 md:px-8 py-4 relative z-50">
                 <div className="flex items-center justify-between gap-2">
                   <input
                     ref={searchInputRef}
@@ -335,7 +335,7 @@ export default function Header({ variant = 'default' }: HeaderProps) {
               }`}
             >
               <nav
-                className="flex flex-col px-6 py-5 text-md font-medium gap-4"
+                className="flex flex-col px-2 sm:px-6 py-5 text-md font-medium gap-4"
                 aria-label="Мобильное меню"
               >
                 {SITE_PRIMARY_NAV.map((item) => (

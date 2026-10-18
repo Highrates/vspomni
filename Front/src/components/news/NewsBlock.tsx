@@ -32,7 +32,7 @@ export default function NewsBlock() {
 
   if (loading) {
     return (
-      <section className="container mb-4 px-4 sm:mb-6 md:mb-8 lg:mb-10">
+      <section className="container mb-4 px-0 sm:mb-6 md:mb-8 lg:mb-10">
         <div className="mb-4 flex items-center justify-between sm:mb-5 md:mb-6">
           <h3 className="text-xl font-semibold select-none sm:text-[36px] md:text-[42px] lg:text-[48px]">
             Полезные материалы
@@ -51,7 +51,7 @@ export default function NewsBlock() {
   }
 
   return (
-    <section className="mb-4 px-4 sm:mb-6 sm:px-2 md:mb-8 lg:mb-10">
+    <section className="mb-4 px-0 sm:mb-6 sm:px-2 md:mb-8 lg:mb-10">
       <div className="mb-4 flex items-center justify-between gap-3 sm:mb-5 md:mb-6">
         <h3 className="min-w-0 text-xl font-semibold select-none sm:text-[36px] md:text-[42px] lg:text-[48px]">
           Полезные материалы

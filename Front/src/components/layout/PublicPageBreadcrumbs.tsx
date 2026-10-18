@@ -11,9 +11,9 @@ type Props = {
 }
 
 const variantClass: Record<NonNullable<Props['variant']>, string> = {
-  default: 'px-2 sm:px-4 pt-2 sm:pt-3 md:pt-4',
-  container: 'px-3 sm:px-4 md:px-0 pt-4 container',
-  article: 'max-w-3xl mx-auto px-4 sm:px-6 lg:px-0 pt-4',
+  default: 'px-0 sm:px-4 pt-2 sm:pt-3 md:pt-4',
+  container: 'px-0 sm:px-4 md:px-0 pt-4 container',
+  article: 'max-w-3xl mx-auto px-0 sm:px-6 lg:px-0 pt-4',
 }
 
 export default function PublicPageBreadcrumbs({

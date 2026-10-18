@@ -103,8 +103,8 @@
 
   /* Контейнер 1536px по макету */
   .container {
-    /* Канон мобильных отступов: 16px; sm+ как раньше */
-    @apply mx-auto w-full max-w-[1536px] px-4 sm:max-w-full;
+    /* Канон мобильных отступов: 8px; sm+ 16px */
+    @apply mx-auto w-full max-w-[1536px] px-2 sm:max-w-full sm:px-4;
   }
 
   .container-inner {

@@ -19,7 +19,7 @@ export default function CatalogCategoryBannersView({
   if (sortedCategories.length === 0) return null
 
   return (
-    <div className="flex w-full flex-col gap-5 sm:gap-6 md:gap-8 lg:gap-10 mb-10 sm:mb-12 md:mb-16 lg:mb-20 px-4 sm:px-0">
+    <div className="flex w-full flex-col gap-5 sm:gap-6 md:gap-8 lg:gap-10 mb-10 sm:mb-12 md:mb-16 lg:mb-20 px-0">
       {sortedCategories.map((category: Category, i: number) => (
         <Link
           key={category.id}

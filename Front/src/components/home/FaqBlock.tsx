@@ -30,7 +30,7 @@ export default function FaqBlock({ initialFaqs = [] }: Props) {
   }
 
   return (
-    <section id="faq" className="mb-4 scroll-mt-[100px] px-4 py-2 sm:mb-6 sm:px-2 md:mb-8 lg:mb-10">
+    <section id="faq" className="mb-4 scroll-mt-[100px] px-0 py-2 sm:mb-6 sm:px-2 md:mb-8 lg:mb-10">
       <div className="flex items-center justify-between mb-4 sm:mb-5 md:mb-6">
         <h2 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none">
           Вопросики
