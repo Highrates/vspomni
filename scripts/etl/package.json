@@ -1,0 +1,21 @@
+{
+  "name": "vspomni-etl",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "inventory": "node inventory.mjs",
+    "migrate": "node migrate.mjs",
+    "migrate:catalog": "node migrate.mjs --apply --step=catalog",
+    "migrate:products": "node migrate.mjs --apply --step=products",
+    "migrate:media": "node migrate.mjs --apply --step=media",
+    "migrate:tags": "node migrate.mjs --apply --step=tags",
+    "migrate:users": "node migrate.mjs --apply --step=users",
+    "migrate:orders": "node migrate.mjs --apply --step=orders",
+    "migrate:all": "node migrate.mjs --apply --step=all",
+    "restore": "bash restore-saleor-dump.sh",
+    "unpack-media": "bash unpack-media.sh"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}

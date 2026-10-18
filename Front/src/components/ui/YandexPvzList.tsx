@@ -1,0 +1,257 @@
+'use client'
+
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { Search, MapPin, Loader2, ChevronDown, Check } from 'lucide-react'
+import type { YandexPickupPoint } from '@/types/yandexDelivery'
+import YandexPvzMap from './YandexPvzMap'
+import { useYandexPvzStore } from '@/stores/useYandexPvz'
+import {
+  orderedYandexPvzCityNames,
+  catalogDisplayCityForUserCity,
+} from '@/lib/yandexCityGeo'
+
+export interface YandexPvzListProps {
+  onChoose: (point: YandexPickupPoint) => void
+  defaultCity?: string
+  selectedPointId?: string | null
+}
+
+export default function YandexPvzList({
+  onChoose,
+  defaultCity = 'Москва',
+  selectedPointId = null,
+}: YandexPvzListProps) {
+  const { points, loading, error, fetchPickupPointsForCity } = useYandexPvzStore()
+  const cities = useMemo(() => orderedYandexPvzCityNames(), [])
+  const prevDefaultCity = useRef(defaultCity)
+  const [pickedCity, setPickedCity] = useState(() =>
+    catalogDisplayCityForUserCity(defaultCity),
+  )
+  const [citySearchQuery, setCitySearchQuery] = useState('')
+  const [showCityDropdown, setShowCityDropdown] = useState(false)
+  const [pvzSearchQuery, setPvzSearchQuery] = useState('')
+
+  useEffect(() => {
+    if (prevDefaultCity.current !== defaultCity) {
+      prevDefaultCity.current = defaultCity
+      setPickedCity(catalogDisplayCityForUserCity(defaultCity))
+    }
+  }, [defaultCity])
+
+  useEffect(() => {
+    if (pickedCity) void fetchPickupPointsForCity(pickedCity)
+  }, [pickedCity, fetchPickupPointsForCity])
+
+  const filteredCities = useMemo(() => {
+    if (!citySearchQuery.trim()) return cities.slice(0, 50)
+    const q = citySearchQuery.toLowerCase().trim()
+    return cities.filter((c) => c.toLowerCase().includes(q)).slice(0, 50)
+  }, [cities, citySearchQuery])
+
+  const pvzInCity = useMemo(() => {
+    if (!pickedCity) return []
+    const byLabel = points.filter(
+      (p) => (p.address?.locality || p.address?.region || '') === pickedCity,
+    )
+    if (byLabel.length > 0) return byLabel
+    return points
+  }, [points, pickedCity])
+
+  const filteredPvz = useMemo(() => {
+    if (!pvzSearchQuery.trim()) return pvzInCity
+    const q = pvzSearchQuery.toLowerCase()
+    return pvzInCity.filter(
+      (p) =>
+        (p.name || '').toLowerCase().includes(q) ||
+        (p.address?.full_address || '').toLowerCase().includes(q) ||
+        (p.instruction || '').toLowerCase().includes(q),
+    )
+  }, [pvzInCity, pvzSearchQuery])
+
+  const handleCitySelect = useCallback((city: string) => {
+    setPickedCity(city)
+    setCitySearchQuery('')
+    setShowCityDropdown(false)
+    setPvzSearchQuery('')
+  }, [])
+
+  const handlePvzSelect = useCallback(
+    (pvz: YandexPickupPoint) => {
+      onChoose(pvz)
+    },
+    [onChoose],
+  )
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('.yandex-pvz-city-dropdown')) setShowCityDropdown(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Города — локальный справочник; не блокируем UI на загрузке ПВЗ
+  return (
+    <div className="flex flex-col gap-4">
+      {error && (
+        <div className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm">
+          {error}
+        </div>
+      )}
+      {loading && (
+        <div className="flex items-center gap-2 text-sm text-black/50">
+          <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+          {points.length > 0
+            ? 'Обновление списка для выбранного города…'
+            : 'Загрузка пунктов выдачи Яндекса…'}
+        </div>
+      )}
+
+      <div className="yandex-pvz-city-dropdown relative flex flex-col">
+        <label className="text-sm font-medium mb-2 flex items-center gap-2">
+          <MapPin className="w-4 h-4" />
+          Город
+        </label>
+        <button
+          type="button"
+          onClick={() => setShowCityDropdown(!showCityDropdown)}
+          className="w-full h-12 px-4 rounded-xl border border-black/10 text-base outline-none transition focus:border-black/30 flex items-center justify-between bg-white"
+        >
+          <span className={pickedCity ? 'text-black' : 'text-black/40'}>
+            {pickedCity || 'Выберите город'}
+          </span>
+          <ChevronDown
+            className={`w-5 h-5 text-black/40 transition-transform ${showCityDropdown ? 'rotate-180' : ''}`}
+          />
+        </button>
+        {showCityDropdown && (
+          <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-black/10 rounded-xl shadow-lg max-h-80 overflow-hidden">
+            <div className="p-2 border-b border-black/5">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black/40" />
+                <input
+                  type="text"
+                  value={citySearchQuery}
+                  onChange={(e) => setCitySearchQuery(e.target.value)}
+                  placeholder="Поиск города..."
+                  className="w-full h-10 pl-9 pr-4 rounded-lg border border-black/10 text-sm outline-none focus:border-black/30"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="overflow-y-auto max-h-60">
+              {filteredCities.length === 0 ? (
+                <div className="p-4 text-center text-black/50 text-sm">Город не найден</div>
+              ) : (
+                filteredCities.map((city) => (
+                  <button
+                    key={city}
+                    type="button"
+                    onClick={() => handleCitySelect(city)}
+                    className={`w-full px-4 py-3 text-left hover:bg-black/5 transition ${
+                      pickedCity === city ? 'bg-black/5 font-medium' : ''
+                    }`}
+                  >
+                    {city}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {pickedCity && (
+        <>
+          {!loading && !error && points.length === 0 ? (
+            <div className="p-4 rounded-xl border border-black/10 text-black/60 text-sm">
+              Список ПВЗ пуст. Проверьте настройки доставки Яндекса.
+            </div>
+          ) : null}
+          {points.length > 0 ? (
+            <YandexPvzMap
+              points={pvzInCity}
+              onSelect={onChoose}
+              selectedPointId={selectedPointId}
+            />
+          ) : null}
+          <div className="flex flex-col">
+            <label className="text-sm font-medium mb-2 flex items-center gap-2">
+              <Search className="w-4 h-4" />
+              Поиск пункта выдачи
+            </label>
+            <input
+              type="text"
+              value={pvzSearchQuery}
+              onChange={(e) => setPvzSearchQuery(e.target.value)}
+              placeholder="Адрес или название ПВЗ"
+              className="h-12 px-4 rounded-xl border border-black/10 text-base outline-none transition focus:border-black/30"
+              disabled={loading && points.length === 0}
+            />
+          </div>
+          <div className="flex flex-col gap-2 max-h-56 sm:max-h-72 overflow-y-auto overscroll-contain">
+            <div className="text-xs text-black/40">Найдено: {filteredPvz.length}</div>
+            {loading && points.length === 0 ? (
+              <div className="flex items-center justify-center gap-2 py-8 text-black/50 text-sm">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Загрузка ПВЗ…
+              </div>
+            ) : filteredPvz.length === 0 ? (
+              <div className="text-center py-6 text-black/50 text-sm">
+                В этом городе пункты не найдены или измените поиск.
+              </div>
+            ) : (
+              filteredPvz.map((pvz) => {
+                const isSelected =
+                  selectedPointId != null && pvz.id === selectedPointId
+                return (
+                <button
+                  key={pvz.id}
+                  type="button"
+                  onClick={() => handlePvzSelect(pvz)}
+                  className={`text-left p-4 border rounded-xl transition group ${
+                    isSelected
+                      ? 'border-green-600 bg-green-50 ring-1 ring-green-600/30'
+                      : 'border-black/10 hover:border-black/30 hover:bg-gray-50/50'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <div
+                      className={`font-semibold ${
+                        isSelected
+                          ? 'text-green-900'
+                          : 'group-hover:text-black/80'
+                      }`}
+                    >
+                      {pvz.name || 'ПВЗ Яндекса'}
+                    </div>
+                    {isSelected && (
+                      <span className="inline-flex items-center gap-1 shrink-0 text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                        <Check className="w-3.5 h-3.5" />
+                        Выбран
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    className={`text-sm flex items-start gap-1.5 ${
+                      isSelected ? 'text-green-800/80' : 'text-black/60'
+                    }`}
+                  >
+                    <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                    {pvz.address?.full_address ||
+                      [pvz.address?.street, pvz.address?.house].filter(Boolean).join(', ') ||
+                      '—'}
+                  </div>
+                  {pvz.instruction && (
+                    <div className="text-xs text-black/40 mt-1">{pvz.instruction}</div>
+                  )}
+                </button>
+              )})
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}

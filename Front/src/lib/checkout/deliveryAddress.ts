@@ -1,0 +1,91 @@
+import type { AddressInfo } from '@/graphql/types/auth.types'
+
+const STORAGE_KEY = 'vspomni_checkout_delivery_address'
+
+export type CheckoutContact = {
+  firstName?: string
+  lastName?: string
+  phone?: string
+}
+
+export function persistCheckoutDeliveryAddress(address: AddressInfo): void {
+  if (typeof window === 'undefined') return
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(address))
+  } catch {
+    // private mode
+  }
+}
+
+export function loadPersistedCheckoutDeliveryAddress(): AddressInfo | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
+    return JSON.parse(raw) as AddressInfo
+  } catch {
+    return null
+  }
+}
+
+export function clearPersistedCheckoutDeliveryAddress(): void {
+  if (typeof window === 'undefined') return
+  try {
+    sessionStorage.removeItem(STORAGE_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+/** Имя/фамилия/телефон из формы checkout поверх адреса профиля. */
+export function mergeCheckoutContact(
+  address: AddressInfo,
+  contact: CheckoutContact,
+): AddressInfo {
+  return {
+    ...address,
+    firstName: contact.firstName?.trim() || address.firstName?.trim() || '',
+    lastName: contact.lastName?.trim() || address.lastName?.trim() || '',
+    phone: contact.phone?.trim() || address.phone?.trim() || '',
+  }
+}
+
+export function resolveCheckoutDeliveryAddress(
+  deliveryAddress?: AddressInfo | null,
+): AddressInfo | null {
+  return deliveryAddress ?? loadPersistedCheckoutDeliveryAddress()
+}
+
+/** Возвращает текст ошибки или null, если адрес годится для checkout (Nest). */
+export function validateDeliveryAddressForCheckout(
+  address: Partial<AddressInfo> | null | undefined,
+): string | null {
+  if (!address) {
+    return 'Выберите адрес доставки'
+  }
+
+  const street = (address.streetAddress1 || '').trim()
+  const city = (address.city || '').trim()
+  const phone = (address.phone || '').trim()
+  const postal = (address.postalCode || '').trim()
+
+  if (!street) return 'Укажите адрес доставки'
+  if (!city) return 'Укажите город'
+  if (!phone) return 'Укажите телефон'
+  if (!postal) return 'Укажите почтовый индекс'
+
+  return null
+}
+
+/** Контактные данные из формы checkout (имя, телефон). */
+export function buildCheckoutContact(input: {
+  name?: string
+  familyName?: string
+  phone?: string
+}): CheckoutContact {
+  return {
+    firstName: input.name?.trim(),
+    lastName: input.familyName?.trim(),
+    phone: input.phone?.trim(),
+  }
+}
