@@ -1,10 +1,12 @@
 export type OrderStatusCode =
+  | 'awaiting_payment'
   | 'paid'
   | 'packing'
   | 'shipped'
   | 'in_transit'
   | 'delivered'
   | 'canceled'
+  | 'refunded'
 
 export type MoneyAmount = {
   amount: number

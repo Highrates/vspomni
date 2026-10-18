@@ -6,6 +6,8 @@ import Image from "next/image"
 import { toast } from "react-toastify"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useAuthStore } from "@/stores/useAuth"
+import { setPassword } from "@/api/authApi"
+import { nextFromSearchParams } from "@/lib/auth/safeNextPath"
 
 interface TProps {
   email: string
@@ -25,7 +27,7 @@ const ResetPasswordForm = ({ email: emailProp, onBack }: TProps) => {
   const { login } = useAuthStore()
   
   // Если пользователь пришел по ссылке с токеном, не показываем кнопку "вернуться назад"
-  const cameFromLink = !!token && !!emailFromUrl
+  const cameFromLink = !!token
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -47,40 +49,29 @@ const ResetPasswordForm = ({ email: emailProp, onBack }: TProps) => {
 
     setLoading(true)
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_SALEOR_API_URL ?? ''
-      const resp = await fetch(`${baseUrl}/auth/reset-password/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, token, newPassword }),
-      })
+      // Nest: POST /auth/password-reset/confirm { token, password }
+      const result = await setPassword(token, newPassword)
+      const loginEmail = (result.email || email || '').trim()
+      const nextPath = nextFromSearchParams(searchParams)
 
-      const data = await resp.json().catch(() => ({}))
-
-      if (!resp.ok || !data.ok) {
-        const errorMsg = data.error || 'Ошибка при сбросе пароля'
-        // Переводим ошибки на русский
-        if (errorMsg.includes('token') || errorMsg.includes('токен')) {
-          throw new Error('Неверный или просроченный токен. Пожалуйста, запросите сброс пароля заново.')
-        }
-        if (errorMsg.includes('too short')) {
-          throw new Error('Пароль слишком короткий. Он должен содержать не менее 8 символов.')
-        }
-        throw new Error(errorMsg)
+      if (!loginEmail) {
+        toast.success('Пароль изменён. Войдите с новым паролем.')
+        const q = nextPath !== '/' ? `?next=${encodeURIComponent(nextPath)}` : ''
+        router.push(`/login${q}`)
+        return
       }
 
       toast.success('Пароль успешно изменен! Вход в систему...')
-      
-      // Автоматически входим пользователя с новым паролем
+
       try {
-        await login(email, newPassword)
+        await login(loginEmail, newPassword)
         toast.success('Вы успешно вошли в систему!')
-        // Перенаправляем на главную страницу
-        router.push('/')
-      } catch (loginError: any) {
+        router.push(nextPath)
+      } catch (loginError: unknown) {
         console.error('Auto-login after password reset failed:', loginError)
-        // Если автоматический вход не удался, перенаправляем на страницу логина
         toast.info('Пароль изменен. Пожалуйста, войдите в систему.')
-        router.push('/login')
+        const q = nextPath !== '/' ? `?next=${encodeURIComponent(nextPath)}` : ''
+        router.push(`/login${q}`)
       }
     } catch (error: any) {
       console.error('Reset password error:', error)
@@ -111,6 +102,7 @@ const ResetPasswordForm = ({ email: emailProp, onBack }: TProps) => {
             width={150}
             height={30}
             className="h-8 w-auto"
+            style={{ width: 'auto', height: 'auto' }}
           />
         </div>
         <h2 className="text-2xl font-semibold">Придумайте пароль</h2>

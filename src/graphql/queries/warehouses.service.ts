@@ -1,30 +1,9 @@
-import { graphqlRequest } from "@/graphql/client";
-import type { WarehousesData, WarehouseNode } from "../types/core.types";
+import type { WarehousesData } from '../types/core.types'
 
-export async function getWarehouses(first = 50): Promise<WarehousesData["warehouses"]> {
-  const query = `
-    query Warehouses($first: Int!) {
-      warehouses(first: $first) {
-        edges {
-          node {
-            id
-            name
-            slug
-            address {
-              city
-              country
-            }
-          }
-        }
-        pageInfo {
-          hasNextPage
-          endCursor
-        }
-      }
-    }
-  `;
-
-  const variables = { first };
-  const data = await graphqlRequest<WarehousesData>(query, variables);
-  return data.warehouses;
+/** Склады Saleor в Nest не используются → пустая выборка. */
+export async function getWarehouses(_first = 50): Promise<WarehousesData['warehouses']> {
+  return {
+    edges: [],
+    pageInfo: { hasNextPage: false, hasPreviousPage: false, endCursor: null },
+  }
 }

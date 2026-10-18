@@ -6,7 +6,6 @@ import StoryCirclePreview from './StoryCirclePreview'
 import { getAllStories, StoryNode } from '@/graphql/queries/stories.service'
 
 function getCirclePreviewSources(story: StoryNode) {
-  // Любое фото: обложка → image → первый image-слайд (не только «первый медиа»)
   const imageUrl =
     story.coverUrl ||
     story.image ||
@@ -19,6 +18,37 @@ function getCirclePreviewSources(story: StoryNode) {
       : null
 
   return { imageUrl, videoUrl }
+}
+
+function StoryCircle({
+  group,
+  preview,
+  onOpen,
+}: {
+  group: StoryGroup
+  preview: { imageUrl: string | null; videoUrl: string | null } | null
+  onOpen: () => void
+}) {
+  return (
+    <div className="flex w-[70px] shrink-0 flex-col items-center text-center sm:w-20 md:w-[88px] lg:w-24">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="relative flex h-[70px] w-[70px] cursor-pointer items-center justify-center rounded-full border border-black transition-all duration-300 hover:border-black/60 sm:h-20 sm:w-20 md:h-[88px] md:w-[88px] lg:h-24 lg:w-24"
+      >
+        <div className="h-[62px] w-[62px] overflow-hidden rounded-full bg-white sm:h-[72px] sm:w-[72px] md:h-[79px] md:w-[79px] lg:h-[87px] lg:w-[87px]">
+          <StoryCirclePreview
+            imageUrl={preview?.imageUrl}
+            videoUrl={preview?.videoUrl}
+            alt={group.title}
+          />
+        </div>
+      </button>
+      <span className="mt-1.5 line-clamp-2 max-w-full break-words text-[11px] font-medium leading-[14px] text-neutral-700 hyphens-auto sm:mt-2 sm:text-[12px] sm:leading-[15px] md:text-[13px] md:leading-[16px]">
+        {group.title}
+      </span>
+    </div>
+  )
 }
 
 export default function StoryBlock() {
@@ -43,13 +73,13 @@ export default function StoryBlock() {
 
   if (loading) {
     return (
-      <section className="mt-4 sm:mt-5 md:mt-6 lg:mt-8 mb-4 sm:mb-5 md:mb-6 px-4 sm:px-6 md:px-8">
-        <div className="w-full flex justify-center">
-          <div className="flex gap-3 sm:gap-[14px] md:gap-4 lg:gap-[18px] overflow-hidden">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="flex flex-col items-center gap-2">
-                <div className="w-[70px] h-[70px] sm:w-[80px] sm:h-[80px] md:w-[88px] md:h-[88px] lg:w-[96px] lg:h-[96px] rounded-full bg-neutral-200 animate-pulse" />
-                <div className="w-[60px] h-3 rounded-full bg-neutral-200 animate-pulse" />
+      <section className="mt-4 mb-4 px-0 sm:mt-5 sm:mb-5 sm:px-6 md:mt-6 md:mb-6 md:px-8 lg:mt-8">
+        <div className="flex justify-center">
+          <div className="flex gap-3 overflow-x-auto px-4 sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="flex shrink-0 flex-col items-center gap-2">
+                <div className="h-[70px] w-[70px] animate-pulse rounded-full bg-neutral-200 sm:h-20 sm:w-20 md:h-[88px] md:w-[88px] lg:h-24 lg:w-24" />
+                <div className="h-3 w-[60px] animate-pulse rounded-full bg-neutral-200" />
               </div>
             ))}
           </div>
@@ -93,42 +123,32 @@ export default function StoryBlock() {
     )
   }
 
+  const renderCircles = (keyPrefix: string) =>
+    storyGroups.map((group, index) => {
+      const story = stories.find((s) => s.id === group.id)
+      const preview = story ? getCirclePreviewSources(story) : null
+      return (
+        <StoryCircle
+          key={`${keyPrefix}-${group.id}`}
+          group={group}
+          preview={preview}
+          onOpen={() => handleOpenGroup(index)}
+        />
+      )
+    })
+
   return (
     <>
-      <section className="mt-4 sm:mt-5 md:mt-6 lg:mt-8 mb-4 sm:mb-5 md:mb-6 px-4 sm:px-6 md:px-8">
-        <div className="w-full flex justify-center">
-          <div
-            className="flex flex-none flex-row flex-wrap items-start justify-center gap-3 sm:gap-[14px] md:gap-4 lg:gap-[18px]"
-            style={{ maxWidth: '100%' }}
-          >
-            {storyGroups.map((group, index) => {
-              const story = stories.find((s) => s.id === group.id)
-              const preview = story ? getCirclePreviewSources(story) : null
+      <section className="mt-4 mb-4 px-0 sm:mt-5 sm:mb-5 sm:px-6 md:mt-6 md:mb-6 md:px-8 lg:mt-8">
+        {/* Mobile: горизонтальный скролл */}
+        <div className="flex gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:hidden">
+          {renderCircles('m')}
+        </div>
 
-              return (
-                <div
-                  key={group.id}
-                  className="flex flex-col items-center text-center shrink-0"
-                >
-                  <button
-                    type="button"
-                    onClick={() => handleOpenGroup(index)}
-                    className="relative flex items-center justify-center w-[70px] h-[70px] sm:w-[80px] sm:h-[80px] md:w-[88px] md:h-[88px] lg:w-[96px] lg:h-[96px] rounded-full border border-black transition-all duration-300 hover:border-black/60"
-                  >
-                    <div className="w-[62px] h-[62px] sm:w-[72px] sm:h-[72px] md:w-[79px] md:h-[79px] lg:w-[87px] lg:h-[87px] rounded-full overflow-hidden bg-white">
-                      <StoryCirclePreview
-                        imageUrl={preview?.imageUrl}
-                        videoUrl={preview?.videoUrl}
-                        alt={group.title}
-                      />
-                    </div>
-                  </button>
-                  <span className="text-[11px] sm:text-[12px] md:text-[13px] leading-[14px] sm:leading-[15px] md:leading-[16px] font-medium mt-1.5 sm:mt-2 text-neutral-700 text-center max-w-[70px] sm:max-w-[80px] md:max-w-[88px] lg:max-w-[96px] line-clamp-2 break-words hyphens-auto">
-                    {group.title}
-                  </span>
-                </div>
-              )
-            })}
+        {/* Desktop: всегда по центру (каждый ряд независимо) */}
+        <div className="hidden w-full justify-center sm:flex">
+          <div className="flex w-full flex-wrap justify-center gap-[14px] md:gap-4 lg:gap-[18px]">
+            {renderCircles('d')}
           </div>
         </div>
       </section>

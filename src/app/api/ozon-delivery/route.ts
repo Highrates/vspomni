@@ -98,6 +98,9 @@ type OzonPointListItem = {
 }
 
 let cachedPointList: { at: number; items: OzonPointListItem[] } | null = null
+/** Кэш ПВЗ по городу (после первой полной выгрузки point/list). */
+const cityPointsCache = new Map<string, { at: number; points: OzonPickupPoint[] }>()
+const CITY_POINTS_TTL_MS = 30 * 60 * 1000
 const POINT_LIST_TTL_MS = 60 * 60 * 1000
 
 async function fetchAllPointListItems(): Promise<OzonPointListItem[]> {
@@ -318,16 +321,23 @@ export async function POST(req: NextRequest) {
       const cityName = String(body.cityName || '').trim()
       if (!cityName) return json({ error: 'cityName обязателен' }, 400)
 
+      const cacheKey = cityName.toLowerCase().replace(/ё/g, 'е')
+      const cachedCity = cityPointsCache.get(cacheKey)
+      if (cachedCity && Date.now() - cachedCity.at < CITY_POINTS_TTL_MS) {
+        return json({ points: cachedCity.points })
+      }
+
       const mapPointIds = await fetchMapPointIdsForCity(cityName)
       const points = await fetchPickupPointsByIds(mapPointIds)
 
-      const cityNorm = cityName.toLowerCase().replace(/ё/g, 'е')
       const filtered = points.filter((p) => {
         const c = (p.address.city || '').toLowerCase().replace(/ё/g, 'е')
-        return !c || c.includes(cityNorm) || cityNorm.includes(c)
+        return !c || c.includes(cacheKey) || cacheKey.includes(c)
       })
+      const result = filtered.length ? filtered : points
+      cityPointsCache.set(cacheKey, { at: Date.now(), points: result })
 
-      return json({ points: filtered.length ? filtered : points })
+      return json({ points: result })
     }
 
     if (action === 'calculate') {

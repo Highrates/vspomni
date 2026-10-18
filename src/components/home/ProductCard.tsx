@@ -13,6 +13,7 @@ import { productDetailPath } from '@/lib/productPaths'
 
 interface ProductCardProps {
   product: ProductCardItem
+  /** @deprecated используйте product.badgeLabel из админки */
   isNew?: boolean
   /** Скрыть строку с ароматами (используем для категории «Подарочные пакеты») */
   hideAromas?: boolean
@@ -26,6 +27,9 @@ export default function ProductCard({ product, isNew = false, hideAromas = false
       : [product.image].filter(Boolean)
 
   const singleImage = images.length <= 1
+  const badgeText =
+    (product.badgeLabel && product.badgeLabel.trim()) ||
+    (isNew ? 'NEW' : '')
 
   if (!detailHref) {
     return null
@@ -78,11 +82,11 @@ export default function ProductCard({ product, isNew = false, hideAromas = false
         )}
 
         <div className="absolute top-2 left-2 sm:top-3 sm:left-3 flex flex-col items-start gap-1 z-10 pointer-events-none">
-          {isNew && (
-            <div className="bg-[#E91E63] text-white text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-md select-none">
-              NEW
+          {badgeText ? (
+            <div className="bg-[#E91E63] text-white text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-md select-none uppercase">
+              {badgeText}
             </div>
-          )}
+          ) : null}
           {product.discountPercent && product.discountPercent > 0 && (
             <div className="bg-red-500 text-white text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-md select-none">
               -{product.discountPercent}%

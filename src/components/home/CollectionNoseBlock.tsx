@@ -62,11 +62,10 @@ export default function CollectionNoseBlock() {
         {TITLE}
       </h2>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5 p-2 -m-2">
-        {products.map((product, index) => (
+        {products.map((product) => (
           <ProductCard
             product={product}
             key={product.id}
-            isNew={index === 0}
           />
         ))}
       </div>

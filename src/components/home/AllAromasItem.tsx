@@ -35,7 +35,7 @@ export default function AllAromasItem({ item }: AllAromasItemProps) {
 
       {/* Content */}
       <div className="flex flex-col gap-1 sm:gap-2 pt-2 sm:pt-3 pb-2 sm:pb-4 px-0.5 sm:px-1 w-full min-w-0">
-        <h3 className="w-full min-w-0 text-black font-semibold text-[13px] sm:text-base lg:text-lg select-none cursor-pointer line-clamp-2 leading-tight">
+        <h3 className="w-full min-w-0 text-black font-semibold text-[12px] sm:text-base lg:text-lg select-none cursor-pointer line-clamp-2 leading-tight">
           {cardTitle}
         </h3>
       </div>

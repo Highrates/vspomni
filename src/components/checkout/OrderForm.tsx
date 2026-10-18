@@ -3,14 +3,16 @@
 import { useUserStore } from '@/stores/useUser'
 import { getAccountEmail } from '@/lib/auth/accountEmail'
 import React, { useEffect } from 'react'
+import Link from 'next/link'
 
 const OrderForm = () => {
   const { user, setUser, fetchUser } = useUserStore()
   const accountEmail = getAccountEmail()
+  const isGuest = !accountEmail
 
   useEffect(() => {
-    fetchUser()
-  }, [fetchUser])
+    if (!isGuest) fetchUser()
+  }, [fetchUser, isGuest])
 
   useEffect(() => {
     if (!accountEmail) return
@@ -21,7 +23,7 @@ const OrderForm = () => {
   }, [accountEmail, setUser])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.name === 'email') return
+    if (e.target.name === 'email' && !isGuest) return
     setUser({ ...user, [e.target.name]: e.target.value })
   }
 
@@ -66,14 +68,36 @@ const OrderForm = () => {
             type="email"
             name="email"
             autoComplete="email"
-            readOnly
-            className="font-medium border-[0.5px] border-black/8 bg-[#F0F0F0] rounded-sm p-2 sm:p-2.5 w-full min-w-0 text-sm sm:text-base text-black/60 cursor-not-allowed"
-            value={accountEmail || user.email}
+            readOnly={!isGuest}
+            required={isGuest}
+            className={`font-medium border-[0.5px] border-black/8 rounded-sm p-2 sm:p-2.5 w-full min-w-0 text-sm sm:text-base ${
+              isGuest
+                ? 'bg-[#FAFAFA] text-black'
+                : 'bg-[#F0F0F0] text-black/60 cursor-not-allowed'
+            }`}
+            value={isGuest ? user.email : accountEmail || user.email}
+            onChange={handleChange}
+            placeholder={isGuest ? 'example@mail.com' : undefined}
           />
         </div>
         <p className="text-xs text-black/35">
-          Email берётся из вашего аккаунта — заказ будет привязан к нему.
-          Имя и фамилию подставляем из адреса доставки, их можно поправить.
+          {isGuest ? (
+            <>
+              Укажите email для чека и статуса заказа. Можно{' '}
+              <Link
+                href="/login?next=/checkout"
+                className="text-blue-600 hover:underline"
+              >
+                войти
+              </Link>
+              , чтобы сохранить заказы в профиле.
+            </>
+          ) : (
+            <>
+              Email берётся из вашего аккаунта — заказ будет привязан к нему.
+              Имя и фамилию подставляем из адреса доставки, их можно поправить.
+            </>
+          )}
         </p>
       </div>
     </section>

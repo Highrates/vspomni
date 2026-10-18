@@ -6,10 +6,8 @@ type SummaryProps = {
   total: number
   subtotal: number
   itemsDiscount: number
-  shippingDiscount: number
   /** Описание применённого промокода, пустая строка — промокода нет */
   promoLabel: string
-  isShippingPromo: boolean
   totalItems: number
   shipping: number
   shippingLoading: boolean
@@ -21,16 +19,12 @@ export const Summary = ({
   total,
   subtotal,
   itemsDiscount,
-  shippingDiscount,
   promoLabel,
-  isShippingPromo,
   totalItems,
   shipping,
   shippingLoading,
   shippingCarrier = null,
 }: SummaryProps) => {
-  const promoDiscount = itemsDiscount + shippingDiscount
-  const shippingPending = isShippingPromo && !(shipping > 0)
   const deliveryLabel =
     shippingCarrier === 'yandex'
       ? 'Доставка Яндекс:'
@@ -52,14 +46,12 @@ export const Summary = ({
       </div>
 
       {/* Блок скидок / промокода */}
-      {promoLabel && (promoDiscount > 0 || shippingPending) && (
+      {promoLabel && itemsDiscount > 0 && (
         <div className="space-y-1.5 mb-3">
           <div className="flex justify-between gap-3 text-[15px] font-medium text-gray-600 min-w-0">
             <span className="min-w-0 break-words">Скидка ({promoLabel})</span>
             <span className="shrink-0 text-red">
-              {shippingPending
-                ? 'после расчёта доставки'
-                : `−${formatCurrency(promoDiscount)} ₽`}
+              −{formatCurrency(itemsDiscount)} ₽
             </span>
           </div>
         </div>

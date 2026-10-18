@@ -39,8 +39,8 @@ export default function CatalogAllProductsSection({
   }
 
   return (
-    <section className="px-2 py-2 mb-10 sm:mb-12 md:mb-16 lg:mb-20 relative z-10">
-      <h2 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold text-black mb-4 sm:mb-5 md:mb-6">
+    <section className="px-0 sm:px-2 py-2 mb-10 sm:mb-12 md:mb-16 lg:mb-20 relative z-10">
+      <h2 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold text-black mb-4 sm:mb-5 md:mb-6 px-0">
         Все товары
       </h2>
       {products.length === 0 ? (

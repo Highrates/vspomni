@@ -1,31 +1,23 @@
 'use client'
 
+/**
+ * Яндекс ID OAuth: в Nest (`/auth/*`) эквивалента нет (Saleor external-auth плагин удалён).
+ * Кнопка скрыта, чтобы не ломать вход; вернуть — когда появится Nest OAuth endpoint.
+ * Включить принудительно (UI-превью, без рабочего OAuth): NEXT_PUBLIC_YANDEX_ID_LOGIN=1.
+ */
 import Image from 'next/image'
-import { toast } from 'react-toastify'
-import { getYandexAuthUrl } from '@/graphql/queries/auth.service'
+
+const ENABLED = process.env.NEXT_PUBLIC_YANDEX_ID_LOGIN === '1'
 
 export default function YandexIdLoginButton() {
-  const handleYandexLogin = async () => {
-    try {
-      const redirectUri = `${window.location.origin}/login`
-      const authUrl = await getYandexAuthUrl(redirectUri)
-      sessionStorage.setItem('yandex_auth_return_url', window.location.pathname)
-      window.location.href = authUrl
-    } catch (error: unknown) {
-      console.error('Yandex auth error:', error)
-      const message =
-        error instanceof Error
-          ? error.message
-          : 'Ошибка при авторизации через Яндекс'
-      toast.error(message)
-    }
-  }
+  if (!ENABLED) return null
 
   return (
     <button
       type="button"
-      onClick={handleYandexLogin}
-      className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-full font-medium transition-colors duration-200 bg-black text-white hover:bg-gray-900 cursor-pointer"
+      disabled
+      title="Вход через Яндекс ID временно недоступен"
+      className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-full font-medium bg-black/40 text-white cursor-not-allowed"
     >
       <Image
         src="/images/Yandex_icon.png"

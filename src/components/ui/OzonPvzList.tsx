@@ -3,10 +3,12 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Search, MapPin, Loader2, ChevronDown, Check, Clock } from 'lucide-react'
 import type { OzonPickupPoint } from '@/types/ozonDelivery'
-import { listOzonCities, listOzonPickupPoints } from '@/lib/api/ozonDelivery'
+import { listOzonPickupPoints } from '@/lib/api/ozonDelivery'
 import OzonPvzMap from './OzonPvzMap'
-
-const PRIORITY_CITIES = ['Москва', 'Санкт-Петербург']
+import {
+  orderedYandexPvzCityNames,
+  catalogDisplayCityForUserCity,
+} from '@/lib/yandexCityGeo'
 
 export interface OzonPvzListProps {
   onChoose: (point: OzonPickupPoint) => void
@@ -19,11 +21,11 @@ export default function OzonPvzList({
   defaultCity = 'Москва',
   selectedPointId = null,
 }: OzonPvzListProps) {
-  const [cities, setCities] = useState<string[]>([])
-  const [citiesLoading, setCitiesLoading] = useState(true)
-  const [citiesError, setCitiesError] = useState<string | null>(null)
-
-  const [pickedCity, setPickedCity] = useState(defaultCity)
+  // Тот же локальный справочник, что у Яндекса — без сетевого list-cities
+  const cities = useMemo(() => orderedYandexPvzCityNames(), [])
+  const [pickedCity, setPickedCity] = useState(() =>
+    catalogDisplayCityForUserCity(defaultCity),
+  )
   const [citySearchQuery, setCitySearchQuery] = useState('')
   const [showCityDropdown, setShowCityDropdown] = useState(false)
 
@@ -33,41 +35,8 @@ export default function OzonPvzList({
   const [pvzSearchQuery, setPvzSearchQuery] = useState('')
 
   useEffect(() => {
-    let cancelled = false
-    setCitiesLoading(true)
-    setCitiesError(null)
-    listOzonCities()
-      .then((list) => {
-        if (cancelled) return
-        const sorted = [...list].sort((a, b) => {
-          const ai = PRIORITY_CITIES.indexOf(a)
-          const bi = PRIORITY_CITIES.indexOf(b)
-          if (ai !== -1 || bi !== -1) {
-            if (ai === -1) return 1
-            if (bi === -1) return -1
-            return ai - bi
-          }
-          return a.localeCompare(b, 'ru')
-        })
-        setCities(sorted)
-        if (sorted.length && !sorted.includes(pickedCity)) {
-          const match = sorted.find((c) =>
-            c.toLowerCase().includes(defaultCity.toLowerCase()),
-          )
-          if (match) setPickedCity(match)
-        }
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setCitiesError(e.message)
-      })
-      .finally(() => {
-        if (!cancelled) setCitiesLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    setPickedCity(catalogDisplayCityForUserCity(defaultCity))
+  }, [defaultCity])
 
   useEffect(() => {
     if (!pickedCity) return
@@ -125,144 +94,137 @@ export default function OzonPvzList({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  if (citiesLoading) {
-    return (
-      <div className="flex items-center justify-center gap-2 py-8 text-black/60">
-        <Loader2 className="w-5 h-5 animate-spin" />
-        <span>Загрузка городов Ozon...</span>
-      </div>
-    )
-  }
-
-  if (citiesError) {
-    return (
-      <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm">
-        {citiesError}
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-4">
       <div className="relative ozon-pvz-city-dropdown">
         <label className="text-sm font-medium mb-2 block">Город</label>
         <button
           type="button"
-          onClick={() => setShowCityDropdown((v) => !v)}
-          className="w-full h-11 px-4 rounded-xl border border-black/10 flex items-center justify-between text-left hover:border-black/20"
+          onClick={() => setShowCityDropdown(!showCityDropdown)}
+          className="w-full h-12 px-4 rounded-xl border border-black/10 text-base outline-none transition focus:border-black/30 flex items-center justify-between bg-white"
         >
-          <span>{pickedCity || 'Выберите город'}</span>
-          <ChevronDown className="w-4 h-4 text-black/40" />
+          <span className={pickedCity ? 'text-black' : 'text-black/40'}>
+            {pickedCity || 'Выберите город'}
+          </span>
+          <ChevronDown
+            className={`w-5 h-5 text-black/40 transition-transform ${showCityDropdown ? 'rotate-180' : ''}`}
+          />
         </button>
         {showCityDropdown && (
-          <div className="absolute z-20 mt-1 w-full bg-white border border-black/10 rounded-xl shadow-lg max-h-64 overflow-hidden">
+          <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-black/10 rounded-xl shadow-lg max-h-80 overflow-hidden">
             <div className="p-2 border-b border-black/5">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black/30" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black/40" />
                 <input
                   type="text"
                   value={citySearchQuery}
                   onChange={(e) => setCitySearchQuery(e.target.value)}
                   placeholder="Поиск города..."
-                  className="w-full h-9 pl-9 pr-3 rounded-lg border border-black/10 text-sm outline-none"
+                  className="w-full h-10 pl-9 pr-4 rounded-lg border border-black/10 text-sm outline-none focus:border-black/30"
+                  autoFocus
                 />
               </div>
             </div>
-            <ul className="max-h-48 overflow-y-auto py-1">
-              {filteredCities.map((city) => (
-                <li key={city}>
+            <div className="overflow-y-auto max-h-60">
+              {filteredCities.length === 0 ? (
+                <div className="p-4 text-center text-black/50 text-sm">Город не найден</div>
+              ) : (
+                filteredCities.map((city) => (
                   <button
+                    key={city}
                     type="button"
                     onClick={() => handleCitySelect(city)}
-                    className={`w-full px-4 py-2 text-left text-sm hover:bg-black/5 flex items-center justify-between ${
-                      pickedCity === city ? 'font-semibold' : ''
+                    className={`w-full px-4 py-3 text-left hover:bg-black/5 transition ${
+                      pickedCity === city ? 'bg-black/5 font-medium' : ''
                     }`}
                   >
                     {city}
-                    {pickedCity === city ? (
-                      <Check className="w-4 h-4 text-[#005BFF]" />
-                    ) : null}
                   </button>
-                </li>
-              ))}
-            </ul>
+                ))
+              )}
+            </div>
           </div>
         )}
       </div>
 
-      {pickedCity && points.length > 0 && !pointsLoading && (
-        <OzonPvzMap
-          points={filteredPoints.length > 0 ? filteredPoints : points}
-          onSelect={onChoose}
-          selectedPointId={selectedPointId}
-        />
+      {pointsError && (
+        <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm">
+          {pointsError}
+        </div>
       )}
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black/30" />
-        <input
-          type="text"
-          value={pvzSearchQuery}
-          onChange={(e) => setPvzSearchQuery(e.target.value)}
-          placeholder="Поиск пункта выдачи Ozon..."
-          className="w-full h-10 pl-9 pr-3 rounded-xl border border-black/10 text-sm outline-none"
-        />
-      </div>
-
-      {pointsLoading ? (
-        <div className="flex items-center justify-center gap-2 py-6 text-black/60">
+      {pointsLoading && points.length === 0 ? (
+        <div className="flex items-center justify-center gap-2 py-8 text-black/60">
           <Loader2 className="w-5 h-5 animate-spin" />
           <span>Загрузка ПВЗ Ozon...</span>
         </div>
-      ) : pointsError ? (
-        <div className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm">
-          {pointsError}
-        </div>
-      ) : filteredPoints.length === 0 ? (
-        <div className="p-3 rounded-xl border border-black/10 text-black/60 text-sm">
-          В этом городе нет пунктов выдачи Ozon.
-        </div>
       ) : (
-        <ul className="space-y-2 max-h-56 sm:max-h-80 overflow-y-auto overscroll-contain">
-          {filteredPoints.map((pvz) => {
-            const selected = selectedPointId === pvz.id
-            return (
-              <li key={pvz.id}>
-                <button
-                  type="button"
-                  onClick={() => onChoose(pvz)}
-                  className={`w-full text-left p-3 rounded-xl border transition ${
-                    selected
-                      ? 'border-[#005BFF] bg-[#005BFF]/5'
-                      : 'border-black/10 hover:border-black/20 hover:bg-black/[0.02]'
-                  }`}
-                >
-                  <div className="flex items-start gap-2">
-                    <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-[#005BFF]" />
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium text-sm">{pvz.name}</div>
-                      <div className="text-xs text-black/50 mt-0.5 break-words">
-                        {pvz.address.fullAddress ||
-                          [pvz.address.city, pvz.address.address]
-                            .filter(Boolean)
-                            .join(', ')}
-                      </div>
-                      {pvz.workingHours ? (
-                        <div className="flex items-center gap-1 text-xs text-black/40 mt-1">
-                          <Clock className="w-3 h-3" />
-                          <span>{pvz.workingHours}</span>
-                        </div>
+        <>
+          {pointsLoading && points.length > 0 && (
+            <div className="flex items-center gap-2 text-sm text-black/50">
+              <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+              Обновление списка для выбранного города…
+            </div>
+          )}
+          {points.length > 0 && (
+            <OzonPvzMap
+              points={filteredPoints}
+              onSelect={onChoose}
+              selectedPointId={selectedPointId}
+            />
+          )}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black/40" />
+            <input
+              type="text"
+              value={pvzSearchQuery}
+              onChange={(e) => setPvzSearchQuery(e.target.value)}
+              placeholder="Поиск ПВЗ по адресу или названию"
+              className="w-full h-11 pl-9 pr-4 rounded-xl border border-black/10 text-sm outline-none focus:border-black/30"
+            />
+          </div>
+          <div className="text-xs text-black/40">Найдено: {filteredPoints.length}</div>
+          <ul className="space-y-2 max-h-64 overflow-y-auto">
+            {filteredPoints.map((p) => {
+              const selected = selectedPointId === String(p.id)
+              return (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    onClick={() => onChoose(p)}
+                    className={`w-full text-left p-3 rounded-xl border transition ${
+                      selected
+                        ? 'border-green-600 bg-green-50'
+                        : 'border-black/10 hover:border-black/25'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-medium text-sm">{p.name}</span>
+                      {selected ? (
+                        <Check className="w-4 h-4 text-green-700 shrink-0" />
                       ) : null}
                     </div>
-                    {selected ? (
-                      <Check className="w-4 h-4 text-[#005BFF] shrink-0" />
+                    <div className="text-xs text-black/50 mt-1 flex gap-1">
+                      <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      {p.address.fullAddress || p.address.address || '—'}
+                    </div>
+                    {p.workingHours ? (
+                      <div className="text-xs text-black/40 mt-1 flex gap-1">
+                        <Clock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                        {p.workingHours}
+                      </div>
                     ) : null}
-                  </div>
-                </button>
-              </li>
-            )
-          })}
-        </ul>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+          {!pointsLoading && filteredPoints.length === 0 && !pointsError ? (
+            <div className="text-center py-6 text-black/50 text-sm">
+              В этом городе пункты не найдены или измените поиск.
+            </div>
+          ) : null}
+        </>
       )}
     </div>
   )

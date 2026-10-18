@@ -1,51 +1,4 @@
-import { graphqlRequest } from '../client'
-
-export interface FaqAssignedAttribute {
-  attribute: {
-    id: string
-    slug: string
-    name: string
-  }
-  fileValue?: {
-    url: string
-  }
-  textValue?: string
-}
-
-export interface FaqPageNode {
-  id: string
-  slug: string
-  title: string
-  publishedAt?: string | null
-  isPublished?: boolean
-  content?: string | null
-  assignedAttributes: FaqAssignedAttribute[]
-  pageType?: {
-    id: string
-    name: string
-    slug: string
-  }
-}
-
-interface FaqPagesConnection {
-  pages: {
-    edges: {
-      node: FaqPageNode
-    }[]
-  }
-}
-
-interface PageTypesConnection {
-  pageTypes: {
-    edges: {
-      node: {
-        id: string
-        name: string
-        slug: string
-      }
-    }[]
-  }
-}
+import { getFaqItems as fetchNestFaqItems } from '@/api/settingsApi'
 
 export interface FaqItem {
   id: string
@@ -54,120 +7,43 @@ export interface FaqItem {
   answer: string
 }
 
-export async function getAllFaqs(): Promise<FaqItem[]> {
-  const pageTypeQuery = `
-    query GetFaqPageType {
-      pageTypes(first: 100) {
-        edges {
-          node {
-            id
-            name
-            slug
-          }
-        }
-      }
-    }
-  `
+/** Корп. Telegram — как в Header / Footer / «Связаться». */
+const TELEGRAM_CORP_HREF = 'https://t.me/vspomni_corp'
+const TELEGRAM_CORP_LINK = `<a href="${TELEGRAM_CORP_HREF}" target="_blank" rel="noopener noreferrer">онлайн-чате Telegram</a>`
 
-  const pageTypesData = await graphqlRequest<PageTypesConnection>(pageTypeQuery)
-  const faqPageType = pageTypesData.pageTypes.edges.find(
-    (e) =>
-      e.node.name.toLowerCase() === 'faq' ||
-      e.node.slug.toLowerCase() === 'faq',
-  )
+const WHOLESALE_ANSWER_HTML =
+  `Мы предоставляем специальные условия для оптовых заказов. Свяжитесь, пожалуйста, с менеджером для получения информации по ценам и условиям в ${TELEGRAM_CORP_LINK}.`
 
-  if (!faqPageType) {
-    return []
+function isWholesaleFaq(question: string): boolean {
+  const q = question.toLowerCase()
+  return q.includes('оптов') || q.includes('оптовый')
+}
+
+/** Гарантируем кликабельный Telegram в ответе про опт. */
+export function enrichFaqAnswer(question: string, answer: string): string {
+  if (!isWholesaleFaq(question)) return answer
+  if (/онлайн-чате\s+Telegram/i.test(answer)) {
+    return answer.replace(/онлайн-чате\s+Telegram/gi, TELEGRAM_CORP_LINK)
   }
+  if (/t\.me\//i.test(answer)) return answer
+  return WHOLESALE_ANSWER_HTML
+}
 
-  const pagesQuery = `
-    query GetAllFaqs($first: Int!, $pageTypeId: ID!) {
-      pages(first: $first, where: { pageType: { eq: $pageTypeId } }) {
-        edges {
-          node {
-            id
-            slug
-            title
-            publishedAt
-            isPublished
-            content
-            pageType {
-              id
-              name
-              slug
-            }
-            assignedAttributes {
-              attribute {
-                id
-                slug
-                name
-              }
-              ... on AssignedFileAttribute {
-                fileValue: value {
-                  url
-                }
-              }
-              ... on AssignedTextAttribute {
-                textValue: value
-              }
-            }
-          }
-        }
-      }
-    }
-  `
-
-  const pagesData = await graphqlRequest<FaqPagesConnection>(pagesQuery, {
-    first: 100,
-    pageTypeId: faqPageType.node.id,
-  })
-
-  const parseEditorJsContent = (content: string | null | undefined): string => {
-    if (!content) return ''
-
-    try {
-      const parsed = typeof content === 'string' ? JSON.parse(content) : content
-      if (parsed && parsed.blocks && Array.isArray(parsed.blocks)) {
-        return parsed.blocks
-          .map((block: any) => {
-            if (block.type === 'paragraph' && block.data?.text) {
-              return block.data.text
-            }
-            return ''
-          })
-          .filter((text: string) => text)
-          .join(' ')
-      }
-    } catch (e) {
-      // Если не JSON, возвращаем как есть
-      return content
-    }
-
-    return content
-  }
-
-  const faqs = pagesData.pages.edges
-    .filter((e) => e.node.isPublished === true)
-    .map((e) => {
-      const node = e.node
-      const shortTextAttr = node.assignedAttributes.find(
-        (attr) =>
-          attr.attribute.slug === 'short-text' ||
-          attr.attribute.slug === 'shorttext' ||
-          attr.attribute.name?.toLowerCase().includes('короткий') ||
-          attr.attribute.name?.toLowerCase().includes('short'),
-      )
-
-      const rawAnswer = node.content || shortTextAttr?.textValue || ''
-      const answer = parseEditorJsContent(rawAnswer)
-
+/** Nest `GET /settings/faq` → `{ id, title, shortText, answer }` (формат Saleor-версии UI). */
+export async function getFaqItems(): Promise<FaqItem[]> {
+  const rows = await fetchNestFaqItems()
+  return rows
+    .filter((r) => r.question?.trim() && r.answer?.trim())
+    .map((r) => {
+      const title = r.question.trim()
       return {
-        id: node.id,
-        title: node.title,
-        shortText: shortTextAttr?.textValue || node.title,
-        answer: answer,
+        id: r.id,
+        title,
+        shortText: title,
+        answer: enrichFaqAnswer(title, r.answer),
       }
     })
-
-  return faqs
 }
+
+/** Имя, которое уже используют `app/page.tsx` и `stores/useFaq.ts`. */
+export const getAllFaqs = getFaqItems

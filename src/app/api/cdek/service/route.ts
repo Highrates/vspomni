@@ -118,41 +118,49 @@ export async function GET(req: NextRequest) {
   const action = searchParams.get('action')
 
   try {
-    // ✅ CITIES WITH CACHE
+    // ✅ CITIES — при city/postal_code/code не тянем весь справочник (size=10000 медленно)
     if (method === 'location/cities') {
-      const cityFilter = searchParams.get('city')?.toLowerCase()
+      const cityFilter = searchParams.get('city')?.trim() || ''
+      const postal = searchParams.get('postal_code')?.trim() || ''
+      const code = searchParams.get('code')?.trim() || ''
+      const country = searchParams.get('country_codes') || 'RU'
+      const sizeRaw = Number(searchParams.get('size') || 0)
+      const filteredQuery = Boolean(cityFilter || postal || code)
 
-      // Если кеш есть и нужна фильтрация — фильтруем из кеша
-      if (citiesCache && Date.now() - citiesCacheTime < 86400000) {
-        if (cityFilter) {
-          const filtered = citiesCache.filter((c: any) =>
-            c.city?.toLowerCase().includes(cityFilter)
-          )
-          return json(filtered)
+      if (!filteredQuery) {
+        if (citiesCache && Date.now() - citiesCacheTime < 86400000) {
+          return json(citiesCache)
         }
-        return json(citiesCache)
+        const res = await cdekRequest('location/cities', {
+          params: { size: 10000, country_codes: country },
+        })
+        const data = await res.json()
+        const list = Array.isArray(data) ? data : data.items || []
+        citiesCache = list
+        citiesCacheTime = Date.now()
+        return json(list)
       }
 
-      const res = await cdekRequest('location/cities', {
-        params: {
-          size: 10000,
-          country_codes: searchParams.get('country_codes') || 'RU',
-        },
-      })
+      // Узкий запрос в CDEK (подсказки / checkout)
+      if (citiesCache && Date.now() - citiesCacheTime < 86400000 && cityFilter && !postal && !code) {
+        const q = cityFilter.toLowerCase()
+        const filtered = citiesCache
+          .filter((c: any) => c.city?.toLowerCase().includes(q))
+          .slice(0, sizeRaw > 0 ? sizeRaw : 40)
+        if (filtered.length > 0) return json(filtered)
+      }
 
+      const params: Record<string, string | number> = {
+        country_codes: country,
+        size: sizeRaw > 0 ? Math.min(sizeRaw, 100) : 40,
+      }
+      if (cityFilter) params.city = cityFilter
+      if (postal) params.postal_code = postal
+      if (code) params.code = code
+
+      const res = await cdekRequest('location/cities', { params })
       const data = await res.json()
       const list = Array.isArray(data) ? data : data.items || []
-
-      citiesCache = list
-      citiesCacheTime = Date.now()
-
-      if (cityFilter) {
-        const filtered = list.filter((c: any) =>
-          c.city?.toLowerCase().includes(cityFilter)
-        )
-        return json(filtered)
-      }
-
       return json(list)
     }
 

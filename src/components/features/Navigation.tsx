@@ -1,15 +1,21 @@
 import Link from 'next/link'
+import { SITE_PRIMARY_NAV } from '@/lib/seo/siteNav'
 
 export default function Navigation() {
   return (
-    <nav className="hidden md:flex items-center gap-8 text-[16px] font-medium text-black/80">
-      <Link href="/catalog" className="hover:text-black transition-colors">
-        Каталог
-      </Link>
-      <Link href="/#vse-aromaty" className="hover:text-black transition-colors">
-        Все ароматы
-      </Link>
-      {/* Временно скрыты пункты "Партнеры" и "Блог" */}
+    <nav
+      className="hidden md:flex items-center gap-6 lg:gap-8 text-[16px] font-medium text-black/80"
+      aria-label="Основное меню"
+    >
+      {SITE_PRIMARY_NAV.map((item) => (
+        <Link
+          key={item.href}
+          href={item.href}
+          className="hover:text-black transition-colors whitespace-nowrap"
+        >
+          {item.label}
+        </Link>
+      ))}
       <Link
         href="https://t.me/vspomni_corp"
         target="_blank"
@@ -18,7 +24,6 @@ export default function Navigation() {
       >
         Связаться
       </Link>
-      <span className="text-black font-semibold">(3)</span>
     </nav>
   )
 }

@@ -1,8 +1,9 @@
 import type { OrderApi, OrderDetail, OrderItem, OrderListItem } from './types'
 
+/** Nest отдаёт суммы в рублях (Saleor REST — в копейках); имя оставлено для совместимости. */
 export function kopecksToRubles(amount: number | undefined | null): number {
   if (!amount) return 0
-  return Math.round(amount / 100)
+  return Math.round(amount)
 }
 
 export function formatOrderDate(iso: string): string {

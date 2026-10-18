@@ -1,19 +1,14 @@
 import axios from 'axios'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL
-
+/**
+ * Legacy axios helper — предпочтите `@/api/apiClient`.
+ * JWT в браузере: httpOnly cookie через same-origin `/api/v1` BFF (не localStorage).
+ */
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: '/api/v1',
   timeout: 10000,
   headers: { 'Content-Type': 'application/json' },
-})
-
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
+  withCredentials: true,
 })
 
 export default api

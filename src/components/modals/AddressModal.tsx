@@ -10,6 +10,7 @@ import { createAddress, updateAddress } from '@/graphql/queries/adress.service'
 import PhoneInput from '../ui/PhoneInput'
 import { formatPhoneInputValue, isValidRuPhone } from '@/lib/ruPhone'
 import { useUserStore } from '@/stores/useUser'
+import { useAuthStore } from '@/stores/useAuth'
 import CdekPvzList, { type CdekPvzInfo } from '../ui/CdekPvzList'
 import YandexPvzList from '../ui/YandexPvzList'
 import OzonPvzList from '../ui/OzonPvzList'
@@ -96,6 +97,8 @@ export default function AddressModal({
   /** id пункта из API Яндекса — для расчёта с type=pvz */
   const [yandexPvzId, setYandexPvzId] = useState<string | null>(null)
   const [ozonPvzId, setOzonPvzId] = useState<string | null>(null)
+  /** Код ПВЗ СДЭК (pvz.code) — уходит в Nest как pvzCode */
+  const [cdekPvzId, setCdekPvzId] = useState<string | null>(null)
   const [cdekDropoff, setCdekDropoff] = useState<'pvz' | 'courier'>('pvz')
   const [yandexDropoff, setYandexDropoff] = useState<'pvz' | 'courier'>('pvz')
   const [ozonDropoff, setOzonDropoff] = useState<'pvz' | 'courier'>('pvz')
@@ -115,6 +118,7 @@ export default function AddressModal({
         )
         setDeliveryService(meta?.carrier ?? 'cdek')
         const carrier = meta?.carrier ?? 'cdek'
+        setCdekPvzId(carrier === 'cdek' ? meta?.cdekPvzId?.trim() || null : null)
 
         if (carrier === 'cdek') {
           const cdekCourier =
@@ -247,6 +251,7 @@ export default function AddressModal({
         setYandexPvzCoords(null)
         setYandexPvzId(null)
         setOzonPvzId(null)
+        setCdekPvzId(null)
         // Pre-fill for new address using User Profile data
         setFormData({
           ...initialFormState,
@@ -358,6 +363,9 @@ export default function AddressModal({
       const metaPayload: VspAddressMeta = {
         carrier: deliveryService,
         dropoff,
+        ...(deliveryService === 'cdek' && dropoff === 'pvz' && cdekPvzId?.trim()
+          ? { cdekPvzId: cdekPvzId.trim() }
+          : {}),
         ...(dropoff === 'courier' &&
         courierCoords &&
         Number.isFinite(courierCoords.lon) &&
@@ -409,34 +417,67 @@ export default function AddressModal({
         companyName: formData.companyName,
       }
 
+      const countryLabel =
+        formData.country === 'RU' ? 'Россия' : formData.country
+      const toAddressInfo = (id: string): AddressInfo => ({
+        id,
+        firstName: addressInput.firstName,
+        lastName: addressInput.lastName,
+        phone: addressInput.phone,
+        country: { code: formData.country, country: countryLabel },
+        countryArea: addressInput.countryArea,
+        city: addressInput.city,
+        cityArea: addressInput.cityArea,
+        streetAddress1: addressInput.streetAddress1,
+        streetAddress2: streetAddress2WithMeta,
+        postalCode: addressInput.postalCode,
+        companyName: addressInput.companyName,
+        isDefaultBillingAddress: formData.isDefaultShippingAddress,
+        isDefaultShippingAddress: formData.isDefaultShippingAddress,
+      })
+
+      // Гость: адрес только в UI checkout (Nest /account/addresses требует JWT)
+      const isGuest = !useAuthStore.getState().isAuthenticated
+      const isLocalGuestAddress =
+        isGuest ||
+        (isEditMode && Boolean(addressToEdit?.id?.startsWith('guest-')))
+
+      if (isLocalGuestAddress) {
+        if (isEditMode && addressToEdit && onAddressUpdated) {
+          onAddressUpdated(toAddressInfo(addressToEdit.id))
+          toast.success('Адрес успешно обновлен!')
+        } else {
+          const id =
+            typeof crypto !== 'undefined' && 'randomUUID' in crypto
+              ? `guest-${crypto.randomUUID()}`
+              : `guest-${Date.now()}`
+          onAddressAdded(toAddressInfo(id))
+          toast.success('Адрес успешно добавлен!')
+        }
+        onClose()
+        return
+      }
+
       if (isEditMode && addressToEdit) {
-        // --- EDIT EXISTING ADDRESS ---
-        // Note: updateAddress usually returns a list of addresses or the updated user object
-        // Adjust this depending on exactly what your service returns. 
-        // Assuming it returns the updated list like createAddress based on your context.
         const updatedAddresses = await updateAddress(
           addressToEdit.id,
           addressInput
         )
 
-        // Find the updated address in the returned list
         const updatedAddress = updatedAddresses.find((a: AddressInfo) => a.id === addressToEdit.id)
 
         if (onAddressUpdated && updatedAddress) {
           onAddressUpdated(updatedAddress)
         } else if (onAddressUpdated) {
-          // Fallback if the backend returns array but ID changed or logic differs
           onAddressUpdated(updatedAddresses.find((a: AddressInfo) => a.streetAddress1 === addressInput.streetAddress1) || updatedAddresses[0])
         }
 
         toast.success('Адрес успешно обновлен!')
       } else {
-        // --- CREATE NEW ADDRESS ---
         const updatedAddresses = await createAddress(
           addressInput,
           formData.isDefaultShippingAddress,
         )
-        // Новый адрес обычно последний в ответе Saleor; передаём полный список, чтобы родитель обновил список и выбрал новый (как с СДЭК)
         const newAddress = updatedAddresses[updatedAddresses.length - 1]
         onAddressAdded(newAddress, updatedAddresses)
         toast.success('Адрес успешно добавлен!')
@@ -464,6 +505,7 @@ export default function AddressModal({
 
   const handleCdekPvzChoose = (pvz: CdekPvzInfo) => {
     setCdekDropoff('pvz')
+    setCdekPvzId(pvz.id?.trim() || null)
     setCourierCoords(null)
     setYandexPvzCoords(null)
     setYandexPvzId(null)

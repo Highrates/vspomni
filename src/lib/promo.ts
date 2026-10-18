@@ -1,10 +1,17 @@
 import type { CartItem } from '@/types/cart'
 import { formatCurrency } from '@/lib/functions'
 
-export type PromoDiscountType = 'PERCENTAGE' | 'FIXED' | 'SHIPPING'
+/** Nest `PromoCodeType`: PERCENT | FIXED (Saleor SHIPPING удалён). */
+export type PromoDiscountType = 'PERCENTAGE' | 'FIXED'
 export type PromoValueType = 'PERCENTAGE' | 'FIXED'
-/** ORDER — весь заказ, PRODUCTS — отдельные товары, CHEAPEST — один самый дешёвый товар */
-export type PromoScope = 'ORDER' | 'PRODUCTS' | 'CHEAPEST' | 'SHIPPING'
+/** Nest scope: null → ORDER, CATEGORY|PRODUCTS → PRODUCTS (UI). */
+export type PromoScope = 'ORDER' | 'PRODUCTS'
+
+/**
+ * Front до релиза сертификатов: только промокоды (`POST /promo/validate`).
+ * Gift validate / dual-input / giftCertificateCode / purchase page — после релиза.
+ */
+export const PROMO_ONLY = true as const
 
 export interface PromoState {
   appliedPromoCode: string | null
@@ -12,18 +19,18 @@ export interface PromoState {
   discountValueType?: PromoValueType
   discountValue?: number
   promoScope?: PromoScope
-  /** Скидка на товары, рассчитанная Saleor для корзины с подписью promoCartSignature */
+  /** Скидка на товары, рассчитанная бэкендом для корзины с подписью promoCartSignature */
   discountAmount?: number
   promoCartSignature?: string | null
 }
 
-/** Ответ /voucher/validate/ */
+/** Результат проверки промокода (Nest `POST /promo/validate`, см. mapNestPromoToValidation) */
 export interface PromoValidationResult {
   code: string
   discountType: PromoDiscountType
   discountValueType: PromoValueType
   discountValue: number
-  /** Скидка на товары для отправленного состава корзины (0 для промокода на доставку) */
+  /** Скидка на товары для отправленного состава корзины */
   discountAmount: number
   scope: PromoScope
   minSpent: number | null
@@ -57,7 +64,7 @@ export function promoItemsDiscount(
   items: CartItem[],
   subtotal: number,
 ): number {
-  if (!promo.appliedPromoCode || promo.discountType === 'SHIPPING') return 0
+  if (!promo.appliedPromoCode) return 0
 
   const serverAmount = Number(promo.discountAmount) || 0
   if (promo.promoCartSignature && promo.promoCartSignature === cartSignature(items)) {
@@ -72,24 +79,6 @@ export function promoItemsDiscount(
   return Math.min(serverAmount, subtotal)
 }
 
-export function promoShippingDiscount(promo: PromoState, shippingPrice: number): number {
-  if (!promo.appliedPromoCode || promo.discountType !== 'SHIPPING') return 0
-  const shipping = Math.max(0, Number(shippingPrice) || 0)
-  const value = Number(promo.discountValue) || 0
-  if (promo.discountValueType === 'PERCENTAGE') {
-    return Math.min(shipping, round2((shipping * value) / 100))
-  }
-  return Math.min(shipping, value)
-}
-
-export function isFreeShippingPromo(promo: PromoState): boolean {
-  return (
-    promo.discountType === 'SHIPPING' &&
-    promo.discountValueType === 'PERCENTAGE' &&
-    (Number(promo.discountValue) || 0) >= 100
-  )
-}
-
 export function describePromo(promo: PromoState): string {
   const code = promo.appliedPromoCode
   if (!code) return ''
@@ -97,17 +86,6 @@ export function describePromo(promo: PromoState): string {
   const amount =
     promo.discountValueType === 'PERCENTAGE' ? `${value}%` : `${formatCurrency(value)} ₽`
 
-  if (promo.discountType === 'SHIPPING') {
-    return isFreeShippingPromo(promo)
-      ? `${code} — бесплатная доставка`
-      : `${code} — скидка ${amount} на доставку`
-  }
-
-  const scopeSuffix =
-    promo.promoScope === 'PRODUCTS'
-      ? ' на часть товаров'
-      : promo.promoScope === 'CHEAPEST'
-        ? ' на один товар'
-        : ''
+  const scopeSuffix = promo.promoScope === 'PRODUCTS' ? ' на часть товаров' : ''
   return `${code} — скидка ${amount}${scopeSuffix}`
 }

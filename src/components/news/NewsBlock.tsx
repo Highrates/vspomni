@@ -32,43 +32,45 @@ export default function NewsBlock() {
 
   if (loading) {
     return (
-      <section className="mb-4 sm:mb-6 md:mb-8 lg:mb-10 container  px-4 max-sm:px-2">
-        <div className="flex items-center justify-between mb-4 sm:mb-5 md:mb-6">
-          <h3 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none">
+      <section className="container mb-4 px-4 sm:mb-6 md:mb-8 lg:mb-10">
+        <div className="mb-4 flex items-center justify-between sm:mb-5 md:mb-6">
+          <h3 className="text-xl font-semibold select-none sm:text-[36px] md:text-[42px] lg:text-[48px]">
             Полезные материалы
           </h3>
         </div>
-        <div className="grid md:grid-cols-2 grid-cols-1 gap-5">
-          <div className="animate-pulse bg-gray-200 h-64 rounded-xl"></div>
-          <div className="animate-pulse bg-gray-200 h-64 rounded-xl"></div>
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="h-64 animate-pulse rounded-xl bg-gray-200" />
+          <div className="h-64 animate-pulse rounded-xl bg-gray-200" />
         </div>
       </section>
-    );
+    )
   }
 
   if (articles.length === 0) {
-    return null;
+    return null
   }
 
   return (
-    <section className="mb-4 sm:mb-6 md:mb-8 lg:mb-10  p-2">
-      <div className="flex items-center justify-between mb-4 sm:mb-5 md:mb-6">
-        <h3 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold select-none">
+    <section className="mb-4 px-4 sm:mb-6 sm:px-2 md:mb-8 lg:mb-10">
+      <div className="mb-4 flex items-center justify-between gap-3 sm:mb-5 md:mb-6">
+        <h3 className="min-w-0 text-xl font-semibold select-none sm:text-[36px] md:text-[42px] lg:text-[48px]">
           Полезные материалы
         </h3>
         <Link
           href="/news"
-          className="text-base text-black font-medium flex items-center"
+          className="flex shrink-0 items-center gap-1 whitespace-nowrap text-base font-medium text-black"
           aria-label="Смотреть все новости и публикации"
         >
-          <span className="text-md font-medium">Все публикации</span>
+          <span className="hidden text-md font-medium sm:inline">
+            Смотреть все
+          </span>
           <Image
             src="/to_right.svg"
             alt=""
             aria-hidden
             width={20}
             height={24}
-            className="ml-1 h-auto"
+            className="h-auto w-auto"
           />
         </Link>
       </div>

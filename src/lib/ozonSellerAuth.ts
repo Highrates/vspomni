@@ -52,7 +52,7 @@ function getRefreshToken(): string | undefined {
 function getRedirectUri(): string {
   const env = readEnv('OZON_OAUTH_REDIRECT_URI')
   if (env) return env
-  const site = readEnv('NEXT_PUBLIC_SALEOR_API_URL') || 'https://vspomni.store'
+  const site = readEnv('NEXT_PUBLIC_SITE_URL') || 'https://vspomni.store'
   return `${site.replace(/\/$/, '')}/api/ozon-delivery/oauth/callback`
 }
 
@@ -135,7 +135,7 @@ function missingCredentialsError(): string {
     return 'Ozon: задан OZON_SELLER_ID, но нет OZON_API_KEY в .env (seller.ozon.ru → API ключи)'
   }
   return (
-    'Ozon: добавьте OZON_SELLER_ID и OZON_API_KEY из seller.ozon.ru → API ключи, затем npm run build && pm2 restart vspomni-front --update-env'
+    'Ozon: добавьте OZON_SELLER_ID и OZON_API_KEY из seller.ozon.ru → API ключи, затем пересоберите Front и systemctl restart vspomni-front'
   )
 }
 

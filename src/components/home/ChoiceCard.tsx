@@ -26,9 +26,11 @@ export default function ChoiceCard({ product }: ChoiceCardProps) {
         />
 
         {/* Имя и дата над плашкой */}
-        <div className="absolute left-[16px] bottom-[86px] text-white text-[14px] leading-[18px] font-semibold drop-shadow-[0_2px_6px_rgba(0,0,0,0.7)] select-none">
-          {product.star} • {product.date}
-        </div>
+        {(product.star || product.date) && (
+          <div className="absolute left-[16px] bottom-[86px] text-white text-[14px] leading-[18px] font-semibold drop-shadow-[0_2px_6px_rgba(0,0,0,0.7)] select-none">
+            {[product.star, product.date].filter(Boolean).join(' • ')}
+          </div>
+        )}
 
         {/* Плашка с товаром */}
         <div className="absolute left-[8px] right-[8px] bottom-[8px] flex items-center gap-[10px] p-[8px] bg-white rounded-[12px]">

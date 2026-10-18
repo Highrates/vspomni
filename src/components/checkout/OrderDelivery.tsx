@@ -1,8 +1,9 @@
 'use client'
 
-import { getMeInfo } from '@/graphql/queries/auth.service'
+import { getMeInfo } from '@/api/authApi'
 import { AddressInfo } from '@/graphql/types/auth.types'
 import { useEffect, useState } from 'react'
+import { useAuthStore } from '@/stores/useAuth'
 import AddressModal from '../modals/AddressModal'
 import { Trash } from 'lucide-react'
 
@@ -48,6 +49,7 @@ import { useUserStore } from '@/stores/useUser'
 import { useCheckoutStore } from '@/stores/useCheckout'
 import { formatPhoneInputValue } from '@/lib/ruPhone'
 import { loadPersistedCheckoutDeliveryAddress } from '@/lib/checkout/deliveryAddress'
+import { reconcileShippingWithNest } from '@/lib/checkout/nestCheckout'
 
 /** Подставляем имя/фамилию/телефон из адреса доставки в форму checkout */
 function syncCheckoutUserFromAddress(addr: AddressInfo) {
@@ -86,9 +88,10 @@ export default function OrderDelivery() {
     setShippingPrice(0)
   }
 
-  const succeedShipping = (
+  const succeedShipping = async (
     price: number,
     carrier: 'cdek' | 'yandex' | 'ozon',
+    address: AddressInfo,
   ) => {
     if (!Number.isFinite(price) || price < 0) {
       failShipping('Не удалось рассчитать стоимость доставки', carrier)
@@ -96,13 +99,37 @@ export default function OrderDelivery() {
     }
     setShippingCarrier(carrier)
     setShippingError(null)
-    if (price === 0) {
+
+    // Nest — источник правды (surcharge + server reprice). Показываем его cost до Pay.
+    // Fail-hard для всех перевозчиков: иначе BFF-цена ≠ Nest → SHIPPING_CHANGED на «Оплатить».
+    const user = useUserStore.getState().user
+    const nest = await reconcileShippingWithNest({
+      items: useCartStore.getState().items,
+      address,
+      contact: {
+        firstName: user?.name,
+        lastName: user?.familyName,
+        phone: user?.phone,
+      },
+      clientEstimate: Math.round(price),
+    })
+    if (!nest) {
+      failShipping(
+        'Не удалось подтвердить стоимость доставки на сервере. Попробуйте позже.',
+        carrier,
+      )
+      return
+    }
+    const finalPrice = nest.cost
+    const isFree = nest.freePvz || finalPrice === 0
+
+    if (isFree) {
       setShippingIsFree(true)
       setShippingPrice(0)
       return
     }
     setShippingIsFree(false)
-    setShippingPrice(Math.round(price))
+    setShippingPrice(finalPrice)
   }
   const setDeliveryAddress = useCheckoutStore((s) => s.setDeliveryAddress)
 
@@ -166,7 +193,7 @@ export default function OrderDelivery() {
           )
           if (cheapest?.price?.total_price != null) {
             const sum = parseYandexOfferPrice(cheapest.price.total_price)
-            succeedShipping(sum, 'yandex')
+            await succeedShipping(sum, 'yandex', address)
             return
           }
         } catch (yErr) {
@@ -214,7 +241,7 @@ export default function OrderDelivery() {
               ...(shipmentLines.length > 0 ? { shipmentLines } : {}),
             })
             const amount = parseOzonAmount(res.amount)
-            succeedShipping(amount, 'ozon')
+            await succeedShipping(amount, 'ozon', address)
             return
           }
 
@@ -234,7 +261,7 @@ export default function OrderDelivery() {
               ...(shipmentLines.length > 0 ? { shipmentLines } : {}),
             })
             const amount = parseOzonAmount(res.amount)
-            succeedShipping(amount, 'ozon')
+            await succeedShipping(amount, 'ozon', address)
             return
           }
 
@@ -341,7 +368,7 @@ export default function OrderDelivery() {
             tariffPool[0],
           )
           const sum = Number(cheapest.delivery_sum)
-          succeedShipping(sum, 'cdek')
+          await succeedShipping(sum, 'cdek', address)
           return
         }
       }
@@ -357,6 +384,11 @@ export default function OrderDelivery() {
   }
 
   useEffect(() => {
+    // Гость: сохранённых адресов нет — не дергаем /auth/me и /account/* (иначе 401 в консоли).
+    if (!useAuthStore.getState().isAuthenticated) {
+      setLoading(false)
+      return
+    }
     getMeInfo()
       .then((data) => {
         if (data && data.addresses) {
@@ -433,21 +465,33 @@ export default function OrderDelivery() {
     setModalVisible(true)
   }
 
+  const removeAddressLocally = () => {
+    toast.success('Адрес удален')
+    setAddresses((prev) => {
+      const remaining = prev.filter((addr) => addr.id !== selected)
+      if (remaining.length > 0) {
+        const def =
+          remaining.find((a) => a.isDefaultShippingAddress) || remaining[0]
+        setSelected(def.id)
+        syncCheckoutUserFromAddress(def)
+      } else {
+        setSelected('')
+      }
+      return remaining
+    })
+  }
+
   const handleDeleteAddress = () => {
+    // Гостевой / локальный адрес — без Nest
+    if (
+      !useAuthStore.getState().isAuthenticated ||
+      selected.startsWith('guest-')
+    ) {
+      removeAddressLocally()
+      return
+    }
     deleteAddress(selected).then(() => {
-      toast.success('Адрес удален')
-      setAddresses(prev => {
-        const remaining = prev.filter(addr => addr.id !== selected)
-        if (remaining.length > 0) {
-          const def =
-            remaining.find(a => a.isDefaultShippingAddress) || remaining[0]
-          setSelected(def.id)
-          syncCheckoutUserFromAddress(def)
-        } else {
-          setSelected('')
-        }
-        return remaining
-      })
+      removeAddressLocally()
     })
   }
 

@@ -1,6 +1,13 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { signUpService, getToken, verifyToken } from '@/graphql/queries/auth.service'
+import {
+  signUpService,
+  getToken,
+  verifyToken,
+  revokeSession,
+} from '@/api/authApi'
+import { setUnauthorizedHandler } from '@/api/authSession'
+import { clearAuthStorage } from '@/api/apiClient'
 
 interface AuthState {
   isAuthenticated: boolean
@@ -8,7 +15,7 @@ interface AuthState {
 
   login: (email: string, password: string) => Promise<void>
   logout: () => void
-  signUp: (email: string, password: string) => Promise<void>
+  signUp: (email: string, password: string, consentMarketing?: boolean) => Promise<void>
   checkAuth: () => Promise<void>
 }
 
@@ -19,32 +26,39 @@ export const useAuthStore = create<AuthState>()(
       email: null,
       
       checkAuth: async () => {
-        const token = localStorage.getItem('token')
-        if (!token || token === 'null' || token === 'undefined') {
-          set({ isAuthenticated: false, email: null })
-          return
+        // Миграция: старый localStorage.token → BFF выставит httpOnly cookie на /auth/me
+        try {
+          const legacy = localStorage.getItem('token')
+          if (legacy && legacy !== 'null' && legacy !== 'undefined') {
+            const ok = await verifyToken(legacy) // Bearer → BFF ставит cookie
+            localStorage.removeItem('token')
+            if (ok) {
+              set({ isAuthenticated: true })
+              return
+            }
+          }
+        } catch {
+          try {
+            localStorage.removeItem('token')
+          } catch {
+            /* ignore */
+          }
         }
 
-        try {
-          await verifyToken(token)
-          // Token is valid, keep authenticated state
-          // Email will be fetched from user store
+        // Cookie-сессия: GET /auth/me через BFF (без Bearer в JS)
+        const valid = await verifyToken()
+        if (valid) {
           set({ isAuthenticated: true })
-        } catch (error) {
-          // Token invalid or expired
-          localStorage.removeItem('token')
-          localStorage.removeItem('refreshToken')
+        } else {
+          clearAuthStorage()
           set({ isAuthenticated: false, email: null })
         }
       },
       login: async (email, password) => {
         try {
-          const result = await getToken(email, password)
+          await getToken(email, password)
+          // JWT в httpOnly cookie ставит BFF /api/v1/auth/login
 
-          localStorage.setItem('token', result.token)
-          localStorage.setItem('refreshToken', result.refreshToken || '')
-
-          // Сброс профиля при смене аккаунта (persist мог держать чужой телефон)
           const prevEmail = get().email
           if (
             !prevEmail ||
@@ -65,8 +79,9 @@ export const useAuthStore = create<AuthState>()(
         }
       },
       logout: () => {
-        localStorage.removeItem('token')
-        localStorage.removeItem('refreshToken')
+        // Серверный revoke (tokenVersion++) — fire-and-forget; локальная сессия чистится сразу
+        void revokeSession()
+        clearAuthStorage()
         localStorage.removeItem('registration_phone')
 
         set({ isAuthenticated: false, email: null })
@@ -77,10 +92,10 @@ export const useAuthStore = create<AuthState>()(
           useUserStore.getState().clearUser()
         })
       },
-      signUp: async (email, password) => {
-        // В текущей схеме регистрация всегда через подтверждение email,
-        // поэтому просто дергаем signUpService и НЕ логиним пользователя сразу.
-        await signUpService(email, password)
+      signUp: async (email, password, consentMarketing = false) => {
+        // Регистрация Nest: register/start (OTP на email) → verify → complete.
+        // Пользователя здесь не логиним.
+        await signUpService(email, password, consentMarketing)
       },
     }),
     {
@@ -88,3 +103,12 @@ export const useAuthStore = create<AuthState>()(
     },
   ),
 )
+
+// Любой 401 от Nest (apiFetch) → сбрасываем стор (токен уже очищен в apiClient).
+if (typeof window !== 'undefined') {
+  setUnauthorizedHandler(() => {
+    if (useAuthStore.getState().isAuthenticated) {
+      useAuthStore.setState({ isAuthenticated: false, email: null })
+    }
+  })
+}

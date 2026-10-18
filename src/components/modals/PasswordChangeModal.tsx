@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { motion } from 'framer-motion'
 import { toast } from 'react-toastify'
+import { changePassword } from '@/api/authApi'
+import { useAuthStore } from '@/stores/useAuth'
 
 interface PasswordChangeModalProps {
   visible: boolean
@@ -82,27 +84,13 @@ export default function PasswordChangeModal({
 
     setLoading(true)
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_SALEOR_API_URL ?? ''
-      const response = await fetch(`${baseUrl}/auth/change-password/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-        },
-        body: JSON.stringify({
-          oldPassword: formData.oldPassword,
-          newPassword: formData.newPassword,
-        }),
-      })
+      // Nest: POST /account/me/password — сессия отзывается, нужен повторный вход
+      await changePassword(formData.oldPassword, formData.newPassword)
+      useAuthStore.setState({ isAuthenticated: false, email: null })
 
-      const data = await response.json().catch(() => ({}))
-
-      if (!response.ok || !data.ok) {
-        throw new Error(data.error || 'Ошибка при смене пароля')
-      }
-
-      toast.success('Пароль успешно изменен')
+      toast.success('Пароль успешно изменен. Войдите с новым паролем.')
       handleClose()
+      window.location.assign('/login')
     } catch (error: any) {
       console.error('Password change error:', error)
       toast.error(error.message || 'Ошибка при смене пароля')

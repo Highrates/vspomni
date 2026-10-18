@@ -91,44 +91,20 @@ export default function YandexPvzList({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const showBlockingLoader = loading && points.length === 0 && !error
-
-  if (showBlockingLoader) {
-    return (
-      <div className="flex items-center justify-center gap-2 py-8 text-black/60">
-        <Loader2 className="w-5 h-5 animate-spin" />
-        <span>Загрузка пунктов выдачи Яндекса...</span>
-      </div>
-    )
-  }
-
-  if (error && points.length === 0) {
-    return (
-      <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm">
-        {error}
-      </div>
-    )
-  }
-
-  if (!loading && !error && !points.length) {
-    return (
-      <div className="p-4 rounded-xl border border-black/10 text-black/60 text-sm">
-        Список ПВЗ пуст. Проверьте настройки доставки Яндекса.
-      </div>
-    )
-  }
-
+  // Города — локальный справочник; не блокируем UI на загрузке ПВЗ
   return (
     <div className="flex flex-col gap-4">
-      {error && points.length > 0 && (
+      {error && (
         <div className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm">
           {error}
         </div>
       )}
-      {loading && points.length > 0 && (
+      {loading && (
         <div className="flex items-center gap-2 text-sm text-black/50">
           <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-          Обновление списка для выбранного города…
+          {points.length > 0
+            ? 'Обновление списка для выбранного города…'
+            : 'Загрузка пунктов выдачи Яндекса…'}
         </div>
       )}
 
@@ -188,11 +164,18 @@ export default function YandexPvzList({
 
       {pickedCity && (
         <>
-          <YandexPvzMap
-            points={pvzInCity}
-            onSelect={onChoose}
-            selectedPointId={selectedPointId}
-          />
+          {!loading && !error && points.length === 0 ? (
+            <div className="p-4 rounded-xl border border-black/10 text-black/60 text-sm">
+              Список ПВЗ пуст. Проверьте настройки доставки Яндекса.
+            </div>
+          ) : null}
+          {points.length > 0 ? (
+            <YandexPvzMap
+              points={pvzInCity}
+              onSelect={onChoose}
+              selectedPointId={selectedPointId}
+            />
+          ) : null}
           <div className="flex flex-col">
             <label className="text-sm font-medium mb-2 flex items-center gap-2">
               <Search className="w-4 h-4" />
@@ -204,11 +187,17 @@ export default function YandexPvzList({
               onChange={(e) => setPvzSearchQuery(e.target.value)}
               placeholder="Адрес или название ПВЗ"
               className="h-12 px-4 rounded-xl border border-black/10 text-base outline-none transition focus:border-black/30"
+              disabled={loading && points.length === 0}
             />
           </div>
           <div className="flex flex-col gap-2 max-h-56 sm:max-h-72 overflow-y-auto overscroll-contain">
             <div className="text-xs text-black/40">Найдено: {filteredPvz.length}</div>
-            {filteredPvz.length === 0 ? (
+            {loading && points.length === 0 ? (
+              <div className="flex items-center justify-center gap-2 py-8 text-black/50 text-sm">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Загрузка ПВЗ…
+              </div>
+            ) : filteredPvz.length === 0 ? (
               <div className="text-center py-6 text-black/50 text-sm">
                 В этом городе пункты не найдены или измените поиск.
               </div>

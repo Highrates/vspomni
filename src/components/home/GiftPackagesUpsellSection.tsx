@@ -63,11 +63,10 @@ export default function GiftPackagesUpsellSection({
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5 p-2 -m-2 w-full min-w-0">
-          {items.map((product, index) => (
+          {items.map((product) => (
             <ProductCard
               key={product.id}
               product={product}
-              isNew={index < 2}
               hideAromas
             />
           ))}

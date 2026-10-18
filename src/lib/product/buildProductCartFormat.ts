@@ -3,6 +3,7 @@ import type { ProductCardItem } from '@/types/product'
 import { normalizeAromaLabel } from '@/lib/normalizeAromaLabel'
 import { variantShippingFromSaleorVariant } from '@/lib/saleorVariantShipping'
 import { isProductInStock } from '@/lib/product/stock'
+import { formatVariantVolumeLabel } from '@/lib/product/variantVolumeLabel'
 
 export function buildProductCartFormat(
   data: ProductDetailNode,
@@ -57,7 +58,7 @@ export function buildProductCartFormat(
     slug: data.slug,
     categorySlug: data.category?.slug,
     aromas,
-    size: firstVariant.name,
+    size: formatVariantVolumeLabel(firstVariant),
     variantId: firstVariant.id,
     group,
     weight: ship.weight,

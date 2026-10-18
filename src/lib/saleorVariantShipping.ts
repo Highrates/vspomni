@@ -1,11 +1,15 @@
 /**
- * Вес и габариты из Saleor: `dimensions.*` часто на уровне продукта, вес — у варианта.
- * Сначала читаем ключ у варианта, затем подмешиваем метаданные продукта.
+ * Вес и габариты варианта: Nest (`weightGrams` / `*Mm`) или legacy Saleor metadata.
  */
 
 export type SaleorVariantShippingInput = {
   metadata?: { key: string; value: string }[] | null
   weight?: { value: number } | null
+  /** Nest ProductVariant */
+  weightGrams?: number | null
+  lengthMm?: number | null
+  widthMm?: number | null
+  heightMm?: number | null
 }
 
 function metaValue(
@@ -25,6 +29,11 @@ function numOrUndef(raw: string | undefined): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined
 }
 
+function positiveInt(n: number | null | undefined): number | undefined {
+  if (n == null || !Number.isFinite(n) || n <= 0) return undefined
+  return Math.round(n)
+}
+
 export function variantShippingFromSaleorVariant(
   variant: SaleorVariantShippingInput,
   productMetadata?: { key: string; value: string }[] | null,
@@ -34,6 +43,26 @@ export function variantShippingFromSaleorVariant(
   width?: number
   height?: number
 } {
+  // Nest fields first (источник правды после миграции с Saleor)
+  const nestLength = positiveInt(variant.lengthMm)
+  const nestWidth = positiveInt(variant.widthMm)
+  const nestHeight = positiveInt(variant.heightMm)
+  const nestWeightKg =
+    variant.weightGrams != null &&
+    Number.isFinite(variant.weightGrams) &&
+    variant.weightGrams > 0
+      ? variant.weightGrams / 1000
+      : undefined
+
+  if (nestLength || nestWidth || nestHeight || nestWeightKg != null) {
+    return {
+      weight: nestWeightKg,
+      length: nestLength,
+      width: nestWidth,
+      height: nestHeight,
+    }
+  }
+
   const vm = variant.metadata || []
   const pm = productMetadata || []
   const get = (k: string) => metaValue(vm, pm, k)

@@ -7,6 +7,8 @@ import { toast } from 'react-toastify'
 import PhoneInput from '@/components/ui/PhoneInput'
 import YandexIdLoginButton from '@/components/login/YandexIdLoginButton'
 import { isValidRuPhone } from '@/lib/ruPhone'
+import { signUpService } from '@/api/authApi'
+import { firstPasswordError } from '@/lib/auth/passwordPolicy'
 
 type TPropss = {
   onVerify: (email: string) => void
@@ -30,56 +32,37 @@ const RegisterForm = ({ onVerify, onLogin }: TPropss) => {
         toast.error('Введите полный номер в формате +7 (900) 000-00-00')
         return
       }
+      const passwordError = firstPasswordError(password)
+      if (passwordError) {
+        toast.error(passwordError)
+        return
+      }
       try {
-        const { signUpService } = await import('@/graphql/queries/auth.service')
-        const result = await signUpService(
-          email,
-          password,
-          firstName,
-          lastName,
-          phone,
-        )
+        // Nest: POST /auth/register/start → OTP на email (пароль держим в памяти вкладки до complete)
+        const result = await signUpService(email, password)
 
-        // Параллельно дергаем кастомный REST-эндпоинт Saleor для отправки кода подтверждения
-        if (result?.requiresConfirmation) {
-          const baseUrl = process.env.NEXT_PUBLIC_SALEOR_API_URL ?? ''
-          let codeSent = false
-          try {
-            const resp = await fetch(`${baseUrl}/auth/request-email-code/`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email, firstName, phone }),
-            })
-            const data = await resp.json().catch(() => ({}))
-            if (!resp.ok || !data.ok) {
-              throw new Error(
-                data.error || 'Не удалось отправить код подтверждения. Попробуйте позже.',
-              )
-            }
-            codeSent = true
-            toast.success('Регистрация прошла успешно! Введите код из письма.')
-          } catch (err) {
-            console.error('send-registration-email error:', err)
-            const message =
-              err instanceof Error
-                ? err.message
-                : 'Не удалось отправить код подтверждения. Попробуйте позже.'
-            toast.error(message)
-          }
-
-          if (!codeSent) {
-            return
-          }
-
-          if (phone) {
-            localStorage.setItem('registration_phone', phone)
-          }
-
-          onVerify(email)
-        } else {
-          toast.success('Регистрация прошла успешно!')
-          router.push('/login')
+        if (!result.otpSent) {
+          // Email занят / лимит — Nest отвечает нейтрально (без user enumeration)
+          toast.info(result.message)
+          return
         }
+
+        toast.success('Введите код из письма, чтобы завершить регистрацию.')
+
+        // Имя/телефон применим к профилю после register/complete (см. VerifyForm)
+        if (phone) {
+          localStorage.setItem('registration_phone', phone)
+        } else {
+          localStorage.removeItem('registration_phone')
+        }
+        const profile = { firstName: firstName.trim(), lastName: lastName.trim() }
+        if (profile.firstName || profile.lastName) {
+          sessionStorage.setItem('registration_profile', JSON.stringify(profile))
+        } else {
+          sessionStorage.removeItem('registration_profile')
+        }
+
+        onVerify(email)
       } catch (error: any) {
         console.error('Signup error:', error)
         // Переводим сообщения об ошибках на русский
@@ -112,6 +95,7 @@ const RegisterForm = ({ onVerify, onLogin }: TPropss) => {
             width={150}
             height={30}
             className="h-8 w-auto"
+            style={{ width: 'auto', height: 'auto' }}
           />
         </div>
         <h2 className="text-2xl font-semibold mb-2">Регистрация</h2>

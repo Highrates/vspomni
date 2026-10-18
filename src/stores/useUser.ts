@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { getMeInfo } from '@/graphql/queries/auth.service'
+import { getMeInfo } from '@/api/authApi'
 import { formatPhoneInputValue } from '@/lib/ruPhone'
 import { User } from '@/types/user'
 import { useAuthStore } from '@/stores/useAuth'

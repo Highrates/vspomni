@@ -4,42 +4,47 @@ import { ArrowUpRight } from 'lucide-react'
 
 export default function HistoryLine() {
   return (
-    <section className="relative w-full overflow-hidden px-2 mt-4 sm:mt-6 md:mt-8 lg:mt-10 mb-4 sm:mb-6 md:mb-8 lg:mb-10">
+    <section className="relative mt-4 mb-4 w-full px-2 sm:mt-6 sm:mb-6 md:mt-8 md:mb-8 lg:mt-10 lg:mb-10">
       <Link
         href="https://t.me/vspomni_nice"
         target="_blank"
         rel="noopener noreferrer"
-        className="block relative w-full h-full cursor-pointer"
+        className="relative block w-full cursor-pointer"
       >
-        {/* Контент по центру — как в «Подарочные пакеты» / наши сосочки */}
-        <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-          <div className="flex items-center justify-center gap-4 sm:gap-5 md:gap-6">
-            <Image
-              src="/telegram.svg"
-              alt="telegram link"
-              width={49}
-              height={49}
-              className="w-[32px] h-[32px] sm:w-[40px] sm:h-[40px] md:w-[49px] md:h-[49px] flex-shrink-0"
-            />
-            <h6 className="text-[16px] sm:text-[28px] md:text-[32px] lg:text-[48px] font-semibold select-none text-white leading-[1.2] lg:leading-[52px]">
-              История создания бренда с первого дня
-            </h6>
-            <div className="hidden sm:flex w-[40px] h-[40px] md:w-[49px] md:h-[49px] rounded-full bg-white/50 backdrop-blur-[10px] items-center justify-center flex-shrink-0">
-              <ArrowUpRight className="w-[16px] h-[16px] md:w-[20px] md:h-[20px] text-black" strokeWidth={1.5} />
-            </div>
-          </div>
-        </div>
-
-        {/* Фоновое изображение — те же размеры и скругление, что у блока «подарочные пакеты» */}
-        <div className="relative w-full h-[170px] sm:h-[240px] md:h-[300px] lg:h-[340px] overflow-hidden rounded-[16px]">
+        <div className="relative h-[170px] w-full overflow-hidden rounded-[16px] sm:h-[240px] md:h-[300px] lg:h-[340px]">
           <Image
             src="/images/history-vspomni.png"
             alt="История создания ВСПОМНИ — Максим Кусков, Иван Городилов"
             fill
             sizes="(max-width: 640px) 100vw, (max-width: 768px) 95vw, (max-width: 1600px) 98vw, 1536px"
             className="rounded-[16px] object-cover object-[center_35%]"
+            priority={false}
           />
-          <div className="absolute inset-0 bg-black/25 rounded-[16px]" />
+          <div className="absolute inset-0 z-[1] rounded-[16px] bg-black/45" />
+
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center px-4 sm:px-8 md:px-10">
+            <div className="flex max-w-full items-center justify-center gap-2 sm:gap-4 md:gap-5">
+              <Image
+                src="/telegram.svg"
+                alt=""
+                width={49}
+                height={49}
+                className="h-7 w-7 shrink-0 sm:h-10 sm:w-10 md:h-[49px] md:w-[49px]"
+              />
+              <h6 className="min-w-0 max-w-[18rem] text-center text-[14px] font-semibold leading-[1.25] text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.75)] select-none sm:max-w-[28rem] sm:text-[26px] md:max-w-[36rem] md:text-[32px] lg:max-w-[42rem] lg:text-[40px] lg:leading-[1.15]">
+                История создания бренда
+                <br className="sm:hidden" />
+                <span className="hidden sm:inline"> </span>
+                с первого дня
+              </h6>
+              <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/50 backdrop-blur-[10px] sm:flex md:h-[49px] md:w-[49px]">
+                <ArrowUpRight
+                  className="h-4 w-4 text-black md:h-5 md:w-5"
+                  strokeWidth={1.5}
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </Link>
     </section>

@@ -8,6 +8,7 @@ import yamIcon from '@/assets/icons/yam.svg'
 import zyaIcon from '@/assets/icons/zya.svg'
 import rgIcon from '@/assets/icons/rg.svg'
 import laIcon from '@/assets/icons/la.svg'
+import { SITE_PRIMARY_NAV } from '@/lib/seo/siteNav'
 
 const marketplaceIconClass =
   'block size-9 shrink-0 rounded-sm transition-opacity hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black'
@@ -97,6 +98,20 @@ export default function Footer() {
           </div>
         </div>
 
+        <nav
+          className="text-left flex flex-col gap-3 md:gap-4 items-start min-w-0 shrink-0"
+          aria-label="Каталог"
+        >
+          {SITE_PRIMARY_NAV.map((item) => (
+            <Link key={item.href} href={item.href} className={footerNavLinkClass}>
+              {item.label}
+            </Link>
+          ))}
+          <Link href="/#vse-aromaty" className={footerNavLinkClass}>
+            Все ароматы
+          </Link>
+        </nav>
+
         <div className="text-left flex flex-col gap-3 md:gap-4 items-start min-w-0 shrink-0">
           <Link
             href="https://t.me/vspomni_corp"
@@ -119,6 +134,12 @@ export default function Footer() {
           </Link>
           <Link href="/article/istoriia-sozdaniia" className={footerNavLinkClass}>
             История создания
+          </Link>
+          <Link href="/news" className={footerNavLinkClass}>
+            Новости
+          </Link>
+          <Link href="/partners" className={footerNavLinkClass}>
+            Партнёры
           </Link>
         </div>
       </div>

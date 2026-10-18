@@ -4,12 +4,12 @@ import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useCartStore } from '@/stores/useCart'
-import { useAuthStore } from '@/stores/useAuth'
 import CartCard from '../cart/CartCard'
 import { formatCurrency } from '@/lib/functions'
 import { CustomButton as Button } from '../common/CustomButton'
 import { motion } from 'framer-motion'
 import { CartPromoCode } from './CartPromoCode'
+import { useCartNestSync } from '@/lib/cart/useCartNestSync'
 
 interface ModalCartProps {
   visible: boolean
@@ -18,7 +18,6 @@ interface ModalCartProps {
 
 export default function ModalCart({ visible, onClose }: ModalCartProps) {
   const [show, setShow] = useState(visible)
-  const { isAuthenticated } = useAuthStore()
   const {
     items,
     totalItems,
@@ -31,6 +30,9 @@ export default function ModalCart({ visible, onClose }: ModalCartProps) {
   } = useCartStore()
 
   const router = useRouter()
+
+  // Живые цены/наличие из Nest при открытии корзины
+  useCartNestSync(visible)
 
   useEffect(() => {
     if (visible) {
@@ -51,7 +53,7 @@ export default function ModalCart({ visible, onClose }: ModalCartProps) {
   }, [visible, onClose])
 
   const checkout = () => {
-    isAuthenticated ? router.push('/checkout') : router.push('/login')
+    router.push('/checkout')
   }
 
   if (!show) return null

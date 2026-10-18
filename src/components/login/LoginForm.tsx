@@ -4,9 +4,10 @@ import { FormEvent, useState, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useAuthStore } from '@/stores/useAuth'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { CustomButton as Button } from '../common/CustomButton'
 import YandexIdLoginButton from '@/components/login/YandexIdLoginButton'
+import { nextFromSearchParams } from '@/lib/auth/safeNextPath'
 import { toast } from 'react-toastify'
 
 interface TProps {
@@ -20,23 +21,27 @@ export const LoginForm = ({ onForgotPass, onRegister }: TProps) => {
   const { isAuthenticated, login } = useAuthStore()
 
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const nextPath = nextFromSearchParams(searchParams)
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     try {
       await login(email, password)
       toast.success('Успешный вход в систему!')
-      router.push('/')
+      router.push(nextPath)
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : 'Попробуйте еще раз'
-      toast.error(`Ошибка входа: ${message}`)
+      toast.error(
+        `${message}. Нет пароля? Задайте через «Забыли пароль» / сброс.`,
+      )
     }
   }
 
   useEffect(() => {
-    if (isAuthenticated) router.push('/')
-  }, [isAuthenticated, router])
+    if (isAuthenticated) router.push(nextPath)
+  }, [isAuthenticated, router, nextPath])
 
   return (
     <div className="space-y-8">
@@ -57,11 +62,12 @@ export const LoginForm = ({ onForgotPass, onRegister }: TProps) => {
               width={150}
               height={30}
               className="h-8 w-auto"
+              style={{ width: 'auto', height: 'auto' }}
             />
           </Link>
         </div>
         <h2 className="text-2xl font-semibold mb-2">Вход в аккаунт</h2>
-        <p className="text-gray-500 mb-6">
+        <p className="text-gray-500 mb-2">
           Впервые у нас?{' '}
           <button
             onClick={onRegister}
@@ -69,6 +75,17 @@ export const LoginForm = ({ onForgotPass, onRegister }: TProps) => {
           >
             Зарегистрироваться
           </button>
+        </p>
+        <p className="text-gray-500 text-sm mb-6 leading-relaxed">
+          Нет пароля (покупали раньше)? Задайте через{' '}
+          <button
+            type="button"
+            onClick={onForgotPass}
+            className="text-blue-500 hover:text-blue-600 font-medium"
+          >
+            сброс пароля
+          </button>
+          .
         </p>
         <YandexIdLoginButton />
       </div>

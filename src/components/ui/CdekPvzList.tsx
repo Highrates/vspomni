@@ -54,17 +54,38 @@ interface Pvz {
   }
 }
 
-/** Москва и Санкт-Петербург — в начале списка, затем остальные по алфавиту */
-const PRIORITY_CITIES_FIRST = ['Москва', 'Санкт-Петербург']
+/** Seed без полного справочника CDEK (код города — официальный location/cities). */
+const SEED_CITIES: City[] = [
+  { code: 44, city: 'Москва', city_uuid: '', region: 'Москва' },
+  { code: 137, city: 'Санкт-Петербург', city_uuid: '', region: 'Санкт-Петербург' },
+]
+
+async function fetchCitiesByQuery(city: string, size = 40): Promise<City[]> {
+  const baseUrl = window.location.origin
+  const params = new URLSearchParams({
+    method: 'location/cities',
+    country_codes: 'RU',
+    city,
+    size: String(size),
+  })
+  const response = await fetch(`${baseUrl}/api/cdek/service?${params}`)
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+  const data = await response.json()
+  const list: City[] = Array.isArray(data) ? data : data.items || []
+  return list
+}
 
 export default function CdekPvzList({
   onChoose,
   defaultCity = 'Москва',
   initialMode = 'list',
 }: CdekPvzListProps) {
-  const [cities, setCities] = useState<City[]>([])
+  const [cities, setCities] = useState<City[]>(SEED_CITIES)
   const [citiesLoading, setCitiesLoading] = useState(true)
   const [citiesError, setCitiesError] = useState<string | null>(null)
+  const [citySearchLoading, setCitySearchLoading] = useState(false)
 
   const [selectedCity, setSelectedCity] = useState<City | null>(null)
   const [citySearchQuery, setCitySearchQuery] = useState('')
@@ -80,64 +101,71 @@ export default function CdekPvzList({
     setShowWidget(initialMode === 'map')
   }, [initialMode])
 
-  // Загрузка списка городов
+  // Быстрый старт: seed + точечный запрос defaultCity (не size=10000)
   useEffect(() => {
-    const fetchCities = async () => {
+    let cancelled = false
+    const boot = async () => {
       setCitiesLoading(true)
       setCitiesError(null)
-
       try {
-        const baseUrl = window.location.origin
-        const url = `${baseUrl}/api/cdek/service?method=location/cities&size=10000&country_codes=RU`
-
-        const response = await fetch(url)
-
-        if (!response.ok) {
-          const errorText = await response.text()
-          setCitiesError(`Ошибка загрузки городов: ${response.status}`)
-          throw new Error(`HTTP ${response.status}: ${errorText}`)
+        const hint = defaultCity.trim() || 'Москва'
+        const found = await fetchCitiesByQuery(hint, 10)
+        if (cancelled) return
+        const merged = [...SEED_CITIES]
+        for (const c of found) {
+          if (!merged.some((m) => m.code === c.code)) merged.push(c)
         }
-
-        const data = await response.json()
-        const citiesList: City[] = Array.isArray(data) ? data : (data.items || [])
-
-        if (citiesList.length === 0) {
-          setCitiesError('Не удалось загрузить список городов')
-          return
-        }
-
-        const sortedCities = [...citiesList].sort((a, b) =>
-          a.city.localeCompare(b.city, 'ru'),
-        )
-        const priority = PRIORITY_CITIES_FIRST.map((name) =>
-          sortedCities.find((c) => c.city === name),
-        ).filter(Boolean) as City[]
-        const rest = sortedCities.filter(
-          (c) => !PRIORITY_CITIES_FIRST.includes(c.city),
-        )
-        const orderedCities = [...priority, ...rest]
-
-        setCities(orderedCities)
-
-        const defaultCityData = orderedCities.find(
-          (c) => c.city.toLowerCase() === defaultCity.toLowerCase(),
-        )
-
-        if (defaultCityData) {
-          setSelectedCity(defaultCityData)
-        } else if (orderedCities.length > 0) {
-          const moscow = orderedCities.find((c) => c.city === 'Москва')
-          setSelectedCity(moscow || orderedCities[0])
-        }
+        setCities(merged)
+        const match =
+          merged.find((c) => c.city.toLowerCase() === hint.toLowerCase()) ||
+          found[0] ||
+          merged[0] ||
+          null
+        setSelectedCity(match)
       } catch (error: any) {
+        if (cancelled) return
         setCitiesError(error?.message || 'Ошибка загрузки городов')
+        setSelectedCity(SEED_CITIES[0] || null)
       } finally {
-        setCitiesLoading(false)
+        if (!cancelled) setCitiesLoading(false)
       }
     }
-
-    fetchCities()
+    void boot()
+    return () => {
+      cancelled = true
+    }
   }, [defaultCity])
+
+  // Поиск города — debounce + узкий запрос CDEK
+  useEffect(() => {
+    const q = citySearchQuery.trim()
+    if (q.length < 2) return
+    let cancelled = false
+    const t = window.setTimeout(() => {
+      void (async () => {
+        setCitySearchLoading(true)
+        try {
+          const found = await fetchCitiesByQuery(q, 40)
+          if (cancelled) return
+          setCities((prev) => {
+            const merged = [...prev]
+            for (const c of found) {
+              if (!merged.some((m) => m.code === c.code)) merged.push(c)
+            }
+            return merged
+          })
+        } catch {
+          /* оставляем seed / предыдущий список */
+        } finally {
+          if (!cancelled) setCitySearchLoading(false)
+        }
+      })()
+    }, 300)
+    return () => {
+      cancelled = true
+      window.clearTimeout(t)
+    }
+  }, [citySearchQuery])
 
   // Загрузка пунктов выдачи при выборе города
   useEffect(() => {
@@ -189,16 +217,17 @@ export default function CdekPvzList({
     fetchPvzList()
   }, [selectedCity])
 
-  // Фильтрация городов по поиску
+  // Фильтрация городов по поиску (список уже пополняется API-поиском)
   const filteredCities = useMemo(() => {
     if (!citySearchQuery.trim()) {
       return cities.slice(0, 50)
     }
 
     const query = citySearchQuery.toLowerCase().trim()
-    return cities
-      .filter(c => c.city.toLowerCase().includes(query))
+    const matched = cities
+      .filter((c) => c.city.toLowerCase().includes(query))
       .slice(0, 50)
+    return matched.length > 0 ? matched : cities.slice(0, 20)
   }, [cities, citySearchQuery])
 
   // Фильтрация пунктов выдачи
@@ -319,6 +348,9 @@ export default function CdekPvzList({
                       className="w-full h-10 pl-9 pr-4 rounded-lg border border-black/10 text-sm outline-none focus:border-black/30"
                       autoFocus
                     />
+                    {citySearchLoading ? (
+                      <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-black/40" />
+                    ) : null}
                   </div>
                 </div>
 
@@ -326,7 +358,7 @@ export default function CdekPvzList({
                 <div className="overflow-y-auto max-h-60">
                   {filteredCities.length === 0 ? (
                     <div className="p-4 text-center text-black/50 text-sm">
-                      Город не найден
+                      {citySearchLoading ? 'Ищем…' : 'Город не найден'}
                     </div>
                   ) : (
                     filteredCities.map((city) => (

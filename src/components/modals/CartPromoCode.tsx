@@ -33,7 +33,7 @@ export const CartPromoCode = () => {
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <h2 className="font-semibold flex-1">
-          Добавить промокод или сертификат
+          Добавить промокод
         </h2>
         <button
           onClick={(e) => {

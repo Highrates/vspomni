@@ -1,142 +1,59 @@
-import { CHANNEL, graphqlRequest } from '@/graphql/client'
-import type {
-  Connection,
-  MutationError,
-  WarehouseNode,
-  WarehousesData,
-} from '../types/core.types'
-import type {
-  ProductNode,
-  ProductDetailNode,
-  ProductData,
-  ProductsData,
-  ProductUpdateMutationResponse,
-  BestSellersResponse,
-  ProductsByCategorySlugResponse,
-  ProductEdge,
-} from '../types/product.types'
-import { formatDate } from '@/lib/functions'
-import { normalizeAromaLabel } from '@/lib/normalizeAromaLabel'
+/**
+ * Товары — Nest `/api/v1/catalog/*`.
+ * Экспорты и сигнатуры сохранены от Saleor-версии, чтобы страницы/сторы не менялись.
+ */
+import {
+  ApiError,
+  uploadsUrl,
+} from '@/api/apiClient'
+import {
+  CHOICE_COLLECTION_SLUG as NEST_CHOICE_COLLECTION_SLUG,
+  NEW_COLLECTION_SLUG,
+  POPULAR_COLLECTION_SLUG,
+  adaptProductDetail,
+  cardToProductCardItem,
+  cardToStarChoiceItem,
+  fetchAllProductCards,
+  fetchCatalogTags,
+  fetchProductBySlug,
+  fetchProductList,
+  resolveCollectionSlug,
+} from '@/api/catalogApi'
+import type { Connection, WarehouseNode } from '../types/core.types'
+import type { ProductDetailNode, ProductNode } from '../types/product.types'
 import type { ProductCardItem, StarChoiceItem } from '@/types/product'
 import { isValidSlug } from '@/lib/productPaths'
-import { variantShippingFromSaleorVariant } from '@/lib/saleorVariantShipping'
-import { isProductInStock } from '@/lib/product/stock'
 
 // -----------------------------------------------------------
-// A. Product Queries (products, product)
+// Helpers
 // -----------------------------------------------------------
+
+function filterValidProductCards(items: ProductCardItem[]): ProductCardItem[] {
+  return items.filter((item) => isValidSlug(item.slug))
+}
+
+/** Saleor GID коллекций, которые ещё зашиты в UI → slug в Nest. */
+const LEGACY_COLLECTION_GID_TO_SLUG: Record<string, string> = {
+  // «Популярное»
+  Q29sbGVjdGlvbjoz: POPULAR_COLLECTION_SLUG,
+  // «Ваши вкусовые сосочки будут в восторге» (CollectionNoseBlock)
+  Q29sbGVjdGlvbjo1: NEW_COLLECTION_SLUG,
+}
+
+function isNotFound(e: unknown): boolean {
+  return e instanceof ApiError && e.status === 404
+}
+
+// -----------------------------------------------------------
+// A. Single product
+// -----------------------------------------------------------
+
+/** Nest `GET /catalog/products/:slug` → Saleor-подобный `ProductDetailNode`. 404 → null. */
 export async function getSingleProduct(
   slug: string,
 ): Promise<ProductDetailNode | null> {
-  const query = `
-    query getSingleProduct($slug: String!, $channel: String!) {
-      product(slug: $slug, channel: $channel) {
-        id
-        slug
-        rating
-        name
-        description
-        metadata {
-          key
-          value
-        }
-        media {
-          alt
-          url
-        }
-        
-        attributes {
-          attribute {
-            id
-            metadata {
-              key
-              value
-            }
-            name
-            slug
-          }
-          values {
-            boolean
-            date
-            dateTime
-            externalReference
-            inputType
-            name
-            plainText
-            reference
-            richText
-            slug
-            value
-            file {
-              url
-            }
-          }
-        }
-
-        productType {
-          name
-        }
-        category {
-          name
-          id
-          slug
-        }
-        productVariants(first: 10) {
-          edges {
-            node {
-              id
-              name
-              sku
-              quantityAvailable
-              quantityLimitPerCustomer
-              weight {
-                value
-              }
-              metadata {
-                key
-                value
-              }
-              pricing {
-                priceUndiscounted {
-                  gross {
-                    currency
-                    amount
-                  }
-                }
-                price {
-                  gross {
-                    amount
-                    currency
-                  }
-                }
-                discount {
-                  net {
-                    amount
-                    currency
-                  }
-                }
-              }
-            }
-          }
-          totalCount
-        }
-        isAvailableForPurchase
-        reviews {
-          id
-          text
-        }
-        availableForPurchaseAt
-        thumbnail {
-          alt
-          url
-        }
-      }
-    }
-  `
-
-  const variables = { slug, channel: CHANNEL }
-  const data = await graphqlRequest<ProductData>(query, variables)
-  return data.product
+  const detail = await fetchProductBySlug(slug)
+  return detail ? adaptProductDetail(detail) : null
 }
 
 /** Имя товара и категории для крошек (server) */
@@ -145,27 +62,8 @@ export async function getProductBreadcrumbMeta(productSlug: string): Promise<{
   categoryName: string | null
   categorySlug: string | null
 } | null> {
-  const query = `
-    query ProductBreadcrumb($slug: String!, $channel: String!) {
-      product(slug: $slug, channel: $channel) {
-        name
-        slug
-        category {
-          name
-          slug
-        }
-      }
-    }
-  `
   try {
-    const data = await graphqlRequest<{
-      product: {
-        name: string
-        slug: string
-        category: { name: string; slug: string } | null
-      } | null
-    }>(query, { slug: productSlug, channel: CHANNEL })
-    const p = data.product
+    const p = await fetchProductBySlug(productSlug)
     if (!p?.name) return null
     return {
       productName: p.name,
@@ -181,1096 +79,167 @@ export async function getProductBreadcrumbMeta(productSlug: string): Promise<{
 export async function getProductCategorySlugForRedirect(
   productSlug: string,
 ): Promise<string | null> {
-  const query = `
-    query ProductCategorySlug($slug: String!, $channel: String!) {
-      product(slug: $slug, channel: $channel) {
-        category {
-          slug
-        }
-      }
-    }
-  `
   try {
-    const data = await graphqlRequest<{
-      product: { category: { slug: string } | null } | null
-    }>(query, { slug: productSlug, channel: CHANNEL })
-    const s = data.product?.category?.slug?.trim()
-    return s || null
+    const p = await fetchProductBySlug(productSlug)
+    return p?.category?.slug?.trim() || null
   } catch {
     return null
   }
 }
 
-/**
- * QUERY: Fetches a paginated list of products, optionally filtered by publication status.
- * SERVICE NAME: products (Filtered Fetch)
- */
+/** Список товаров как `Connection<ProductNode>` (isPublished игнорируется — Nest отдаёт только активные). */
 export async function getFilteredProducts(
   first = 20,
-  isPublished?: boolean,
+  _isPublished?: boolean,
 ): Promise<Connection<ProductNode>> {
-  const query = `
-    query FilteredProducts($first: Int!, $published: Boolean) {
-      products(
-        first: $first, 
-        channel: "${CHANNEL}",
-        filter: { isPublished: $published }
-      ) {
-        edges {
-          node {
-            id
-            name
-            slug
-            isPublished
-            rating
-            metadata { key value }
-            thumbnail { url alt }
-            media { id alt url }
-          }
-        }
-        pageInfo {
-          hasNextPage
-          endCursor
-        }
-      }
-    }
-  `
-
-  const variables = {
-    first,
-    published: isPublished,
-  }
-
-  const data = await graphqlRequest<ProductsData>(query, variables)
-  return data.products
-}
-
-// -----------------------------------------------------------
-// B. Inventory Queries (warehouse, warehouses)
-// -----------------------------------------------------------
-
-/**
- * QUERY: Fetches a list of all active warehouses.
- * SERVICE NAME: warehouses (List Fetch)
- */
-export async function getAllWarehouses(
-  first = 50,
-): Promise<Connection<WarehouseNode>> {
-  const query = `
-        query AllWarehouses($first: Int!) {
-            warehouses(first: $first) {
-                edges {
-                    node {
-                        id
-                        name
-                        slug
-                        address {
-                            city
-                            country
-                        }
-                    }
-                }
-                pageInfo {
-                    hasNextPage
-                    endCursor
-                }
-            }
-        }
-    `
-
-  const variables = { first }
-  const data = await graphqlRequest<WarehousesData>(query, variables)
-  return data.warehouses
-}
-
-// Helper: map Saleor product node to frontend ProductCardItem with discount info
-function filterValidProductCards(items: ProductCardItem[]): ProductCardItem[] {
-  return items.filter((item) => isValidSlug(item.slug))
-}
-
-function mapNodeToProductCard(
-  node: any,
-  externalDiscounts?: Record<string, number>,
-  opts?: { categorySlug?: string },
-): ProductCardItem {
-  const variant = node.productVariants.edges[0].node
-  const price = variant.pricing.price.gross.amount
-
-  const priceUndiscounted = variant.pricing.priceUndiscounted?.gross?.amount
-  const discountNet = variant.pricing.discount?.net?.amount ?? 0
-
-  let oldPrice: number | undefined = priceUndiscounted
-  let discountPercent: number | undefined
-
-  // 1) если есть внешняя скидка от catalog_discounts — используем её
-  const external = externalDiscounts?.[variant.id]
-  if (typeof external === 'number' && external > 0) {
-    discountPercent = Math.round(external)
-    oldPrice = Math.round((price * 100) / (100 - discountPercent))
-  } else if (oldPrice && oldPrice > price) {
-    // 2) стандартный случай: priceUndiscounted > price
-    discountPercent = Math.round(((oldPrice - price) / oldPrice) * 100)
-  } else if (discountNet > 0) {
-    // 3) fallback: есть только discount.net
-    const fullPrice = price + discountNet
-    oldPrice = fullPrice
-    discountPercent = Math.round((discountNet / fullPrice) * 100)
-  }
-
-  // Извлекаем теги из атрибута "aromaty-v-kartochke-tovara"
-  const aromaAttribute = node.attributes?.find(
-    (attr: any) => attr.attribute?.slug === 'aromaty-v-kartochke-tovara'
-  )
-  const aromaValues = aromaAttribute?.values || []
-  const aromas = aromaValues
-    .map((val: any) => normalizeAromaLabel(val.name || val.value || ''))
-    .filter(Boolean)
-
-  // Формируем group из aromas (для обратной совместимости)
-  const group = aromas.map((aroma: string, index: number) => {
-    // Определяем тип группы по тексту
-    let groupType = 'flower'
-    if (aroma.toLowerCase().includes('сладк') || aroma.includes('🤤')) {
-      groupType = 'sweet'
-    } else if (aroma.toLowerCase().includes('цветочн') || aroma.includes('🌸')) {
-      groupType = 'flower'
-    } else if (aroma.toLowerCase().includes('древесн') || aroma.includes('🪵')) {
-      groupType = 'wood'
-    }
-
-    return {
-      id: index + 1,
-      group: groupType,
-      title: aroma,
-    }
-  })
-
-  const { weight, length, width, height } = variantShippingFromSaleorVariant(
-    variant,
-    node.metadata,
-  )
-
-  const categorySlug =
-    (opts?.categorySlug ?? node.category?.slug)?.trim() || undefined
-
-  const stockKnown =
-    node.isAvailableForPurchase !== undefined ||
-    variant.quantityAvailable !== undefined ||
-    node.productVariants?.edges?.some(
-      (e: any) => e?.node?.quantityAvailable !== undefined,
-    )
-
-  const inStock = stockKnown
-    ? isProductInStock(node)
-    : true
-
-  const quantityLimitPerCustomer =
-    typeof variant.quantityLimitPerCustomer === 'number'
-      ? variant.quantityLimitPerCustomer
-      : variant.quantityLimitPerCustomer === null
-        ? null
-        : undefined
-
-  const quantityAvailable =
-    typeof variant.quantityAvailable === 'number'
-      ? variant.quantityAvailable
-      : variant.quantityAvailable === null
-        ? null
-        : undefined
-
+  const res = await fetchProductList({ limit: first, page: 1 })
   return {
-    id: variant.id,
-    name: node.name,
-    slug: node.slug,
-    categorySlug,
-    thumbnail: node.thumbnail?.url ?? '',
-    image: node.media?.[0]?.url ?? '',
-    gallery: (node.media || []).map((m: any) => m?.url).filter(Boolean),
-    price,
-    oldPrice,
-    discountPercent,
-    size: variant.name,
-    variantId: variant.id,
-    group,
-    aromas,
-    weight,
-    length,
-    width,
-    height,
-    inStock,
-    quantityLimitPerCustomer,
-    quantityAvailable,
-  }
-}
-
-
-// --- catalog_discounts endpoint client ---
-
-interface CatalogDiscount {
-  variantId: string
-  discountPercent: number
-}
-
-interface CatalogDiscountsResponse {
-  catalogDiscounts: CatalogDiscount[]
-}
-
-export async function getCatalogDiscounts(
-  variantIds: string[],
-  channel: string = CHANNEL,
-): Promise<Record<string, number>> {
-  if (!variantIds.length) return {}
-
-  const query = `
-    query CatalogDiscounts($channel: String!, $variantIds: [ID!]!) {
-      catalogDiscounts(channel: $channel, variantIds: $variantIds) {
-        variantId
-        discountPercent
+    edges: (res.items ?? []).map((c) => {
+      const thumb = uploadsUrl(c.imageUrl) || ''
+      return {
+        node: {
+          id: c.id,
+          name: c.name,
+          slug: c.slug,
+          isPublished: true,
+          thumbnail: { url: thumb, alt: c.name },
+          media: (c.imageUrls ?? []).map((u, i) => ({
+            id: `${c.id}-${i}`,
+            alt: c.name,
+            url: uploadsUrl(u) || u,
+          })),
+        } as ProductNode,
       }
-    }
-  `
-
-  const variables = { channel, variantIds }
-  const data = await graphqlRequest<CatalogDiscountsResponse>(query, variables)
-
-  const map: Record<string, number> = {}
-  for (const item of data.catalogDiscounts || []) {
-    map[item.variantId] = item.discountPercent
+    }),
+    pageInfo: {
+      hasNextPage: (res.total ?? 0) > first,
+      hasPreviousPage: false,
+      endCursor: null,
+    },
   }
-  return map
 }
 
 // -----------------------------------------------------------
-// C. Product Mutation (productUpdate)
+// B. Inventory (stubs — склады Saleor в Nest не используются)
+// -----------------------------------------------------------
+
+export async function getAllWarehouses(
+  _first = 50,
+): Promise<Connection<WarehouseNode>> {
+  return {
+    edges: [],
+    pageInfo: { hasNextPage: false, hasPreviousPage: false, endCursor: null },
+  }
+}
+
+// -----------------------------------------------------------
+// C. Discounts / mutations (stubs)
 // -----------------------------------------------------------
 
 /**
- * MUTATION: Updates a product's name and publication status.
- * SERVICE NAME: productUpdate
+ * Скидки кампаний уже включены в `price/oldPrice/discountPercent` Nest.
+ * Возвращаем пустую карту: UI тогда использует oldPrice из самих данных.
  */
+export async function getCatalogDiscounts(
+  _variantIds: string[],
+  _channel?: string,
+): Promise<Record<string, number>> {
+  return {}
+}
+
+/** Редактирование товара с витрины не поддерживается (админка — отдельное приложение). No-op. */
 export async function updateProductName(
   productId: string,
   newName: string,
 ): Promise<ProductNode> {
-  const mutation = `
-        mutation UpdateProduct($id: ID!, $name: String!) {
-            productUpdate(
-                id: $id, 
-                input: {
-                    name: $name, 
-                }
-            ) {
-                product {
-                    id
-                    name
-                    slug
-                }
-                errors {
-                    field
-                    message
-                    code
-                }
-            }
-        }
-    `
-
-  const variables = { id: productId, name: newName }
-  const result = await graphqlRequest<ProductUpdateMutationResponse>(
-    mutation,
-    variables,
-  )
-
-  const errors = result.productUpdate.errors || []
-  if (errors.length > 0) {
-    throw new Error(
-      `Product update failed: ${errors.map((e: MutationError) => e.message).join(', ')}`,
-    )
-  }
-
-  if (!result.productUpdate.product) {
-    throw new Error('Product update returned no product')
-  }
-
-  return result.productUpdate.product
+  return { id: productId, name: newName, slug: '' } as ProductNode
 }
 
 // -----------------------------------------------------------
-// D. Bestseller Products Query
+// D. Product lists
 // -----------------------------------------------------------
 
-/**
- * QUERY: Fetches bestseller products from a collection.
- * SERVICE NAME: collection (Bestsellers)
- */
+/** Сетка товаров (главная): первые 12 из каталога. */
 export async function getGreedProducts(): Promise<any> {
-  const query = `
-    query getGreedProducts($channel: String!) {
-  products(first: 12, channel: $channel) {
-    edges {
-      node {
-        id
-        name
-        description
-        slug
-        rating
-        metadata {
-          key
-          value
-        }
-        thumbnail {
-          url
-          alt
-        }
-        media {
-          id
-          alt
-          url
-        }
-        collections{
-          id
-          name
-          slug
-        }
-        category {
-          slug
-        }
-        isAvailableForPurchase
-        productVariants(first: 12) {
-          edges {
-            node {
-              id
-              name
-              sku
-              quantityAvailable
-              quantityLimitPerCustomer
-              weight {
-                value
-              }
-              metadata {
-                key
-                value
-              }
-              pricing {
-                price {
-                  gross {
-                    currency
-                    amount
-                  }
-                }
-                priceUndiscounted {
-                  gross {
-                    currency
-                    amount
-                  }
-                }
-                discount {
-                  net {
-                    amount
-                    currency
-                  }
-                }
-              }
-            }
-          }
-        }
-        attributes {
-          attribute {
-            id
-            slug
-            name
-          }
-          values {
-            name
-            slug
-            value
-          }
-        }
-      }
-    }
-  }
-}
-  `
-
-  const variables = {
-    channel: CHANNEL,
-  }
-
-  const data = await graphqlRequest<BestSellersResponse>(query, variables)
-
-  const nodes = data.products.edges.map((edge: any) => edge.node)
-  const variantIds = nodes.map(
-    (node: any) => node.productVariants.edges[0].node.id as string,
-  )
-  const discounts = await getCatalogDiscounts(variantIds)
-
-  return filterValidProductCards(
-    nodes.map((node: any) => mapNodeToProductCard(node, discounts)),
-  )
+  const res = await fetchProductList({ limit: 12, page: 1 })
+  return filterValidProductCards((res.items ?? []).map((c) => cardToProductCardItem(c)))
 }
 
-/**
- * QUERY: Fetches bestseller products from a collection.
- * SERVICE NAME: collection (Bestsellers)
- */
+/** «Популярное»: коллекция `populiarnye`, fallback — `koe-chto-novoe-dlia-vas`. */
 export async function getPopularProducts(): Promise<any> {
-  const query = `
-    query getGreedProducts($channel: String!) {
-  products(
-    first: 5, 
-    channel: $channel, 
-    where: { collection: {eq :"Q29sbGVjdGlvbjoz" } }
-    ) {
-    edges {
-      node {
-        id
-        name
-        description
-        slug
-        rating
-        metadata {
-          key
-          value
-        }
-        thumbnail {
-          url
-          alt
-        }
-        media {
-          id
-          alt
-          url
-        }
-        collections{
-          id
-          name
-          slug
-        }
-        category {
-          slug
-        }
-        isAvailableForPurchase
-        productVariants(first: 12) {
-          edges {
-            node {
-              id
-              name
-              sku
-              quantityAvailable
-              quantityLimitPerCustomer
-              weight {
-                value
-              }
-              metadata {
-                key
-                value
-              }
-              pricing {
-                price {
-                  gross {
-                    currency
-                    amount
-                  }
-                }
-                priceUndiscounted {
-                  gross {
-                    currency
-                    amount
-                  }
-                }
-                discount {
-                  net {
-                    amount
-                    currency
-                  }
-                }
-              }
-            }
-          }
-        }
-        attributes {
-          attribute {
-            id
-            slug
-            name
-          }
-          values {
-            name
-            slug
-            value
-          }
-        }
-      }
-    }
+  let res = await fetchProductList({ collection: POPULAR_COLLECTION_SLUG, limit: 5, page: 1 })
+  if (!res.items?.length) {
+    res = await fetchProductList({ collection: NEW_COLLECTION_SLUG, limit: 5, page: 1 })
   }
+  return filterValidProductCards((res.items ?? []).map((c) => cardToProductCardItem(c)))
 }
-  `
-
-  const variables = {
-    channel: CHANNEL,
-  }
-
-  const data = await graphqlRequest<BestSellersResponse>(query, variables)
-  const nodes = data.products.edges.map((edge: any) => edge.node)
-  const variantIds = nodes.map(
-    (node: any) => node.productVariants.edges[0].node.id as string,
-  )
-  const discounts = await getCatalogDiscounts(variantIds)
-
-  return filterValidProductCards(
-    nodes.map((node: any) => mapNodeToProductCard(node, discounts)),
-  )
-}
-
-/** Все товары канала (каталог). Saleor: не больше 100 записей за запрос */
-const CATALOG_PRODUCT_NODE_FRAGMENT = `
-            id
-            name
-            description
-            slug
-            rating
-            thumbnail {
-              url
-              alt
-            }
-            media {
-              id
-              alt
-              url
-            }
-            collections {
-              id
-              name
-              slug
-            }
-            category {
-              slug
-            }
-            isAvailableForPurchase
-            productVariants(first: 12) {
-              edges {
-                node {
-                  id
-                  name
-                  sku
-                  quantityAvailable
-                  quantityLimitPerCustomer
-                  pricing {
-                    price {
-                      gross {
-                        currency
-                        amount
-                      }
-                    }
-                    priceUndiscounted {
-                      gross {
-                        currency
-                        amount
-                      }
-                    }
-                    discount {
-                      net {
-                        amount
-                        currency
-                      }
-                    }
-                  }
-                }
-              }
-            }
-            attributes {
-              attribute {
-                id
-                slug
-                name
-              }
-              values {
-                name
-              }
-            }
-`
-
-const CATALOG_PRODUCTS_QUERY = `
-    query getCatalogProducts($channel: String!, $first: Int!, $after: String) {
-      products(
-        first: $first
-        channel: $channel
-        after: $after
-        filter: { isPublished: true }
-      ) {
-        pageInfo {
-          hasNextPage
-          endCursor
-        }
-        edges {
-          node {
-            ${CATALOG_PRODUCT_NODE_FRAGMENT}
-          }
-        }
-      }
-    }
-  `
 
 export type CatalogProductsPage = {
   products: ProductCardItem[]
   hasNextPage: boolean
+  /** Nest: номер следующей страницы строкой (аналог курсора Saleor) */
   endCursor: string | null
 }
 
-async function mapCatalogNodesToProductCards(
-  nodes: any[],
-): Promise<ProductCardItem[]> {
-  const variantIds = nodes
-    .map((node: any) => node.productVariants?.edges?.[0]?.node?.id as string)
-    .filter(Boolean)
-  const discounts = await getCatalogDiscounts(variantIds)
-  return filterValidProductCards(
-    nodes.map((node: any) => mapNodeToProductCard(node, discounts)),
-  )
-}
-
-/** Одна страница товаров каталога (для /catalog и «Показать ещё») */
+/**
+ * Одна страница каталога (для /catalog и «Показать ещё»).
+ * `after` — `endCursor` предыдущей страницы (номер страницы).
+ */
 export async function getCatalogProductsPage(
   pageSize: number,
   after?: string | null,
 ): Promise<CatalogProductsPage> {
-  const data = await graphqlRequest<{
-    products: {
-      pageInfo: { hasNextPage: boolean; endCursor: string | null }
-      edges: { node: any }[]
-    }
-  }>(CATALOG_PRODUCTS_QUERY, {
-    channel: CHANNEL,
-    first: pageSize,
-    after: after ?? null,
-  })
-
-  const nodes = (data.products?.edges ?? [])
-    .map((edge) => edge?.node)
-    .filter(Boolean)
-
-  const products = await mapCatalogNodesToProductCards(nodes)
-  const pageInfo = data.products?.pageInfo
-
+  const page = after && Number(after) > 0 ? Number(after) : 1
+  const res = await fetchProductList({ page, limit: pageSize })
+  const items = res.items ?? []
+  const hasNextPage = page * pageSize < (res.total ?? 0) && items.length > 0
   return {
-    products,
-    hasNextPage: pageInfo?.hasNextPage ?? false,
-    endCursor: pageInfo?.endCursor ?? null,
+    products: filterValidProductCards(items.map((c) => cardToProductCardItem(c))),
+    hasNextPage,
+    endCursor: hasNextPage ? String(page + 1) : null,
   }
 }
 
 export async function getCatalogAllProducts(
   maxProducts: number = 500,
 ): Promise<ProductCardItem[]> {
-  const pageSize = 100
-  const allNodes: any[] = []
-  let after: string | undefined
-  let safety = 0
-  const maxPages = Math.ceil(maxProducts / pageSize) + 2
-
-  while (allNodes.length < maxProducts && safety < maxPages) {
-    safety += 1
-    const first = Math.min(pageSize, maxProducts - allNodes.length)
-
-    const data = await graphqlRequest<{
-      products: {
-        pageInfo: { hasNextPage: boolean; endCursor: string | null }
-        edges: { node: any }[]
-      }
-    }>(CATALOG_PRODUCTS_QUERY, {
-      channel: CHANNEL,
-      first,
-      after: after ?? null,
-    })
-
-    const edges = data.products?.edges ?? []
-    for (const e of edges) {
-      if (e?.node) allNodes.push(e.node)
-    }
-
-    const pi = data.products?.pageInfo
-    if (!pi?.hasNextPage || !edges.length) break
-    after = pi.endCursor ?? undefined
-    if (!after) break
-  }
-
-  return mapCatalogNodesToProductCards(allNodes)
+  const cards = await fetchAllProductCards({}, maxProducts)
+  return filterValidProductCards(cards.map((c) => cardToProductCardItem(c)))
 }
 
-/** Коллекция «Выбор ⭐» в Saleor Dashboard */
-export const CHOICE_COLLECTION_SLUG = 'vybor'
+/** Коллекция «Выбор ⭐» */
+export const CHOICE_COLLECTION_SLUG = NEST_CHOICE_COLLECTION_SLUG
 
-const CHOICE_PRODUCTS_QUERY = `
-  query getChoiceProductsPage(
-    $channel: String!
-    $collectionId: ID!
-    $first: Int!
-    $after: String
-  ) {
-    products(
-      first: $first
-      after: $after
-      channel: $channel
-      where: { collection: { eq: $collectionId } }
-    ) {
-      pageInfo {
-        hasNextPage
-        endCursor
-      }
-      edges {
-        node {
-          id
-          name
-          slug
-          category {
-            slug
-          }
-          thumbnail {
-            url
-            alt
-          }
-          media {
-            url
-          }
-          isAvailableForPurchase
-          productVariants(first: 12) {
-            edges {
-              node {
-                id
-                name
-                sku
-                quantityAvailable
-                quantityLimitPerCustomer
-                weight {
-                  value
-                }
-                metadata {
-                  key
-                  value
-                }
-                pricing {
-                  price {
-                    gross {
-                      currency
-                      amount
-                    }
-                  }
-                }
-              }
-            }
-          }
-          attributes {
-            attribute {
-              name
-              slug
-            }
-            values {
-              name
-              file {
-                url
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-`
-
-async function resolveChoiceCollectionId(): Promise<string> {
-  const query = `
-    query getChoiceCollectionId($channel: String!, $slug: String!) {
-      collection(channel: $channel, slug: $slug) {
-        id
-      }
-    }
-  `
-  const data = await graphqlRequest<{ collection: { id: string } | null }>(query, {
-    channel: CHANNEL,
-    slug: CHOICE_COLLECTION_SLUG,
-  })
-  const collectionId = data.collection?.id
-  if (!collectionId) {
-    throw new Error(`Collection "${CHOICE_COLLECTION_SLUG}" not found`)
-  }
-  return collectionId
-}
-
-function mapChoiceProductNode(n: any): StarChoiceItem | null {
-  if (!n) return null
-
-  const variantNode = n.productVariants?.edges?.[0]?.node
-  const thumbUrl = n.thumbnail?.url
-  if (!variantNode || !thumbUrl) return null
-
-  const photoAttr = n.attributes?.find(
-    (i: any) =>
-      i.attribute?.slug === 'vybor-foto' ||
-      i.attribute?.slug === 'vybor-photo' ||
-      i.attribute?.name?.toLowerCase().includes('фото') ||
-      i.attribute?.name?.toLowerCase().includes('photo'),
-  )
-  const choicePhotoUrl = photoAttr?.values?.[0]?.file?.url
-  const mediaUrl =
-    (Array.isArray(n.media) && n.media[0]?.url) ||
-    n.media?.edges?.[0]?.node?.url
-  const imageUrl =
-    (choicePhotoUrl && String(choicePhotoUrl).trim()) ||
-    mediaUrl ||
-    thumbUrl ||
-    '/images/choice-1.jpg'
-
-  const nameAttr = n.attributes?.find(
-    (i: any) =>
-      i.attribute?.slug === 'vybor-imya' ||
-      i.attribute?.slug === 'vybor-name' ||
-      i.attribute?.name?.toLowerCase().includes('имя') ||
-      i.attribute?.name?.toLowerCase().includes('name'),
-  )
-  const star = nameAttr?.values?.[0]?.name || ''
-
-  const dateAttr = n.attributes?.find(
-    (i: any) =>
-      i.attribute?.slug === 'vybor-data' ||
-      i.attribute?.slug === 'vybor-date' ||
-      i.attribute?.name?.toLowerCase().includes('дата') ||
-      i.attribute?.name?.toLowerCase().includes('date'),
-  )
-  const dateRaw = dateAttr?.values?.[0]?.name || ''
-
-  const amount = variantNode.pricing?.price?.gross?.amount
-  if (amount == null) return null
-
-  return {
-    id: variantNode.id,
-    name: n.name,
-    slug: n.slug,
-    categorySlug: n.category?.slug?.trim() || undefined,
-    thumbnail: thumbUrl,
-    image: imageUrl,
-    price: parseFloat(String(amount)),
-    oldPrice: 0,
-    size: variantNode.name ?? '',
-    star,
-    date: formatDate(dateRaw),
-  }
-}
-
-/**
- * Товары коллекции «Выбор ⭐» (slug: vybor) — все карточки из дашборда.
- */
+/** Товары коллекции «Выбор ⭐» (slug: vybor). */
 export async function getChoiceProducts(): Promise<StarChoiceItem[]> {
-  const collectionId = await resolveChoiceCollectionId()
-  const allNodes: any[] = []
-  let after: string | undefined
-  let safety = 0
-  const pageSize = 100
-
-  while (safety < 20) {
-    safety += 1
-    const data = await graphqlRequest<{
-      products: {
-        pageInfo: { hasNextPage: boolean; endCursor: string | null }
-        edges: { node: any }[]
-      }
-    }>(CHOICE_PRODUCTS_QUERY, {
-      channel: CHANNEL,
-      collectionId,
-      first: pageSize,
-      after: after ?? null,
-    })
-
-    const edges = data.products?.edges ?? []
-    for (const edge of edges) {
-      if (edge?.node) allNodes.push(edge.node)
-    }
-
-    const pageInfo = data.products?.pageInfo
-    if (!pageInfo?.hasNextPage || !edges.length) break
-    after = pageInfo.endCursor ?? undefined
-    if (!after) break
-  }
-
-  return allNodes
-    .map((node) => mapChoiceProductNode(node))
-    .filter((item): item is StarChoiceItem => item != null)
+  const cards = await fetchAllProductCards({ collection: CHOICE_COLLECTION_SLUG }, 200)
+  return cards
+    .filter((c) => c.imageUrl || (c.imageUrls?.length ?? 0) > 0)
+    .map(cardToStarChoiceItem)
 }
 
-/** Товары коллекции по ID (коллекция 5 — «Ваши вкусовые сосочки будут в восторге») */
-const COLLECTION_NOSE_ID = 'Q29sbGVjdGlvbjo1'
-
-const PRODUCTS_BY_COLLECTION_QUERY = `
-  query getProductsByCollection(
-    $channel: String!
-    $collectionId: ID!
-    $first: Int!
-    $after: String
-  ) {
-    products(
-      first: $first
-      after: $after
-      channel: $channel
-      where: { collection: { eq: $collectionId } }
-    ) {
-      pageInfo {
-        hasNextPage
-        endCursor
-      }
-      edges {
-        node {
-          id
-          name
-          description
-          slug
-          rating
-          thumbnail { url alt }
-          media { id alt url }
-          collections { id name slug }
-          category { slug }
-          isAvailableForPurchase
-          productVariants(first: 12) {
-            edges {
-              node {
-                id
-                name
-                sku
-                quantityAvailable
-                quantityLimitPerCustomer
-                pricing {
-                  price { gross { currency amount } }
-                  priceUndiscounted { gross { currency amount } }
-                }
-              }
-            }
-          }
-          attributes {
-            attribute { id slug name }
-            values { name slug value }
-          }
-        }
-      }
-    }
-  }
-`
-
 /**
- * Все товары коллекции (с пагинацией).
- * @param first — устаревший лимит; если не передан, тянем всю коллекцию.
+ * Товары коллекции. Принимает slug Nest или legacy Saleor GID (см. LEGACY_COLLECTION_GID_TO_SLUG).
+ * @param first — лимит (если не задан, тянем всю коллекцию).
  */
 export async function getProductsByCollectionId(
-  collectionId: string = COLLECTION_NOSE_ID,
+  collectionId: string = 'Q29sbGVjdGlvbjo1',
   first?: number,
 ): Promise<ProductCardItem[]> {
-  const allNodes: any[] = []
-  let after: string | undefined
-  let safety = 0
-  const pageSize = 100
-  const hardCap = typeof first === 'number' && first > 0 ? first : Number.POSITIVE_INFINITY
-
-  while (safety < 20 && allNodes.length < hardCap) {
-    safety += 1
-    const data = await graphqlRequest<{
-      products: {
-        pageInfo: { hasNextPage: boolean; endCursor: string | null }
-        edges: { node: any }[]
-      }
-    }>(PRODUCTS_BY_COLLECTION_QUERY, {
-      channel: CHANNEL,
-      collectionId,
-      first: Math.min(pageSize, Number.isFinite(hardCap) ? hardCap - allNodes.length : pageSize),
-      after: after ?? null,
-    })
-
-    const edges = data.products?.edges ?? []
-    for (const edge of edges) {
-      if (edge?.node) allNodes.push(edge.node)
-      if (allNodes.length >= hardCap) break
-    }
-
-    const pageInfo = data.products?.pageInfo
-    if (!pageInfo?.hasNextPage || !edges.length || allNodes.length >= hardCap) break
-    after = pageInfo.endCursor ?? undefined
-    if (!after) break
-  }
-
-  const nodes = Number.isFinite(hardCap) ? allNodes.slice(0, hardCap) : allNodes
-  const variantIds = nodes
-    .map((node: any) => node.productVariants?.edges?.[0]?.node?.id)
-    .filter(Boolean)
-  const discounts = await getCatalogDiscounts(variantIds)
-  return filterValidProductCards(
-    nodes
-      .filter((node: any) => node.productVariants?.edges?.[0]?.node)
-      .map((node: any) => mapNodeToProductCard(node, discounts)),
-  )
+  const hint = LEGACY_COLLECTION_GID_TO_SLUG[collectionId] ?? collectionId
+  const slug = (await resolveCollectionSlug(hint)) ?? null
+  if (!slug) return []
+  const cap = typeof first === 'number' && first > 0 ? first : 500
+  const cards = await fetchAllProductCards({ collection: slug }, cap)
+  return filterValidProductCards(cards.map((c) => cardToProductCardItem(c)))
 }
 
-/** Slug атрибута «Аромат» в Saleor (Reference на страницы «Все ароматы») */
-const CATALOG_AROMA_ATTRIBUTE_SLUG = 'aromat'
-
-/** Товары по slug страницы аромата (аромат — Reference на Page, фильтр по pageSlugs) */
+/** Товары по slug аромата (= `CatalogTag.slug`). */
 export async function getProductsByAromaSlug(aromaSlug: string): Promise<ProductCardItem[]> {
-  const query = `
-    query getProductsByAroma($channel: String!, $first: Int!, $pageSlugs: [String!]!) {
-      products(
-        first: $first,
-        channel: $channel,
-        where: {
-          attributes: [
-            {
-              slug: "${CATALOG_AROMA_ATTRIBUTE_SLUG}",
-              value: {
-                reference: {
-                  pageSlugs: { containsAny: $pageSlugs }
-                }
-              }
-            }
-          ]
-        }
-      ) {
-        edges {
-          node {
-            id
-            name
-            description
-            slug
-            rating
-            thumbnail { url alt }
-            media { id alt url }
-            collections { id name slug }
-            category { slug }
-            isAvailableForPurchase
-            productVariants(first: 12) {
-              edges {
-                node {
-                  id
-                  name
-                  sku
-                  quantityAvailable
-                  quantityLimitPerCustomer
-                  pricing {
-                    price { gross { currency amount } }
-                    priceUndiscounted { gross { currency amount } }
-                  }
-                }
-              }
-            }
-            attributes {
-              attribute { id slug name }
-              values { name slug value }
-            }
-          }
-        }
-      }
-    }
-  `
-  const variables = { channel: CHANNEL, first: 50, pageSlugs: [aromaSlug] }
   try {
-    const data = await graphqlRequest<BestSellersResponse>(query, variables)
-    const nodes = data.products.edges.map((edge: any) => edge.node)
-    const variantIds = nodes.map((node: any) => node.productVariants.edges[0]?.node.id).filter(Boolean)
-    const discounts = await getCatalogDiscounts(variantIds)
+    const cards = await fetchAllProductCards({ tag: aromaSlug }, 200)
     return filterValidProductCards(
-      nodes.map((node: any) => mapNodeToProductCard(node, discounts)),
+      cards.map((c) => cardToProductCardItem(c)),
     )
   } catch (e) {
     console.error('getProductsByAromaSlug error:', e)
@@ -1278,170 +247,32 @@ export async function getProductsByAromaSlug(aromaSlug: string): Promise<Product
   }
 }
 
-/** Товары по имени значения атрибута (fallback, если по slug ничего не нашлось) */
+/** Товары по имени аромата (fallback): имя → тег → фильтр по тегу. */
 export async function getProductsByAromaValue(aromaName: string): Promise<ProductCardItem[]> {
-  const query = `
-    query getProductsByAromaName($channel: String!, $aromaName: String!, $first: Int!) {
-      products(
-        first: $first,
-        channel: $channel,
-        where: {
-          attributes: [
-            { slug: "${CATALOG_AROMA_ATTRIBUTE_SLUG}", value: { name: { eq: $aromaName } } }
-          ]
-        }
-      ) {
-        edges {
-          node {
-            id
-            name
-            description
-            slug
-            rating
-            thumbnail { url alt }
-            media { id alt url }
-            collections { id name slug }
-            category { slug }
-            isAvailableForPurchase
-            productVariants(first: 12) {
-              edges {
-                node {
-                  id
-                  name
-                  sku
-                  quantityAvailable
-                  quantityLimitPerCustomer
-                  pricing {
-                    price { gross { currency amount } }
-                    priceUndiscounted { gross { currency amount } }
-                  }
-                }
-              }
-            }
-            attributes {
-              attribute { id slug name }
-              values { name slug value }
-            }
-          }
-        }
-      }
-    }
-  `
-  const variables = { channel: CHANNEL, aromaName, first: 50 }
   try {
-    const data = await graphqlRequest<BestSellersResponse>(query, variables)
-    const nodes = data.products.edges.map((edge: any) => edge.node)
-    const variantIds = nodes.map((node: any) => node.productVariants.edges[0]?.node.id).filter(Boolean)
-    const discounts = await getCatalogDiscounts(variantIds)
-    return filterValidProductCards(
-      nodes.map((node: any) => mapNodeToProductCard(node, discounts)),
+    const needle = aromaName.trim().toLowerCase()
+    if (!needle) return []
+    const { items } = await fetchCatalogTags()
+    const tag = items.find(
+      (t) => t.name.trim().toLowerCase() === needle || t.title?.trim().toLowerCase() === needle,
     )
+    if (!tag) return []
+    return await getProductsByAromaSlug(tag.slug)
   } catch (e) {
     console.error('getProductsByAromaValue error:', e)
     return []
   }
 }
 
+/** Товары категории (Nest `?category=`). Неизвестная категория → []. */
 export async function getProductsByCategorySlug(categorySlug: string): Promise<any> {
-  const query = `
-    query getGreedProducts($channel: String! , $categorySlug: String) {
-         category(slug: $categorySlug){
-  products(first: 50, channel: $channel) {
-    edges {
-      node {
-        id
-        name
-        description
-        slug
-        rating
-        metadata {
-          key
-          value
-        }
-        thumbnail {
-          url
-          alt
-        }
-        media {
-          id
-          alt
-          url
-        }
-        collections{
-          id
-          name
-          slug
-        }
-        category {
-          slug
-        }
-        isAvailableForPurchase
-        productVariants(first: 12) {
-          edges {
-            node {
-              id
-              name
-              sku
-              quantityAvailable
-              quantityLimitPerCustomer
-              weight {
-                value
-              }
-              metadata {
-                key
-                value
-              }
-              pricing {
-                price {
-                  gross {
-                    currency
-                    amount
-                  }
-                }
-              }
-            }
-          }
-        }
-        attributes {
-          attribute {
-            id
-            slug
-            name
-          }
-          values {
-            name
-            slug
-            value
-          }
-        }
-      }
-    }
-}}
-}
-  `
-
-  const variables = {
-    channel: CHANNEL,
-    categorySlug: categorySlug
-  }
-
-  const data = await graphqlRequest<ProductsByCategorySlugResponse>(query, variables)
-
-  // Категории нет в Saleor (неверный/устаревший slug) — не падаем на SSR
-  if (!data?.category?.products?.edges) {
-    return []
-  }
-
-  const nodes = data.category.products.edges.map((edge: any) => edge.node)
-  const variantIds = nodes
-    .map((node: any) => node.productVariants?.edges?.[0]?.node?.id as string | undefined)
-    .filter(Boolean) as string[]
-  const discounts = await getCatalogDiscounts(variantIds)
-
-  const result = nodes
-    .filter((node: any) => node.productVariants?.edges?.[0]?.node)
-    .map((node: any) =>
-      mapNodeToProductCard(node, discounts, { categorySlug }),
+  try {
+    const cards = await fetchAllProductCards({ category: categorySlug }, 200)
+    return filterValidProductCards(
+      cards.map((c) => cardToProductCardItem(c, { categorySlug })),
     )
-  return filterValidProductCards(result)
+  } catch (e) {
+    if (isNotFound(e)) return []
+    throw e
+  }
 }

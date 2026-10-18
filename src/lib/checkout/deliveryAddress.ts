@@ -1,8 +1,4 @@
 import type { AddressInfo } from '@/graphql/types/auth.types'
-import {
-  displayStreetAddress2Comment,
-  formatDeliveryAddressSummary,
-} from '@/lib/addressVspMeta'
 
 const STORAGE_KEY = 'vspomni_checkout_delivery_address'
 
@@ -54,34 +50,13 @@ export function mergeCheckoutContact(
   }
 }
 
-/**
- * Адрес для Saleor: в streetAddress1 — читаемое описание доставки (ПВЗ/курьер),
- * в streetAddress2 — служебные метаданные + комментарий пользователя.
- */
-export function toSaleorDeliveryAddress(address: AddressInfo): Partial<AddressInfo> {
-  const summary = formatDeliveryAddressSummary(address)
-  const userComment = displayStreetAddress2Comment(address.streetAddress2 || '')
-  const metaLine = (address.streetAddress2 || '').split('\n')[0]?.trim() || ''
-
-  let streetAddress2 = metaLine
-  if (userComment) {
-    streetAddress2 = metaLine ? `${metaLine}\n${userComment}` : userComment
-  }
-
-  return {
-    ...address,
-    streetAddress1: summary || address.streetAddress1,
-    streetAddress2,
-  }
-}
-
 export function resolveCheckoutDeliveryAddress(
   deliveryAddress?: AddressInfo | null,
 ): AddressInfo | null {
   return deliveryAddress ?? loadPersistedCheckoutDeliveryAddress()
 }
 
-/** Возвращает текст ошибки или null, если адрес годится для checkout/Saleor. */
+/** Возвращает текст ошибки или null, если адрес годится для checkout (Nest). */
 export function validateDeliveryAddressForCheckout(
   address: Partial<AddressInfo> | null | undefined,
 ): string | null {

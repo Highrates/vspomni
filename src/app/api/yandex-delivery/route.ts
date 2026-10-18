@@ -292,6 +292,12 @@ export async function POST(req: NextRequest) {
         }>
       }
       const pkgResolved = resolveYandexShipmentPackage(body)
+      if (!to || typeof to !== 'object') {
+        return NextResponse.json(
+          { error: 'calculate: нужен объект to { city, … }' },
+          { status: 400 },
+        )
+      }
       const yandexDropoffPointId = (
         to.yandex_point_id ||
         to.yandexPointId ||

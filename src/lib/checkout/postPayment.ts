@@ -1,197 +1,47 @@
+/**
+ * После оплаты: подтверждение заказа через Nest.
+ *
+ * Nest финализирует заказ сам (webhook `POST /orders/yookassa/webhook`); `checkout-status`
+ * и `payments/:id/status` дополнительно сверяются с ЮKassa (нужно локально, где webhook
+ * недоступен). Front больше не создаёт заказ и не ходит в ЮKassa напрямую.
+ */
 import { stashPaymentForMetrika } from '@/lib/analytics/yandexMetrika'
+import { ApiError } from '@/api/apiClient'
+import { getCheckoutStatus, getPaymentStatus } from '@/api/ordersApi'
+import {
+  clearPendingCheckoutOrder,
+  readPendingCheckoutOrder,
+} from '@/lib/checkout/nestCheckout'
 
 const PAYMENT_POLL_INTERVAL_MS = 2000
 const PAYMENT_POLL_MAX_ATTEMPTS = 45
-/** Даём webhook время создать заказ до idempotent fallback */
-const WEBHOOK_GRACE_MS = 6000
-
-export type PendingPaymentStorage = {
-  checkoutId: string | null
-  paymentId: string | null
-  paymentAmount: number | undefined
-  shippingAmount: number | undefined
-  shippingCarrier: 'cdek' | 'yandex' | 'ozon' | null
-}
-
-export function persistPendingPaymentStorage(
-  checkoutToken: string,
-  amount: number,
-  yookassaPaymentId?: string,
-  shipping?: { amount: number; carrier: 'cdek' | 'yandex' | 'ozon' | null },
-): void {
-  localStorage.setItem('pendingCheckoutId', checkoutToken)
-  localStorage.setItem('pendingPaymentAmount', amount.toString())
-  localStorage.setItem('pendingShippingAmount', String(shipping?.amount ?? 0))
-  localStorage.setItem('pendingShippingCarrier', shipping?.carrier || 'cdek')
-  if (yookassaPaymentId) {
-    localStorage.setItem('pendingPaymentId', yookassaPaymentId)
-  }
-}
-
-export function readPendingPaymentStorage(): PendingPaymentStorage {
-  const paymentAmountStr = localStorage.getItem('pendingPaymentAmount')
-  const shippingAmountStr = localStorage.getItem('pendingShippingAmount')
-  const carrier = localStorage.getItem('pendingShippingCarrier') as
-    | 'cdek'
-    | 'yandex'
-    | 'ozon'
-    | null
-
-  return {
-    checkoutId: localStorage.getItem('pendingCheckoutId'),
-    paymentId: localStorage.getItem('pendingPaymentId'),
-    paymentAmount: paymentAmountStr ? parseFloat(paymentAmountStr) : undefined,
-    shippingAmount: shippingAmountStr ? parseFloat(shippingAmountStr) : undefined,
-    shippingCarrier:
-      carrier === 'cdek' || carrier === 'yandex' || carrier === 'ozon'
-        ? carrier
-        : null,
-  }
-}
-
-export function clearPendingPaymentStorage(): void {
-  localStorage.removeItem('pendingCheckoutId')
-  localStorage.removeItem('pendingPaymentId')
-  localStorage.removeItem('pendingPaymentAmount')
-  localStorage.removeItem('pendingShippingAmount')
-  localStorage.removeItem('pendingShippingCarrier')
-}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-type PaymentStatusResponse = {
+export function clearPendingPaymentStorage(): void {
+  clearPendingCheckoutOrder()
+}
+
+export type PaymentStatusResponse = {
   status?: string
   paid?: boolean
-  amount?: { value?: string }
-  metadata?: Record<string, string>
+  latePayment?: boolean
+  message?: string
 }
 
+/** Статус платежа (Nest сверяется с ЮKassa). null — сеть/нет доступа. */
 export async function fetchPaymentStatus(
   paymentId: string,
+  payToken?: string | null,
 ): Promise<PaymentStatusResponse | null> {
+  const token = payToken ?? readPendingCheckoutOrder()?.payToken ?? null
+  if (!token) return null
   try {
-    const response = await fetch(
-      `/api/yookassa/payment-status?paymentId=${encodeURIComponent(paymentId)}`,
-    )
-    if (!response.ok) return null
-    return (await response.json()) as PaymentStatusResponse
+    return await getPaymentStatus(paymentId, token)
   } catch {
     return null
-  }
-}
-
-export async function enrichPendingPaymentFromYookassa(
-  paymentId: string,
-): Promise<Partial<PendingPaymentStorage>> {
-  const status = await fetchPaymentStatus(paymentId)
-  if (!status) return {}
-
-  const meta = status.metadata || {}
-  const patch: Partial<PendingPaymentStorage> = {}
-
-  const checkoutId = meta.orderId || meta.checkoutId
-  if (checkoutId) {
-    patch.checkoutId = checkoutId
-    localStorage.setItem('pendingCheckoutId', checkoutId)
-  }
-
-  if (meta.shippingAmount) {
-    const parsed = parseFloat(String(meta.shippingAmount))
-    if (Number.isFinite(parsed)) {
-      patch.shippingAmount = parsed
-      localStorage.setItem('pendingShippingAmount', String(parsed))
-    }
-  }
-
-  if (
-    meta.shippingCarrier === 'cdek' ||
-    meta.shippingCarrier === 'yandex' ||
-    meta.shippingCarrier === 'ozon'
-  ) {
-    patch.shippingCarrier = meta.shippingCarrier
-    localStorage.setItem('pendingShippingCarrier', meta.shippingCarrier)
-  }
-
-  if (status.amount?.value) {
-    const amount = parseFloat(status.amount.value)
-    if (Number.isFinite(amount)) {
-      patch.paymentAmount = amount
-      localStorage.setItem('pendingPaymentAmount', String(amount))
-    }
-  }
-
-  return patch
-}
-
-export async function waitForPaymentSucceeded(paymentId: string): Promise<boolean> {
-  for (let attempt = 0; attempt < PAYMENT_POLL_MAX_ATTEMPTS; attempt += 1) {
-    const status = await fetchPaymentStatus(paymentId)
-    if (status?.status === 'succeeded' || status?.paid) {
-      return true
-    }
-    await sleep(PAYMENT_POLL_INTERVAL_MS)
-  }
-  return false
-}
-
-async function finalizeOrderViaApi(
-  paymentId: string,
-): Promise<
-  | { ok: true; orderNumber: string; orderId?: string }
-  | {
-      ok: false
-      stockFailure: boolean
-      refunded?: boolean
-      error: string
-      code?: string
-    }
-  | never
-> {
-  const response = await fetch('/api/yookassa/finalize-order', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ paymentId }),
-  })
-
-  const data = await response.json().catch(() => null)
-
-  if (data && response.status === 409 && data.code) {
-    const requiresRefund = Boolean(data.requiresRefund)
-    const userMessage =
-      data.code === 'INSUFFICIENT_STOCK'
-        ? data.message ||
-          data.error ||
-          'Товар закончился на складе. Оплата будет возвращена.'
-        : data.code === 'PAYMENT_AMOUNT_MISMATCH'
-          ? 'Сумма оплаты не совпала с заказом. Оплата будет возвращена.'
-          : data.code === 'CHECKOUT_QUANTITY_LIMIT'
-            ? 'Не удалось применить промокод к заказу. Оплата будет возвращена.'
-            : data.message || data.error || 'Не удалось оформить заказ.'
-
-    return {
-      ok: false,
-      stockFailure: requiresRefund,
-      refunded: Boolean(data.refunded),
-      error: userMessage,
-      code: String(data.code),
-    }
-  }
-
-  if (!response.ok || !data?.success) {
-    throw new Error(data?.error || 'Failed to finalize order')
-  }
-
-  const orderNumber = String(data.order?.number || data.order?.id || '')
-  if (!orderNumber) {
-    throw new Error('Order was not returned after finalize')
-  }
-
-  return {
-    ok: true,
-    orderNumber,
-    orderId: data.order?.id,
   }
 }
 
@@ -214,73 +64,73 @@ export type PostPaymentResult =
     }
 
 /**
- * Webhook создаёт заказ (primary). Success page ждёт оплату → grace →
- * idempotent POST /api/yookassa/finalize-order (REST complete, не GraphQL).
+ * Success-страница: ждём, пока Nest переведёт заказ в PAID.
+ * `orderId` берём из query (return_url Nest), иначе из pending-заказа.
  */
-export async function resolveOrderAfterPayment(): Promise<PostPaymentResult> {
-  let ctx = readPendingPaymentStorage()
-
-  if (!ctx.paymentId) {
+export async function resolveOrderAfterPayment(params?: {
+  orderId?: string | null
+}): Promise<PostPaymentResult> {
+  const pending = readPendingCheckoutOrder()
+  const orderId = params?.orderId?.trim() || pending?.orderId || ''
+  if (!orderId) {
     return {
       ok: false,
       error:
         'Не удалось подтвердить заказ. Если оплата прошла — проверьте раздел «Заказы» в профиле.',
     }
   }
+  const payToken = pending && pending.orderId === orderId ? pending.payToken : null
+  const paymentId = pending && pending.orderId === orderId ? pending.paymentId : null
+  const paymentAmount = pending && pending.orderId === orderId ? pending.total : undefined
 
-  const paymentId = ctx.paymentId
-
-  if (!ctx.checkoutId) {
-    const recovered = await enrichPendingPaymentFromYookassa(paymentId)
-    ctx = { ...ctx, ...recovered }
-  }
-
-  const paid = await waitForPaymentSucceeded(paymentId)
-  if (!paid) {
-    return {
-      ok: false,
-      error: 'Оплата ещё не подтверждена. Подождите и обновите страницу.',
-      paymentId,
-      paymentAmount: ctx.paymentAmount,
-    }
-  }
-
-  stashPaymentForMetrika({
-    paymentId,
-    revenue: ctx.paymentAmount,
-  })
-
-  await sleep(WEBHOOK_GRACE_MS)
-
-  try {
-    const order = await finalizeOrderViaApi(paymentId)
-    if (!order.ok) {
-      clearPendingPaymentStorage()
-      return {
-        ok: false,
-        stockFailure: Boolean(order.stockFailure),
-        refunded: order.refunded,
-        error: order.error,
-        paymentId,
-        paymentAmount: ctx.paymentAmount,
+  for (let attempt = 0; attempt < PAYMENT_POLL_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const status = await getCheckoutStatus(orderId, payToken)
+      if (status.paid) {
+        stashPaymentForMetrika({ paymentId: paymentId ?? orderId, revenue: paymentAmount })
+        return {
+          ok: true,
+          orderNumber: String(status.number || pending?.number || orderId),
+          orderId: status.orderId || orderId,
+          paymentAmount,
+          paymentId,
+        }
       }
+      const msg = status.message || ''
+      // Терминальные состояния: отмена / просрочка / автовозврат
+      if (/истёк|отменён|автовозврат|нельзя подтвердить/i.test(msg)) {
+        const refunded = /автовозврат/i.test(msg) && !/не удался/i.test(msg)
+        return {
+          ok: false,
+          error: msg,
+          stockFailure: refunded,
+          refunded,
+          paymentId,
+          paymentAmount,
+        }
+      }
+    } catch (e) {
+      if (e instanceof ApiError && (e.status === 403 || e.status === 404)) {
+        return {
+          ok: false,
+          processing: true,
+          error:
+            'Не удалось подтвердить оплату в этом браузере. Проверьте раздел «Заказы» в профиле — заказ появится после подтверждения оплаты.',
+          paymentId,
+          paymentAmount,
+        }
+      }
+      // сетевые/5xx — пробуем ещё
     }
-    return {
-      ok: true,
-      orderNumber: order.orderNumber,
-      orderId: order.orderId,
-      paymentAmount: ctx.paymentAmount,
-      paymentId,
-    }
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'Не удалось оформить заказ'
-    return {
-      ok: false,
-      processing: true,
-      error: `${message}. Заказ может появиться в профиле через минуту — обновите страницу «Заказы».`,
-      paymentId: ctx.paymentId,
-      paymentAmount: ctx.paymentAmount,
-    }
+    await sleep(PAYMENT_POLL_INTERVAL_MS)
+  }
+
+  return {
+    ok: false,
+    processing: true,
+    error:
+      'Оплата ещё не подтверждена. Если деньги списаны, заказ появится в профиле в течение нескольких минут.',
+    paymentId,
+    paymentAmount,
   }
 }

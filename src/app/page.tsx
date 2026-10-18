@@ -9,6 +9,7 @@ import StoryBlock from '@/components/features/StoryBlock'
 import PopularScentsAlt from '@/components/features/PopularScentsAlt'
 import ComingSoon from '@/components/features/ComingSoon'
 import Choice from '@/components/home/Choice'
+import ChannelOneSection from '@/components/home/ChannelOneSection'
 import NewsBlock from '@/components/news/NewsBlock'
 import FaqBlock from '@/components/home/FaqBlock'
 import FaqNoscript from '@/components/home/FaqNoscript'
@@ -59,15 +60,11 @@ export default async function Home() {
       ) : null}
       <FaqNoscript faqs={faqs} />
       <Hero />
-      <section className="px-4 sm:px-6 md:px-8 pt-6 sm:pt-8 md:pt-10">
-        <h1 className="text-xl sm:text-[36px] md:text-[42px] lg:text-[48px] font-semibold text-black select-none">
-          {HOME_TITLE}
-        </h1>
-      </section>
       <StoryBlock />
-      <PopularScentsAlt />
+      <PopularScentsAlt title={HOME_TITLE} heading="h1" />
       <ComingSoon initialCategories={comingSoonCategories} />
       <Choice initialProducts={choiceProducts} />
+      <ChannelOneSection />
       <HistoryLine />
       <ProductGrid />
       <GiftPackagesBanner initialCategory={giftPackagesCategory} />

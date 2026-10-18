@@ -18,7 +18,6 @@ export default function OrderSummary() {
     promoScope,
     appliedPromoCode,
     promoItemsDiscount,
-    promoShippingDiscount,
     shippingPrice,
     shippingLoading,
     shippingCarrier,
@@ -67,9 +66,7 @@ export default function OrderSummary() {
         total={totalPrice}
         subtotal={subtotal}
         itemsDiscount={promoItemsDiscount}
-        shippingDiscount={promoShippingDiscount}
         promoLabel={promoLabel}
-        isShippingPromo={discountType === 'SHIPPING'}
         totalItems={totalItems}
         shipping={shippingPrice}
         shippingLoading={shippingLoading}

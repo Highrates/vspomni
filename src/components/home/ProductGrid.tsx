@@ -35,8 +35,8 @@ export default function ProductGrid() {
           Все ароматы Вспомни.
         </h2>
       </div>
-      {/* Сетка как на десктопе: 3 колонки, на lg — 5 */}
-      <div className="grid grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-5 md:gap-6 p-2 -m-2">
+      {/* Mobile: 2 кол.; sm–md: 3; lg+: 5 */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-5 md:gap-6 p-1 sm:p-2 -m-1 sm:-m-2">
         {items.map((item) => (
           <div key={item.id} className="w-full min-w-0">
             <AllAromasItem item={item} />

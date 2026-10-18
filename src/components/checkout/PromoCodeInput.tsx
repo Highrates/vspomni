@@ -50,7 +50,7 @@ export const PromoCodeInput = () => {
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <label className="min-w-0 flex-1 text-base sm:text-xl font-semibold text-black leading-snug cursor-pointer">
-          Добавить промокод или сертификат
+          Добавить промокод
         </label>
         <button
           type="button"

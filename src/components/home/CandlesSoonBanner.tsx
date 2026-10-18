@@ -13,7 +13,11 @@ export interface CandlesSoonBannerProps {
 }
 
 export default function CandlesSoonBanner({ imageUrl, bannerText }: CandlesSoonBannerProps) {
-  const src = imageUrl && imageUrl.startsWith('http') ? imageUrl : DEFAULT_IMAGE
+  const raw = (imageUrl || '').trim()
+  const src =
+    raw.startsWith('http') || raw.startsWith('/')
+      ? raw
+      : DEFAULT_IMAGE
   const text = (bannerText || DEFAULT_TEXT).trim()
 
   return (
@@ -23,13 +27,14 @@ export default function CandlesSoonBanner({ imageUrl, bannerText }: CandlesSoonB
           src={src}
           alt={text}
           fill
+          unoptimized
           sizes="(max-width: 640px) 100vw, (max-width: 768px) 95vw, (max-width: 1600px) 98vw, 1536px"
           className="rounded-[16px] object-cover"
         />
         <div className="absolute inset-0 bg-black/35 rounded-[16px]" />
 
-        <div className="absolute inset-0 flex items-center justify-center z-10">
-          <h6 className="text-[20px] sm:text-[28px] md:text-[32px] lg:text-[48px] font-semibold select-none text-white leading-[1.2] lg:leading-[52px] text-center">
+        <div className="absolute inset-0 z-10 flex items-center justify-center px-4 sm:px-6">
+          <h6 className="line-clamp-2 text-center text-[20px] font-semibold leading-[1.2] text-white select-none sm:text-[28px] md:text-[32px] lg:text-[48px] lg:leading-[52px]">
             {text}
           </h6>
         </div>

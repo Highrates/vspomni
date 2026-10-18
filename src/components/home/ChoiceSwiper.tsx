@@ -42,7 +42,7 @@ export default function ChoiceSwiper({ products }: Props) {
       {products.map((product) => (
         <SwiperSlide key={product.id} className={slideClass}>
           <motion.div
-            initial={{ opacity: 0, scale: 0.98 }}
+            initial={false}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.4 }}
             className="h-auto w-full"

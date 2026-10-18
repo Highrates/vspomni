@@ -26,6 +26,7 @@ export default function BackButton() {
         width={20}
         height={20}
         className="mr-1 rotate-180 pointer-events-none"
+        style={{ width: 'auto', height: 'auto' }}
       />
       <span className="text-left text-md text-black font-medium">
         Вернуться назад

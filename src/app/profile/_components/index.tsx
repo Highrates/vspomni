@@ -22,7 +22,7 @@ import { transformOrderListItem } from '@/lib/order/transform'
 import type { OrderListItem, OrdersPagination } from '@/lib/order/types'
 
 // --- Imports from OrderDelivery logic ---
-import { getMeInfo } from '@/graphql/queries/auth.service'
+import { getMeInfo, updateBuyerProfile } from '@/api/authApi'
 import {
   deleteAddress,
   setDefaultAddress,
@@ -180,11 +180,7 @@ export default function ProfileIndex() {
 
   const handleSave = async () => {
     try {
-      const token =
-        typeof window !== 'undefined'
-          ? localStorage.getItem('token')
-          : null
-      if (!token || token === 'null' || token === 'undefined') {
+      if (!isAuthenticated) {
         toast.error('Сессия истекла. Войдите снова.')
         return
       }
@@ -194,24 +190,15 @@ export default function ProfileIndex() {
         return
       }
 
-      const { updateAccount, getMeInfo } = await import('@/graphql/queries/auth.service')
       const { updateAddress } = await import('@/graphql/queries/adress.service')
-      
-      // Обновляем имя и фамилию (передаём токен явно для надёжности после OAuth)
-      await updateAccount(user.name, user.familyName, token)
 
-      // Телефон в metadata пользователя (источник правды без адреса)
-      if (user.userId && user.userId !== '0') {
-        try {
-          const { updateUserPhoneMetadata } = await import(
-            '@/graphql/queries/auth.service'
-          )
-          await updateUserPhoneMetadata(user.userId, user.phone || '', token)
-        } catch (metaErr) {
-          console.warn('Не удалось сохранить телефон в metadata:', metaErr)
-        }
-      }
-      
+      // Nest: PATCH /account/me — имя, фамилия (displayName) и телефон профиля одним запросом
+      await updateBuyerProfile({
+        firstName: user.name,
+        lastName: user.familyName,
+        phone: user.phone || '',
+      })
+
       // Обновляем телефон в адресе (если есть адрес и он полный)
       if (user.phone) {
         if (addresses.length > 0) {

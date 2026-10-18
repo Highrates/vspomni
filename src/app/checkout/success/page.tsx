@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useCartStore } from '@/stores/useCart'
 import { useCheckoutStore } from '@/stores/useCheckout'
 import { trackPaymentSuccess } from '@/lib/analytics/yandexMetrika'
@@ -11,6 +12,8 @@ import {
 } from '@/lib/checkout/postPayment'
 
 function CheckoutSuccessContent() {
+  const searchParams = useSearchParams()
+  const orderIdParam = searchParams.get('orderId')
   const { clearCart } = useCartStore()
   const { clearCheckout } = useCheckoutStore()
   const [isCompleting, setIsCompleting] = useState(true)
@@ -22,7 +25,7 @@ function CheckoutSuccessContent() {
     let cancelled = false
 
     async function run() {
-      const result = await resolveOrderAfterPayment()
+      const result = await resolveOrderAfterPayment({ orderId: orderIdParam })
       if (cancelled) return
 
       if (result.ok) {
@@ -57,7 +60,7 @@ function CheckoutSuccessContent() {
     return () => {
       cancelled = true
     }
-  }, [clearCart, clearCheckout])
+  }, [clearCart, clearCheckout, orderIdParam])
 
   return (
     <div className="min-h-[calc(100vh-80px)] flex items-center justify-center px-4 py-12 text-center">

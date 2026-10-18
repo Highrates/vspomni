@@ -1,5 +1,10 @@
 'use client'
 
+/**
+ * Promo-only до релиза сертификатов:
+ * только `POST /promo/validate`. Dual-input (gift → promo), `giftCertificateCode`
+ * на create, страница покупки и `/account/gift-certificates` — после релиза.
+ */
 import { useCallback, useEffect, useState } from 'react'
 import { useCartStore } from '@/stores/useCart'
 import { getAccountEmail } from '@/lib/auth/accountEmail'

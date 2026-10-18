@@ -168,11 +168,10 @@ export default function CatalogAromaPageClient({
           </p>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5 p-2 -m-2 w-full min-w-0">
-            {products.map((product, index) => (
+            {products.map((product) => (
               <ProductCard
                 product={product}
                 key={product.id}
-                isNew={index < 2}
               />
             ))}
           </div>

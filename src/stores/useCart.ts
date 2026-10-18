@@ -10,7 +10,6 @@ import {
   cartSignature,
   cartSubtotal,
   promoItemsDiscount,
-  promoShippingDiscount,
   round2,
   type PromoDiscountType,
   type PromoScope,
@@ -39,7 +38,6 @@ interface CartState {
   /** Сообщение, почему промокод был снят или изменён */
   promoNotice: string | null
   promoItemsDiscount: number
-  promoShippingDiscount: number
   shippingPrice: number
   shippingLoading: boolean
   /** Ошибка расчёта доставки — блокирует оплату */
@@ -57,6 +55,8 @@ interface CartState {
     variantId?: string,
   ) => CartQuantityResult
   removeItem: (id: string) => void
+  /** Заменить строки целиком (результат Nest cart sync); пересчитывает итоги. */
+  replaceItems: (items: CartItem[]) => void
   increaseQuantity: (id: string) => CartQuantityResult
   decreaseQuantity: (id: string) => void
   clearCart: () => void
@@ -90,13 +90,11 @@ const calcTotals = (state: TotalsInput) => {
   const subtotal = cartSubtotal(validItems)
   const shippingPrice = Number(state.shippingPrice) || 0
   const itemsDiscount = promoItemsDiscount(state, validItems, subtotal)
-  const shippingDiscount = promoShippingDiscount(state, shippingPrice)
 
   return {
     totalItems: validItems.reduce((sum, i) => sum + i.quantity, 0),
-    totalPrice: round2(subtotal - itemsDiscount + shippingPrice - shippingDiscount),
+    totalPrice: round2(subtotal - itemsDiscount + shippingPrice),
     promoItemsDiscount: itemsDiscount,
-    promoShippingDiscount: shippingDiscount,
   }
 }
 
@@ -155,7 +153,6 @@ export const useCartStore = create<CartState>()(
         ...EMPTY_PROMO,
         promoNotice: null,
         promoItemsDiscount: 0,
-        promoShippingDiscount: 0,
         shippingPrice: 0,
         shippingLoading: false,
         shippingError: null,
@@ -222,6 +219,10 @@ export const useCartStore = create<CartState>()(
           setItems(get().items.filter((item) => item.id !== id))
         },
 
+        replaceItems: (items) => {
+          setItems(items)
+        },
+
         increaseQuantity: (id) => {
           const items = [...get().items]
           const index = items.findIndex((item) => item.id === id)
@@ -270,9 +271,7 @@ export const useCartStore = create<CartState>()(
           const promo = {
             appliedPromoCode: result.code,
             discount:
-              result.discountType !== 'SHIPPING' && result.discountValueType === 'PERCENTAGE'
-                ? result.discountValue
-                : 0,
+              result.discountValueType === 'PERCENTAGE' ? result.discountValue : 0,
             discountAmount: result.discountAmount,
             discountType: result.discountType,
             discountValueType: result.discountValueType,
@@ -302,7 +301,6 @@ export const useCartStore = create<CartState>()(
             ...EMPTY_PROMO,
             promoNotice: null,
             promoItemsDiscount: 0,
-            promoShippingDiscount: 0,
             shippingPrice: 0,
             shippingError: null,
             shippingIsFree: false,
@@ -325,7 +323,6 @@ export const useCartStore = create<CartState>()(
         promoCartSignature: state.promoCartSignature,
         promoValidatedAt: state.promoValidatedAt,
         promoItemsDiscount: state.promoItemsDiscount,
-        promoShippingDiscount: state.promoShippingDiscount,
         shippingPrice: state.shippingPrice,
         shippingCarrier: state.shippingCarrier,
         shippingIsFree: state.shippingIsFree,

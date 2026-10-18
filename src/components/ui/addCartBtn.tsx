@@ -16,9 +16,17 @@ interface AddCartBtnProps {
   variantId?: string | null
   /** Мобилка: полоса под ценой с текстом «В корзину» и компактный степпер */
   mobileRow?: boolean
+  /** Узкие карточки (Выбор ⭐): 36px иконка / компактный степпер */
+  compact?: boolean
 }
 
-export default function AddCartBtn({ product, size, variantId, mobileRow }: AddCartBtnProps) {
+export default function AddCartBtn({
+  product,
+  size,
+  variantId,
+  mobileRow,
+  compact,
+}: AddCartBtnProps) {
   const addItem = useCartStore((state) => state.addItem)
   const increaseQuantity = useCartStore((state) => state.increaseQuantity)
   const decreaseQuantity = useCartStore((state) => state.decreaseQuantity)
@@ -118,6 +126,45 @@ export default function AddCartBtn({ product, size, variantId, mobileRow }: AddC
       )
     }
 
+    if (compact) {
+      return (
+        <div
+          className="flex h-9 min-w-[88px] cursor-default select-none items-center justify-center gap-0.5 rounded-full bg-black px-1 transition-all duration-300 ease-out"
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            aria-label="Уменьшить количество"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:bg-white/15 active:bg-white/20"
+            onClick={handleDec}
+          >
+            <Minus className="h-3.5 w-3.5 text-white" strokeWidth={2} />
+          </button>
+          <span className="min-w-[1.1rem] flex-1 text-center text-[12px] font-semibold tabular-nums text-white">
+            {quantity}
+          </span>
+          <button
+            type="button"
+            aria-label={
+              plusDisabled && maxQty != null
+                ? formatMaxQuantityMessage(
+                    maxQty,
+                    product.quantityLimitPerCustomer,
+                    product.quantityAvailable,
+                  )
+                : 'Увеличить количество'
+            }
+            disabled={plusDisabled}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:bg-white/15 active:bg-white/20 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
+            onClick={handleInc}
+          >
+            <Plus className="h-3.5 w-3.5 text-white" strokeWidth={2} />
+          </button>
+        </div>
+      )
+    }
+
     return (
       <div
         className="rounded-full bg-black h-[42px] flex items-center justify-center gap-0.5 px-1.5 sm:gap-1 sm:px-2 min-w-[104px] sm:min-w-[118px] cursor-default select-none transition-all duration-300 ease-out"
@@ -166,6 +213,21 @@ export default function AddCartBtn({ product, size, variantId, mobileRow }: AddC
       >
         <ShoppingBag className="w-4 h-4 text-white shrink-0" strokeWidth={1.8} aria-hidden />
         {inStock ? 'В корзину' : 'Нет в наличии'}
+      </button>
+    )
+  }
+
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={handleAddFirst}
+        disabled={!inStock}
+        title={inStock ? 'Добавить в корзину' : 'Нет в наличии'}
+        aria-label={inStock ? 'Добавить в корзину' : 'Нет в наличии'}
+        className="relative flex h-9 w-9 shrink-0 cursor-pointer select-none items-center justify-center rounded-full bg-black transition-transform duration-300 ease-out hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
+      >
+        <Image src="/shopping-bag.svg" alt="" width={18} height={18} />
       </button>
     )
   }

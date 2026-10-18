@@ -66,6 +66,8 @@ export interface ProductCardItem {
   image: string;
   gallery?: string[]; // дополнительные изображения для слайдера
   aromas: string[];
+  /** Лейбл на карточке (NEW и т.п.); задаётся в админке */
+  badgeLabel?: string | null;
   price: number;
   oldPrice?: number;
   discountPercent?: number;

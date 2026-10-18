@@ -44,6 +44,12 @@ export interface ProductDetailNode extends Omit<ProductNode, 'category'> {
     name: string;
     id: string;
     slug?: string;
+    parent?: {
+      id: string;
+      name: string;
+      slug: string;
+      parent?: { id: string; name: string; slug: string } | null;
+    } | null;
   };
   media: MediaItem[];
   productVariants: {
@@ -64,6 +70,28 @@ export interface ProductDetailNode extends Omit<ProductNode, 'category'> {
   isAvailableForPurchase?: boolean;
   availableForPurchaseAt?: string;
   attributes?: Attribute[];
+
+  // --- Nest `/catalog/products/:slug` (optional, заполняются catalogApi.adaptProductDetail) ---
+  shortDescription?: string;
+  pageShortDescriptionHtml?: string;
+  actionEffectHtml?: string;
+  applicationHtml?: string;
+  compositionHtml?: string;
+  importantNoteHtml?: string;
+  /** Заметка Vspomni (Nest `vspomniNoteHtml`) */
+  vspomniNoteHtml?: string;
+  /** Alias для Mira-совместимости */
+  mirafloresNoteHtml?: string;
+  storageHtml?: string;
+  purpose?: string;
+  shelfLife?: string;
+  extraHtml?: string;
+  catalogTags?: Array<{ id: string; name: string; slug: string; sortOrder: number }>;
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  ogImageUrl?: string | null;
+  canonicalPath?: string | null;
+  seoNoIndex?: boolean;
 }
 
 /**
@@ -74,12 +102,19 @@ export interface ProductVariant {
     id: string;
     sku: string;
     name: string;
+    /** Nest: объём мл для подписи чипа варианта */
+    volumeMl?: number | null;
     quantityAvailable?: number;
     quantityLimitPerCustomer?: number | null;
     /** Вес в кг (Saleor Dashboard → вариант → доставка) */
     weight?: {
       value: number;
     };
+    /** Nest ProductVariant (предпочтительнее metadata) */
+    weightGrams?: number | null;
+    lengthMm?: number | null;
+    widthMm?: number | null;
+    heightMm?: number | null;
     /** Габариты: dimensions.*_mm, dimensions.volume_m3 */
     metadata?: {
       key: string;

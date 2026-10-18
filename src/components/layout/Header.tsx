@@ -13,6 +13,7 @@ import { useAuthStore } from '@/stores/useAuth'
 import { searchProducts } from '@/graphql/queries/search.service'
 import { ProductNode } from '@/graphql/types/product.types'
 import Image from 'next/image'
+import { SITE_PRIMARY_NAV } from '@/lib/seo/siteNav'
 
 interface HeaderProps {
   variant: 'default' | 'overlay'
@@ -121,17 +122,17 @@ export default function Header({ variant = 'default' }: HeaderProps) {
   return (
     <>
       {isOverlay && (
-        <div className="m-3 bg-[url('/images/catalog.jpg')] p-10 bg-cover bg-center top-0 left-0 right-0 h-[511px] z-0 pointer-events-none rounded-none sm:rounded-3xl max-w-[1679px] mx-auto"></div>
+        <div className="mx-auto h-[511px] w-full max-w-[1679px] bg-[url('/images/catalog.jpg')] bg-cover bg-center z-0 pointer-events-none rounded-none sm:mt-3 sm:mb-3 sm:w-[calc(100%-24px)] sm:rounded-3xl" />
       )}
 
       <motion.header
         initial={{ y: -60, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.5 }}
-        className={`fixed top-0 left-0 w-full py-4 z-50 transition-all duration-300 ${getHeaderStyles()}`}
+        className={`fixed top-0 left-0 z-50 w-full overflow-visible py-4 transition-all duration-300 ${getHeaderStyles()}`}
         style={{ height: '80px' }}
       >
-        <div className="flex items-center justify-between h-full px-4 sm:px-6 md:px-[33px] container">
+        <div className="container flex h-full items-center justify-between overflow-visible px-4 sm:px-6 md:px-[33px]">
           {isHome ? (
             <span className="text-base sm:text-[18px] font-semibold tracking-wide inline-flex shrink-0">
               <Image
@@ -160,18 +161,22 @@ export default function Header({ variant = 'default' }: HeaderProps) {
 
           {/* Desktop Menu */}
           <div
-            className={`hidden md:flex items-center justify-center rounded-full border px-4 lg:px-8 shrink-0 ${getMenuBackground()}`}
+            className={`hidden md:flex items-center justify-center rounded-full border px-3 lg:px-6 xl:px-8 shrink-0 max-w-[min(100%,52rem)] ${getMenuBackground()}`}
             style={{ height: '46px', width: 'auto' }}
           >
             <nav
-              className={`flex items-center gap-4 lg:gap-8 text-sm lg:text-[15px] font-medium ${isOverlay && !scrolled ? 'text-white' : 'text-black/80'}`}
+              className={`flex items-center gap-2.5 lg:gap-4 xl:gap-6 text-[13px] lg:text-sm xl:text-[15px] font-medium ${isOverlay && !scrolled ? 'text-white' : 'text-black/80'}`}
+              aria-label="Основное меню"
             >
-          <Link href="/catalog" className="hover:opacity-80 transition whitespace-nowrap">
-            Каталог
-          </Link>
-          <Link href="/#vse-aromaty" className="hover:opacity-80 transition whitespace-nowrap">
-            Все ароматы
-          </Link>
+              {SITE_PRIMARY_NAV.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="hover:opacity-80 transition whitespace-nowrap"
+                >
+                  {item.label}
+                </Link>
+              ))}
               <Link
                 href="https://t.me/vspomni_corp"
                 target="_blank"
@@ -179,7 +184,7 @@ export default function Header({ variant = 'default' }: HeaderProps) {
                 className="flex items-center gap-1 hover:opacity-80 transition whitespace-nowrap"
               >
                 <Send size={16} strokeWidth={1.8} color="#229ED9" />
-                <span className="hidden lg:inline">Связаться</span>
+                <span className="hidden xl:inline">Связаться</span>
               </Link>
             </nav>
 
@@ -216,27 +221,40 @@ export default function Header({ variant = 'default' }: HeaderProps) {
           </div>
 
           {/* Mobile Icons */}
-          <div className="md:hidden flex p-2 items-center gap-5">
-            <Search
-              size={20}
-              strokeWidth={1.8}
-              color={iconColor}
+          <div className="flex items-center gap-3 overflow-visible md:hidden">
+            <button
+              type="button"
+              aria-label="Поиск"
+              className="flex h-10 w-10 shrink-0 items-center justify-center hover:opacity-70"
               onClick={() => {
                 setSearchOpen((v) => !v)
                 setMenuOpen(false)
               }}
-            />
-            <div
-              className="relative cursor-pointer"
+            >
+              <Search size={20} strokeWidth={1.8} color={iconColor} />
+            </button>
+            <button
+              type="button"
+              aria-label="Корзина"
+              className="relative flex h-10 shrink-0 items-center justify-center gap-0.5 hover:opacity-70"
               onClick={() => setShowCart(!showCart)}
             >
               <ShoppingBag size={20} strokeWidth={1.8} color={cartIconColor} />
-              <span className={`absolute -top-1 -right-3 text-[11px] font-semibold ${isOverlay && !scrolled ? 'text-white' : 'text-black'}`}>
+              <span
+                className={`min-w-[1.25rem] text-left text-[12px] font-semibold tabular-nums leading-none ${
+                  cartHasItems
+                    ? 'text-[#E52F20]'
+                    : isOverlay && !scrolled
+                      ? 'text-white'
+                      : 'text-black'
+                }`}
+              >
                 ({cartQuantity})
               </span>
-            </div>
+            </button>
             <button
-              className="md:hidden p-2 hover:opacity-70 transition-opacity"
+              type="button"
+              className="flex h-10 w-10 shrink-0 items-center justify-center hover:opacity-70"
               onClick={() => {
                 setMenuOpen((v) => !v)
                 setSearchOpen(false)
@@ -244,9 +262,9 @@ export default function Header({ variant = 'default' }: HeaderProps) {
               aria-label="Меню"
             >
               {menuOpen ? (
-                <X size={24} strokeWidth={1.8} color={iconColor} />
+                <X size={22} strokeWidth={1.8} color={iconColor} />
               ) : (
-                <Menu size={24} strokeWidth={1.8} color={iconColor} />
+                <Menu size={22} strokeWidth={1.8} color={iconColor} />
               )}
             </button>
           </div>
@@ -316,11 +334,23 @@ export default function Header({ variant = 'default' }: HeaderProps) {
                   : 'bg-white border-black/10'
               }`}
             >
-              <nav className="flex flex-col px-6 py-5 text-md font-medium gap-4">
-                <Link href="/catalog" onClick={() => setMenuOpen(false)}>
-                  Каталог
-                </Link>
-                <Link href="/#vse-aromaty" onClick={() => setMenuOpen(false)}>
+              <nav
+                className="flex flex-col px-6 py-5 text-md font-medium gap-4"
+                aria-label="Мобильное меню"
+              >
+                {SITE_PRIMARY_NAV.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+                <Link
+                  href="/#vse-aromaty"
+                  onClick={() => setMenuOpen(false)}
+                >
                   Все ароматы
                 </Link>
                 <Link

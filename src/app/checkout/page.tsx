@@ -8,12 +8,14 @@ import PaymentBlock from '@/components/checkout/PaymentBlock'
 import BackButton from '@/components/checkout/BackButton'
 import { useEffect, useState } from 'react'
 import { useAuthStore } from '@/stores/useAuth'
-import { useRouter } from 'next/navigation'
+import { useCartNestSync } from '@/lib/cart/useCartNestSync'
+import Link from 'next/link'
 
 const CheckoutPage = () => {
   const { isAuthenticated, checkAuth } = useAuthStore()
-  const navigate = useRouter()
   const [authReady, setAuthReady] = useState(false)
+  // Guest и авторизованный — sync корзины с Nest
+  useCartNestSync(authReady)
 
   useEffect(() => {
     let active = true
@@ -24,13 +26,6 @@ const CheckoutPage = () => {
       active = false
     }
   }, [checkAuth])
-
-  useEffect(() => {
-    if (!authReady) return
-    if (!isAuthenticated) {
-      navigate.push('/login?next=/checkout')
-    }
-  }, [authReady, isAuthenticated, navigate])
 
   useEffect(() => {
     const prevHtml = document.documentElement.style.overflowX
@@ -51,10 +46,6 @@ const CheckoutPage = () => {
     )
   }
 
-  if (!isAuthenticated) {
-    return null
-  }
-
   return (
     <div className="w-full min-w-0 overflow-x-clip overscroll-x-none touch-pan-y pb-12">
       <div className="container w-full min-w-0 max-w-full px-4 sm:px-6 lg:px-0">
@@ -67,6 +58,17 @@ const CheckoutPage = () => {
 
           <div className="w-full min-w-0 lg:w-1/2">
             <BackButton />
+            {!isAuthenticated ? (
+              <p className="mt-4 text-sm text-black/50">
+                Оформление без аккаунта. Уже есть профиль?{' '}
+                <Link
+                  href="/login?next=/checkout"
+                  className="text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  Войти
+                </Link>
+              </p>
+            ) : null}
             <div className="border p-4 sm:p-6 lg:p-8 rounded-lg shadow-md mt-4 space-y-6 overflow-x-clip min-w-0">
               <OrderForm />
               <OrderDelivery />

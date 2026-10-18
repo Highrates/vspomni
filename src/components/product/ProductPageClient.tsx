@@ -17,6 +17,7 @@ import {
   getInitialProductPageUiState,
 } from '@/lib/product/buildProductCartFormat'
 import { variantShippingFromSaleorVariant } from '@/lib/saleorVariantShipping'
+import { formatVariantVolumeLabel } from '@/lib/product/variantVolumeLabel'
 import {
   getAttributeBySlug,
   NOTE_ATTRIBUTE_SLUGS,
@@ -147,7 +148,7 @@ export default function ProductPageClient({
           ? {
               ...prev,
               price: variant.pricing.price.gross.amount,
-              size: variant.name,
+              size: formatVariantVolumeLabel(variant),
               variantId: variant.id,
               weight: ship.weight,
               length: ship.length,
@@ -427,7 +428,7 @@ export default function ProductPageClient({
                             : 'border-textgrey text-textgrey hover:border-black hover:text-black'
                         }`}
                       >
-                        {variant.name}
+                        {formatVariantVolumeLabel(variant)}
                       </div>
                     )
                   })}
@@ -448,9 +449,12 @@ export default function ProductPageClient({
                 <AddCartButton
                   product={productCartFormat}
                   size={
-                    product.productVariants?.edges?.find(
-                      (e) => e.node.id === selectedVariantId,
-                    )?.node.name || null
+                    (() => {
+                      const node = product.productVariants?.edges?.find(
+                        (e) => e.node.id === selectedVariantId,
+                      )?.node
+                      return node ? formatVariantVolumeLabel(node) : null
+                    })()
                   }
                   variantId={selectedVariantId}
                   inStock={isSelectedVariantInStock(product, selectedVariantId)}

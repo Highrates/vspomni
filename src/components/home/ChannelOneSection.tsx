@@ -1,0 +1,78 @@
+'use client'
+
+/**
+ * Сюжет Первого канала («Доброе утро»).
+ * Desktop: видео слева, текст справа (высота = «Скоро свечи» + 25%).
+ * Mobile: колонка — видео сверху (с постером), текст снизу.
+ */
+const VIDEO_SRC = '/videos/1-ch.MP4'
+const VIDEO_POSTER = '/videos/1-ch-poster.jpg'
+
+const LINES = [
+  'Неделю назад первый канал увидел ролики Вспомни. в соц сетях и захотели сюжет',
+  'Написали озону, попросили связаться с нами',
+  'И вот спустя неделю вышел сюжет в прайм программе «Доброе утро» 🤩',
+] as const
+
+const LINE_CLASS =
+  'm-0 font-semibold text-brand text-[12px] sm:text-base lg:text-lg leading-[1.4]'
+
+export default function ChannelOneSection() {
+  return (
+    <section className="w-full px-2 mt-4 sm:mt-6 md:mt-8 lg:mt-10 mb-4 sm:mb-6 md:mb-8 lg:mb-10">
+      <style>{`
+        .channel-one-card {
+          background: #f5f5f5;
+        }
+        /* Скоро свечи 170/240/300/340 → +25% от sm */
+        @media (min-width: 640px) {
+          .channel-one-card {
+            height: 300px !important;
+          }
+        }
+        @media (min-width: 768px) {
+          .channel-one-card {
+            height: 375px !important;
+          }
+        }
+        @media (min-width: 1024px) {
+          .channel-one-card {
+            height: 425px !important;
+          }
+        }
+      `}</style>
+
+      <div className="channel-one-card flex w-full flex-col overflow-hidden rounded-[16px] sm:flex-row">
+        {/*
+          Mobile: обычный block-video с aspect-ratio (absolute на iOS часто даёт 0×0 / чёрный экран).
+          Desktop: absolute fill в половине карточки.
+        */}
+        <div className="relative w-full shrink-0 overflow-hidden bg-black sm:h-full sm:w-1/2">
+          <video
+            className="block w-full aspect-video object-cover sm:absolute sm:inset-0 sm:aspect-auto sm:h-full sm:w-full"
+            src={VIDEO_SRC}
+            poster={VIDEO_POSTER}
+            controls
+            playsInline
+            preload="metadata"
+            controlsList="nodownload"
+            aria-label="Сюжет о Вспомни на Первом канале, программа Доброе утро"
+          />
+        </div>
+
+        <div className="flex min-w-0 w-full flex-col justify-center gap-3 bg-[#F5F5F5] px-4 py-5 sm:h-full sm:w-1/2 sm:gap-3 sm:px-6 sm:py-0 md:px-8 lg:gap-4 lg:px-10">
+          <p className="m-0 font-semibold uppercase tracking-[0.12em] text-brand/50 text-[10px] sm:text-xs">
+            Первый канал · Доброе утро
+          </p>
+          <div className="flex flex-col gap-2.5 sm:gap-2 md:gap-3">
+            {LINES.map((line) => (
+              <p key={line} className={LINE_CLASS}>
+                {line}
+              </p>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}

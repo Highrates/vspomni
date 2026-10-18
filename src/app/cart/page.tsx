@@ -3,15 +3,15 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCartStore } from '@/stores/useCart'
-import { useAuthStore } from '@/stores/useAuth'
 import CartCard from '@/components/cart/CartCard'
 import { CartPromoCode } from '@/components/modals/CartPromoCode'
 import { formatCurrency } from '@/lib/functions'
 import { CustomButton as Button } from '@/components/common/CustomButton'
+import { useCartNestSync } from '@/lib/cart/useCartNestSync'
 
 export default function CartPage() {
   const router = useRouter()
-  const { isAuthenticated } = useAuthStore()
+  useCartNestSync()
   const {
     items,
     totalItems,
@@ -25,7 +25,7 @@ export default function CartPage() {
 
   const handleCheckout = () => {
     if (totalItems <= 0) return
-    router.push(isAuthenticated ? '/checkout' : '/login?next=/checkout')
+    router.push('/checkout')
   }
 
   return (

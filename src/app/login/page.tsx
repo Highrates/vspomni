@@ -6,69 +6,29 @@ import RegisterForm from '@/components/login/RegisterForm'
 import ResetPasswordForm from '@/components/login/ResetPasswordForm'
 import VerifyForm from '@/components/login/VerifyForm'
 import { useState, useEffect, Suspense } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
-import { exchangeYandexCode } from '@/graphql/queries/auth.service'
-import { useAuthStore } from '@/stores/useAuth'
-import { toast } from 'react-toastify'
+import { useSearchParams } from 'next/navigation'
 
 type TAuthsteps = 'login' | 'register' | 'verify' | 'forgot' | 'reset'
 
 const LoginContent = () => {
   const searchParams = useSearchParams()
-  const router = useRouter()
   const [currentStep, setCurrentStep] = useState<TAuthsteps>('login')
   const [email, setEmail] = useState<string>('')
 
-  // Проверяем URL параметры при загрузке страницы
+  // Ссылка из письма Nest: /login?token=… (redirectUrl задаётся в ForgotPasswordForm).
+  // email в ссылке нет — для старых ссылок с ?email= оставляем поддержку.
+  // Яндекс OAuth callback (?code&state) больше не обрабатываем — в Nest нет эквивалента.
   useEffect(() => {
     const token = searchParams.get('token')
     const emailParam = searchParams.get('email')
-    const code = searchParams.get('code')
-    const state = searchParams.get('state')
-    
-    // Обработка callback от Яндекс OAuth
-    if (code && state) {
-      const handleYandexCallback = async () => {
-        try {
-          const result = await exchangeYandexCode(code, state)
-          
-          if (result && result.token && result.refreshToken) {
-            // Сохраняем токены
-            localStorage.setItem('token', result.token)
-            localStorage.setItem('refreshToken', result.refreshToken)
-            
-            // Обновляем состояние авторизации
-            useAuthStore.setState({
-              isAuthenticated: true,
-              email: result.user?.email || null,
-            })
-            
-            toast.success('Успешная авторизация через Яндекс!')
-            
-            // Возвращаемся на сохраненный URL или на главную
-            const returnUrl = sessionStorage.getItem('yandex_auth_return_url') || '/'
-            sessionStorage.removeItem('yandex_auth_return_url')
-            
-            // Очищаем URL параметры и перенаправляем
-            router.replace(returnUrl)
-          } else {
-            throw new Error('Не удалось получить токены авторизации')
-          }
-        } catch (error: any) {
-          console.error('Yandex callback error:', error)
-          toast.error(error.message || 'Ошибка при авторизации через Яндекс')
-          // Очищаем URL параметры при ошибке
-          router.replace('/login')
-        }
-      }
-      
-      handleYandexCallback()
-    } else if (token && emailParam) {
-      // Если есть токен и email в URL, переключаемся на форму сброса пароля
-      setEmail(emailParam)
+    if (token) {
+      setEmail(emailParam || '')
       setCurrentStep('reset')
+    } else {
+      // после сброса пароля router.push('/login') убирает ?token — выходим из шага reset
+      setCurrentStep((step) => (step === 'reset' ? 'login' : step))
     }
-  }, [searchParams, router])
+  }, [searchParams])
 
   const handleSwitchToRegister = () => setCurrentStep('register')
   const handleSwitchToLogin = () => setCurrentStep('login')

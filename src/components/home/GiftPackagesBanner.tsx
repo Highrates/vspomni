@@ -64,14 +64,17 @@ export default function GiftPackagesBanner({
         href={`/category/${encodeURIComponent(category.slug)}`}
         className="block relative w-full h-full"
       >
-        <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-          <div className="flex items-center justify-center gap-4 sm:gap-5 md:gap-6">
-            <h6 className="text-[16px] sm:text-[28px] md:text-[32px] lg:text-[48px] font-semibold select-none text-white leading-[1.2] lg:leading-[52px]">
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center px-4 sm:px-6">
+          <div className="flex max-w-full items-center justify-center gap-3 sm:gap-5 md:gap-6">
+            <h6 className="line-clamp-2 text-center text-[16px] font-semibold leading-[1.2] text-white select-none sm:text-[28px] md:text-[32px] lg:text-[48px] lg:leading-[52px]">
               {category.name}
             </h6>
 
-            <div className="hidden sm:flex w-[40px] h-[40px] md:w-[49px] md:h-[49px] rounded-full bg-white/50 backdrop-blur-[10px] items-center justify-center flex-shrink-0">
-              <ArrowUpRight className="w-[16px] h-[16px] md:w-[20px] md:h-[20px] text-black" strokeWidth={1.5} />
+            <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/50 backdrop-blur-[10px] sm:flex md:h-[49px] md:w-[49px]">
+              <ArrowUpRight
+                className="h-4 w-4 text-black md:h-5 md:w-5"
+                strokeWidth={1.5}
+              />
             </div>
           </div>
         </div>

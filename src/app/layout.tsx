@@ -22,6 +22,9 @@ export const metadata: Metadata = {
     icon: [{ url: '/favicon1.svg', type: 'image/svg+xml' }],
     shortcut: '/favicon1.svg',
   },
+  verification: {
+    yandex: '790999d87e189045',
+  },
 }
 
 export default function RootLayout({

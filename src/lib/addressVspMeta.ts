@@ -1,6 +1,6 @@
 /**
  * Служебная строка в начале `streetAddress2`: перевозчик, координаты ПВЗ Яндекса,
- * опционально id пункта Яндекса для расчёта (|pvz=...).
+ * опционально код ПВЗ (|pvz=…: СДЭК / Яндекс / Ozon — формат, который читает Nest).
  * Пользовательский комментарий — со второй строки (или пусто).
  */
 
@@ -12,6 +12,8 @@ export type VspAddressMeta = {
   yandexPvzId?: string
   /** id способа доставки Ozon (deliveryVariantId) */
   ozonPvzId?: string
+  /** Код ПВЗ СДЭК (pvz.code) — пишется как `pvz=` для Nest */
+  cdekPvzId?: string
   /** Пункт выдачи или курьер до двери (по умолчанию для старых адресов — ПВЗ) */
   dropoff?: 'pvz' | 'courier'
 }
@@ -36,7 +38,9 @@ function parseMetaFirstLine(first: string): VspAddressMeta | null {
       const n = Number(val)
       if (Number.isFinite(n)) meta.lat = n
     } else if (key === 'pvz' && val) {
+      // Nest читает код ПВЗ из `pvz=` для всех перевозчиков (order-shipping.resolve)
       if (carrier === 'ozon') meta.ozonPvzId = val
+      else if (carrier === 'cdek') meta.cdekPvzId = val
       else meta.yandexPvzId = val
     } else if (key === 'ozonPvz' && val) {
       meta.ozonPvzId = val
@@ -77,13 +81,16 @@ export function buildStreetAddress2WithMeta(
   ) {
     line += `|lon=${meta.lon}|lat=${meta.lat}`
   }
-  const pvz = meta.yandexPvzId?.trim()
+  // Код ПВЗ — всегда `pvz=` (Nest: free-PVZ порог, assertCdekPvzCodePresent, fulfillment)
+  const pvz = (
+    meta.carrier === 'cdek'
+      ? meta.cdekPvzId
+      : meta.carrier === 'ozon'
+        ? meta.ozonPvzId
+        : meta.yandexPvzId
+  )?.trim()
   if (pvz) {
     line += `|pvz=${pvz}`
-  }
-  const ozonPvz = meta.ozonPvzId?.trim()
-  if (ozonPvz) {
-    line += `|ozonPvz=${ozonPvz}`
   }
   if (meta.dropoff) {
     line += `|dropoff=${meta.dropoff}`

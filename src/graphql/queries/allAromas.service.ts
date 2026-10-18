@@ -1,43 +1,5 @@
-import { graphqlRequest } from '@/graphql/client'
-
-interface PageTypesConnection {
-  pageTypes: {
-    edges: {
-      node: {
-        id: string
-        name: string
-        slug: string
-      }
-    }[]
-  }
-}
-
-interface AllAromasPagesConnection {
-  pages: {
-    edges: {
-      node: {
-        id: string
-        slug: string
-        title: string
-        content?: string | null
-        publishedAt: string
-        isPublished: boolean
-        assignedAttributes: Array<{
-          attribute: {
-            id: string
-            slug: string
-            name: string
-          }
-          fileValue?: {
-            url: string
-          }
-          textValue?: string
-          textValuePlain?: string
-        }>
-      }
-    }[]
-  }
-}
+import { uploadsUrl } from '@/api/apiClient'
+import { fetchCatalogTags, type CatalogTagPublic } from '@/api/catalogApi'
 
 export interface AllAromasItem {
   id: string
@@ -45,7 +7,7 @@ export interface AllAromasItem {
   title: string
   text: string
   image: string
-  /** Поле content страницы Saleor (Editor.js и т.п.) */
+  /** Описание аромата (plain / HTML из Nest CatalogTagStep) */
   content?: string | null
   publishedAt?: string | null
 }
@@ -61,112 +23,28 @@ export function getAromaDisplayTitle(
   )
 }
 
-export async function getAllAromas(): Promise<AllAromasItem[]> {
-  const pageTypeQuery = `
-    query GetAllAromasPageType {
-      pageTypes(first: 100) {
-        edges {
-          node {
-            id
-            name
-            slug
-          }
-        }
-      }
-    }
-  `
-
-  const pageTypesData = await graphqlRequest<PageTypesConnection>(pageTypeQuery)
-  const allAromasPageType = pageTypesData.pageTypes.edges.find(
-    (e) =>
-      e.node.name.toLowerCase() === 'все ароматы' ||
-      e.node.slug.toLowerCase() === 'vse-aromaty' ||
-      e.node.slug.toLowerCase() === 'all-aromas'
-  )
-
-  if (!allAromasPageType) {
-    return []
+function mapTagToAroma(tag: CatalogTagPublic): AllAromasItem {
+  return {
+    id: tag.id,
+    slug: tag.slug,
+    title: tag.title?.trim() || tag.name,
+    // `text` в Saleor-версии — имя аромата для фильтра по значению атрибута
+    text: tag.name,
+    image: uploadsUrl(tag.coverImageUrl) || '',
+    content: tag.description?.trim() || null,
+    publishedAt: null,
   }
-
-  const pagesQuery = `
-    query GetAllAromas($first: Int!, $pageTypeId: ID!) {
-      pages(first: $first, where: { pageType: { eq: $pageTypeId } }) {
-        edges {
-          node {
-            id
-            slug
-            title
-            content
-            publishedAt
-            isPublished
-            assignedAttributes {
-              attribute {
-                id
-                slug
-                name
-              }
-              ... on AssignedFileAttribute {
-                fileValue: value {
-                  url
-                }
-              }
-              ... on AssignedTextAttribute {
-                textValue: value
-              }
-              ... on AssignedPlainTextAttribute {
-                textValuePlain: value
-              }
-            }
-          }
-        }
-      }
-    }
-  `
-
-  const pagesData = await graphqlRequest<AllAromasPagesConnection>(pagesQuery, {
-    first: 100,
-    pageTypeId: allAromasPageType.node.id,
-  })
-
-  const allAromas: AllAromasItem[] = []
-
-  pagesData.pages.edges
-    .filter((edge) => edge.node.isPublished)
-    .forEach((edge) => {
-      const node = edge.node
-      let text = ''
-      let image = ''
-
-      // Извлекаем атрибуты
-      node.assignedAttributes.forEach((attr) => {
-        if (attr.attribute.slug === 'vse-aromaty-tekst') {
-          const v = attr.textValue ?? attr.textValuePlain
-          if (v) text = v
-        }
-        if (
-          (attr.attribute.slug === 'vsy-aromaty-kartinka' ||
-            attr.attribute.slug === 'vse-aromaty-kartinka') &&
-          attr.fileValue?.url
-        ) {
-          image = attr.fileValue.url
-        }
-      })
-
-      allAromas.push({
-        id: node.id,
-        slug: node.slug,
-        title: node.title || '',
-        text,
-        image,
-        content: node.content ?? null,
-        publishedAt: node.publishedAt ?? null,
-      })
-    })
-
-  return allAromas
 }
 
-/** Заголовок страницы аромата для крошек (по slug страницы Saleor) */
+/** Nest `GET /catalog/tags` → список «Все ароматы». */
+export async function getAllAromas(): Promise<AllAromasItem[]> {
+  const { items } = await fetchCatalogTags()
+  return [...items]
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+    .map(mapTagToAroma)
+}
+
+/** Заголовок страницы аромата для крошек (по slug тега) */
 export async function getAromaBreadcrumbTitleBySlug(
   slug: string,
 ): Promise<string | null> {

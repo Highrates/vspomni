@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Loader2, CreditCard, ExternalLink } from 'lucide-react'
+import { fetchPaymentStatus } from '@/lib/checkout/postPayment'
 
 declare global {
   interface Window {
@@ -57,6 +58,8 @@ const METHOD_LABELS: Record<YooPaymentMethod, string> = {
 interface YooKassaWidgetProps {
   confirmationToken: string
   paymentId?: string | null
+  /** Nest payToken заказа — для `GET /orders/payments/:id/status` (сверка с ЮKassa). */
+  payToken?: string | null
   onSuccess?: (result: YooKassaPaymentResult) => void
   onError?: (error: any) => void
   onClose?: () => void
@@ -90,6 +93,7 @@ function isNoMethodsToDisplayError(err: unknown): boolean {
 export default function YooKassaWidget({
   confirmationToken,
   paymentId = null,
+  payToken = null,
   onSuccess,
   onError,
   onClose,
@@ -116,6 +120,8 @@ export default function YooKassaWidget({
   onErrorRef.current = onError
   onCloseRef.current = onClose
   paymentIdRef.current = paymentId
+  const payTokenRef = useRef(payToken)
+  payTokenRef.current = payToken
 
   const finishWithSuccess = useCallback((result: YooKassaPaymentResult = {}) => {
     if (paymentHandledRef.current) return
@@ -133,17 +139,12 @@ export default function YooKassaWidget({
     if (!id) return false
 
     try {
-      const response = await fetch(
-        `/api/yookassa/payment-status?paymentId=${encodeURIComponent(id)}`,
-      )
-      if (!response.ok) return false
-      const data = await response.json()
-      if (data.status === 'succeeded' || data.paid) {
+      const data = await fetchPaymentStatus(id, payTokenRef.current)
+      if (data && (data.status === 'succeeded' || data.paid)) {
         finishWithSuccess({
           paymentId: id,
           status: data.status,
           paid: true,
-          amount: data.amount,
         })
         return true
       }

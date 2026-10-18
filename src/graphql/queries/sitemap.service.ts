@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next'
-import { CHANNEL, graphqlRequest } from '@/graphql/client'
+import { fetchAllProductCards, fetchCategories, type NestCategory } from '@/api/catalogApi'
 import { absoluteUrl, getPublicSiteUrl } from '@/lib/siteUrl'
 import { getAllCategory } from '@/graphql/queries/category.service'
 import { getAllArticles } from '@/graphql/queries/articles.service'
@@ -7,7 +7,6 @@ import { getAllAromas } from '@/graphql/queries/allAromas.service'
 import { isValidSlug } from '@/lib/productPaths'
 
 const MAX_URLS = 49_000
-const PAGE_SIZE = 100
 
 /** Реальная дата из БД; без даты — не подставляем «сейчас» (ломает краулеров). */
 function toLastMod(d?: string | null): Date | undefined {
@@ -27,89 +26,33 @@ function productLocPath(
   return `/product/${encodeURIComponent(productSlug)}`
 }
 
-/** Заглушки вроде aromat-1 не отдаём в sitemap */
-function isPlaceholderAromaSlug(slug: string): boolean {
-  return /^aromat-\d+$/i.test(slug.trim())
-}
-
-interface SitemapProductsResponse {
-  products: {
-    pageInfo: { hasNextPage: boolean; endCursor: string | null }
-    edges: {
-      node: {
-        slug: string
-        updatedAt?: string | null
-        category?: { slug?: string | null } | null
-      }
-    }[]
-  }
+function flattenCategories(items: NestCategory[]): NestCategory[] {
+  return items.flatMap((c) => [c, ...flattenCategories(c.children ?? [])])
 }
 
 async function fetchAllPublishedProductsForSitemap(): Promise<
   { slug: string; categorySlug: string | null; updatedAt: string | null }[]
 > {
-  const query = `
-    query SitemapProducts($channel: String!, $first: Int!, $after: String) {
-      products(
-        first: $first
-        channel: $channel
-        after: $after
-        filter: { isPublished: true }
-      ) {
-        pageInfo {
-          hasNextPage
-          endCursor
-        }
-        edges {
-          node {
-            slug
-            updatedAt
-            category {
-              slug
-            }
-          }
-        }
+  // Nest-карточки не содержат категорию → строим slug→category через выдачу по категориям
+  const categoryBySlug = new Map<string, string>()
+  try {
+    const { items } = await fetchCategories()
+    for (const cat of flattenCategories(items)) {
+      const cards = await fetchAllProductCards({ category: cat.slug }, MAX_URLS)
+      for (const c of cards) {
+        if (!categoryBySlug.has(c.slug)) categoryBySlug.set(c.slug, cat.slug)
       }
     }
-  `
-
-  const out: {
-    slug: string
-    categorySlug: string | null
-    updatedAt: string | null
-  }[] = []
-
-  let after: string | null = null
-  let guard = 0
-  const maxPages = 600
-
-  while (out.length < MAX_URLS && guard < maxPages) {
-    guard += 1
-    const pageData: SitemapProductsResponse =
-      await graphqlRequest<SitemapProductsResponse>(query, {
-        channel: CHANNEL,
-        first: PAGE_SIZE,
-        after: after,
-      })
-
-    const edges = pageData.products?.edges ?? []
-    for (const e of edges) {
-      const n = e?.node
-      if (!n?.slug) continue
-      out.push({
-        slug: n.slug,
-        categorySlug: n.category?.slug?.trim() || null,
-        updatedAt: n.updatedAt ?? null,
-      })
-    }
-
-    const pi = pageData.products?.pageInfo
-    if (!pi?.hasNextPage || !edges.length) break
-    after = pi.endCursor
-    if (!after) break
+  } catch {
+    /* sitemap без категорий в путях */
   }
 
-  return out
+  const all = await fetchAllProductCards({}, MAX_URLS)
+  return all.map((c) => ({
+    slug: c.slug,
+    categorySlug: categoryBySlug.get(c.slug) ?? null,
+    updatedAt: null,
+  }))
 }
 
 /** Данные для /sitemap.xml (динамически, до лимита URL) */
@@ -172,14 +115,8 @@ export async function buildSitemapEntries(): Promise<MetadataRoute.Sitemap> {
     const aromas = await getAllAromas()
     for (const ar of aromas) {
       if (!ar.slug) continue
-      if (isPlaceholderAromaSlug(ar.slug)) continue
       if (entries.length >= MAX_URLS) break
-      // Без контента и картинки — пустышка, не тратим crawl budget
-      const hasBody =
-        Boolean(ar.content?.trim()) ||
-        Boolean(ar.text?.trim()) ||
-        Boolean(ar.image?.trim())
-      if (!hasBody && !ar.title?.trim()) continue
+      if (!ar.title?.trim() && !ar.text?.trim()) continue
       push(
         `/catalog/aroma/${encodeURIComponent(ar.slug)}`,
         toLastMod(ar.publishedAt),

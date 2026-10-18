@@ -5,38 +5,42 @@ import { useUserStore } from '@/stores/useUser'
 import { useCheckoutStore } from '@/stores/useCheckout'
 import { useCartStore } from "@/stores/useCart"
 import YooKassaWidget from '@/components/ui/YooKassaWidget'
-import { getSingleProduct } from '@/graphql/queries/product.service'
 import { toast } from 'react-toastify'
 import { formatCurrency } from '@/lib/functions'
 import { isValidRuPhone } from '@/lib/ruPhone'
 import { getAccountEmail } from '@/lib/auth/accountEmail'
 import {
   buildCheckoutContact,
-  mergeCheckoutContact,
   resolveCheckoutDeliveryAddress,
-  toSaleorDeliveryAddress,
 } from '@/lib/checkout/deliveryAddress'
 import {
-  isProductInStock,
-  isSelectedVariantInStock,
-  isVariantSellable,
-} from '@/lib/product/stock'
+  CheckoutError,
+  clearPendingCheckoutOrder,
+  prepareNestPayment,
+} from '@/lib/checkout/nestCheckout'
+import { fetchPaymentStatus } from '@/lib/checkout/postPayment'
 import {
-  fetchPaymentStatus,
-  persistPendingPaymentStorage,
-} from '@/lib/checkout/postPayment'
+  describeCartSyncChanges,
+  syncCartWithNest,
+} from '@/lib/cart/syncCart'
 
+/**
+ * Оплата через Nest: syncCart → shipping-quote → create order → pay → YooKassa widget.
+ * Успех фиксирует Nest (webhook / checkout-status), см. `lib/checkout/nestCheckout.ts`.
+ */
 export default function PaymentBlock() {
   const [confirmationToken, setConfirmationToken] = useState<string | null>(null)
   const [showYooKassaWidget, setShowYooKassaWidget] = useState(false)
   const [isCreatingPayment, setIsCreatingPayment] = useState(false)
-  const [checkoutId, setCheckoutId] = useState<string | null>(null)
+  const [orderId, setOrderId] = useState<string | null>(null)
+  const [orderNumber, setOrderNumber] = useState<string | null>(null)
+  const [payToken, setPayToken] = useState<string | null>(null)
   const [paymentId, setPaymentId] = useState<string | null>(null)
   const [paymentCompleted, setPaymentCompleted] = useState(false)
   const paymentCompletedRef = useRef(false)
   const { user } = useUserStore()
   const deliveryAddress = useCheckoutStore((s) => s.deliveryAddress)
-  const { items, totalPrice, appliedPromoCode, shippingPrice, shippingCarrier, shippingLoading, shippingError, shippingIsFree } = useCartStore()
+  const { items, shippingPrice, shippingCarrier, shippingLoading, shippingError, shippingIsFree } = useCartStore()
 
   const getCheckoutContact = useCallback(
     () =>
@@ -48,59 +52,23 @@ export default function PaymentBlock() {
     [user.name, user.familyName, user.phone],
   )
 
-  const syncDeliveryToCheckout = useCallback(
-    async (checkoutToken: string) => {
-      const address = resolveCheckoutDeliveryAddress(
-        useCheckoutStore.getState().deliveryAddress,
-      )
-      if (!address) {
-        throw new Error('Выберите адрес доставки перед оплатой.')
-      }
-
-      const { syncCheckoutDeliveryAddress } = await import(
-        '@/graphql/queries/cart.service'
-      )
-      await syncCheckoutDeliveryAddress(
-        checkoutToken,
-        address,
-        getCheckoutContact(),
-      )
+  const redirectToSuccess = useCallback(
+    (id?: string | null, number?: string | null) => {
+      const qs = new URLSearchParams()
+      if (id) qs.set('orderId', id)
+      if (number) qs.set('number', number)
+      const q = qs.toString()
+      window.location.assign(q ? `/checkout/success?${q}` : '/checkout/success')
     },
-    [getCheckoutContact],
+    [],
   )
-
-  const prepareCheckoutPayment = useCallback(async (checkoutToken: string) => {
-    const { resolveCheckoutPaymentAmount } = await import(
-      '@/graphql/queries/cart.service'
-    )
-    const {
-      shippingPrice: currentShipping,
-      shippingCarrier: currentCarrier,
-      shippingIsFree: currentShippingIsFree,
-    } = useCartStore.getState()
-
-    return resolveCheckoutPaymentAmount(checkoutToken, currentShipping, currentCarrier, {
-      allowFreeShipping: currentShippingIsFree,
-    })
-  }, [])
-
-  const redirectToSuccess = useCallback(() => {
-    window.location.assign('/checkout/success')
-  }, [])
 
   const handleYooKassaSuccess = useCallback(async () => {
     if (paymentCompletedRef.current) return
     paymentCompletedRef.current = true
     setPaymentCompleted(true)
-
-    const storedPaymentId =
-      localStorage.getItem('pendingPaymentId') || paymentId || undefined
-    if (storedPaymentId && !localStorage.getItem('pendingPaymentId')) {
-      localStorage.setItem('pendingPaymentId', storedPaymentId)
-    }
-
-    redirectToSuccess()
-  }, [paymentId, redirectToSuccess])
+    redirectToSuccess(orderId, orderNumber)
+  }, [orderId, orderNumber, redirectToSuccess])
 
   const handleCreateDraftOrder = async () => {
     try {
@@ -112,17 +80,16 @@ export default function PaymentBlock() {
         shippingError: currentShippingError,
         shippingCarrier: currentShippingCarrier,
         shippingIsFree: currentShippingIsFree,
+        appliedPromoCode: currentPromo,
       } = useCartStore.getState()
 
       if (isShippingLoading) {
         toast.error('Подождите, идёт расчёт стоимости доставки.')
-        setIsCreatingPayment(false)
         return
       }
 
       if (currentShippingError) {
         toast.error(currentShippingError)
-        setIsCreatingPayment(false)
         return
       }
 
@@ -134,359 +101,120 @@ export default function PaymentBlock() {
         toast.error(
           'Не удалось рассчитать доставку. Проверьте адрес или попробуйте позже.',
         )
-        setIsCreatingPayment(false)
         return
       }
 
       const resolvedDelivery = resolveCheckoutDeliveryAddress(deliveryAddress)
       if (!resolvedDelivery) {
         toast.error('Выберите адрес доставки перед оплатой.')
-        setIsCreatingPayment(false)
         return
       }
 
-      const checkoutLines = await Promise.all(
-        items.map(async (item: any) => {
-          let variantId = item.variantId
-
-          if (!variantId && item.product.slug) {
-            try {
-              const productData = await getSingleProduct(item.product.slug)
-
-              // Единый источник наличия (остаток + канал)
-              if (productData && !isProductInStock(productData)) {
-                throw new Error(
-                  `Товар "${item.product.name}" закончился. ` +
-                  `Пожалуйста, удалите его из корзины.`,
-                )
-              }
-
-              if (productData?.productVariants?.edges) {
-                const targetSize = item.size || item.product.size
-                const matchingVariant = productData.productVariants.edges.find(
-                  (edge) => edge.node.name === targetSize || edge.node.name === item.product.size
-                )
-
-                if (matchingVariant) {
-                  if (!isVariantSellable(matchingVariant.node.quantityAvailable)) {
-                    throw new Error(
-                      `Товар "${item.product.name}" (${matchingVariant.node.name}) закончился. ` +
-                      `Пожалуйста, удалите его из корзины.`,
-                    )
-                  }
-                  variantId = matchingVariant.node.id
-                  const updatedItems = items.map((i: any) =>
-                    i.id === item.id ? { ...i, variantId } : i
-                  )
-                  useCartStore.setState({ items: updatedItems })
-                } else {
-                  const availableVariants = productData.productVariants.edges
-                    .map(edge => edge.node.name)
-                    .join(', ')
-
-                  throw new Error(
-                    `Вариант "${targetSize}" для товара "${item.product.name}" не найден. ` +
-                    (availableVariants ? `Доступные варианты: ${availableVariants}` : 'Товар временно недоступен.')
-                  )
-                }
-              }
-            } catch (error) {
-              console.error(`Failed to find variant for ${item.product.name}:`, error)
-              throw error
-            }
-          }
-
-          if (variantId && item.product.slug && !item.variantId) {
-            try {
-              const productData = await getSingleProduct(item.product.slug)
-
-              // Повторный запрос: единый источник наличия
-              if (
-                productData &&
-                !isSelectedVariantInStock(productData, variantId)
-              ) {
-                throw new Error(
-                  `Товар "${item.product.name}" закончился. ` +
-                  `Пожалуйста, удалите его из корзины.`,
-                )
-              }
-            } catch (error: any) {
-              if (error.message && error.message.includes('недоступен')) {
-                throw error
-              }
-            }
-          }
-
-          if (!variantId) {
-            throw new Error(
-              `Для товара "${item.product.name}" не указан вариант. ` +
-              `Пожалуйста, удалите товар из корзины и добавьте его заново, выбрав размер.`
-            )
-          }
-
-          return {
-            variantId: variantId,
-            quantity: item.quantity,
-          }
-        })
-      )
-
-      try {
-        const accountEmail = getAccountEmail()
-        const contact = getCheckoutContact()
-        const saleorAddress = resolvedDelivery
-          ? toSaleorDeliveryAddress(
-              mergeCheckoutContact(resolvedDelivery, contact),
-            )
-          : undefined
-
-        const checkoutResponse = await fetch('/api/saleor/create-order', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            lines: checkoutLines,
-            userEmail: accountEmail,
-            channel: 'vspomni-site',
-            address: saleorAddress,
-            promoCode: appliedPromoCode || undefined,
-            shippingAmount: currentShippingIsFree ? 0 : currentShippingPrice,
-            shippingCarrier: currentShippingCarrier || undefined,
-          }),
-        })
-
-        const checkoutResult = await checkoutResponse.json()
-
-        if (checkoutResult.code === 'PROMO_CODE_NOT_APPLIED') {
-          const reason = checkoutResult.error || 'промокод не подходит для этого заказа'
-          useCartStore
-            .getState()
-            .removePromoCode(`Промокод ${appliedPromoCode ?? ''} снят: ${reason}`)
-          toast.error(
-            `Промокод не применён: ${reason}. Итог пересчитан — проверьте сумму и нажмите «Оплатить» ещё раз.`,
-          )
-          setIsCreatingPayment(false)
-          return
-        }
-
-        if (checkoutResponse.ok && checkoutResult.checkout) {
-          // Промокод и адрес уже применены на бэке (без quantity limit GraphQL)
-          const newCheckoutId = checkoutResult.checkout.token as string
-
-          console.log('Setting checkoutId state to:', newCheckoutId)
-          setCheckoutId(newCheckoutId)
-
-          // Адрес уже на checkout через REST — GraphQL shippingAddressUpdate
-          // снова проверяет склад и падает с «Only 0 remaining in stock».
-          // Только привязываем пользователя; иначе sync с soft-fail.
-          if (saleorAddress && accountEmail) {
-            const { attachCheckoutToCustomer } = await import(
-              '@/graphql/queries/cart.service'
-            )
-            await attachCheckoutToCustomer(newCheckoutId, accountEmail)
-          } else {
-            try {
-              await syncDeliveryToCheckout(newCheckoutId)
-            } catch (syncError: unknown) {
-              const message =
-                syncError instanceof Error ? syncError.message : String(syncError)
-              if (
-                message.includes('Cannot add more than') ||
-                message.includes('remaining in stock') ||
-                message.includes('Could not add items')
-              ) {
-                console.warn(
-                  'Skipping GraphQL address sync due to stock/quantity check:',
-                  message,
-                )
-                if (accountEmail) {
-                  const { attachCheckoutToCustomer } = await import(
-                    '@/graphql/queries/cart.service'
-                  )
-                  await attachCheckoutToCustomer(newCheckoutId, accountEmail)
-                }
-              } else {
-                throw syncError
-              }
-            }
-          }
-
-          const amountForPayment = await prepareCheckoutPayment(newCheckoutId)
-          console.log('Calling handleCreatePayment with:', { newCheckoutId, amountForPayment })
-          await handleCreatePayment(newCheckoutId, amountForPayment)
-          return
-        } else {
-          // Если получили 504 или другую ошибку от кастомного API, не переходим к fallback
-          // Показываем понятную ошибку пользователю
-          if (checkoutResult.status === 504 || checkoutResponse.status === 504) {
-            throw new Error(
-              'Сервер не отвечает. Пожалуйста, попробуйте позже или обратитесь в поддержку.\n' +
-              'Если проблема повторяется, возможно, требуется увеличить таймаут на сервере.'
-            )
-          }
-
-          throw new Error(
-            checkoutResult.message ||
-            checkoutResult.error ||
-            'Ошибка создания заказа. Пожалуйста, попробуйте позже.'
-          )
-        }
-      } catch (customError: any) {
-        // Если это ошибка сети или таймаута, не переходим к fallback
-        if (customError.message && (
-          customError.message.includes('timeout') ||
-          customError.message.includes('Gateway Time-out') ||
-          customError.message.includes('504')
-        )) {
-          throw new Error(
-            'Сервер не отвечает. Пожалуйста, попробуйте позже или обратитесь в поддержку.'
-          )
-        }
-
-        // Для других ошибок тоже пробрасываем, не переходим к fallback
-        // чтобы не использовать стандартный API с проверкой наличия
-        console.error('Custom checkout creation error:', customError)
-        throw customError
+      // 1) Живые цены/наличие из Nest: товары без остатка убираем, изменения показываем до оплаты
+      const sync = await syncCartWithNest({ throwOnError: true })
+      const syncMessage = describeCartSyncChanges(sync)
+      if (sync.items.length === 0) {
+        toast.error(syncMessage || 'Корзина пуста или товары закончились.')
+        return
       }
-    } catch (error: any) {
-      console.error('Error creating checkout:', error)
-      let errorMessage = error.message || 'Ошибка создания заказа'
-      if (
-        errorMessage.includes('метод оплаты') &&
-        errorMessage.toLowerCase().includes('недоступен')
-      ) {
-        errorMessage =
-          'Метод оплаты недоступен. В админке Saleor: Настройки → Каналы → vspomni-site → Способы оплаты — включите хотя бы один способ (Dummy или плагин ЮKassa).'
-      } else if (errorMessage.includes('Failed to create checkout')) {
-        errorMessage = 'Не удалось создать заказ. Пожалуйста, попробуйте позже.'
+      if (sync.changed) {
+        toast.warn(
+          `${syncMessage}. Проверьте итог и нажмите «Оплатить» ещё раз.`,
+        )
+        return
       }
-      toast.error(errorMessage)
-      setIsCreatingPayment(false)
-    }
-  }
 
-  const handleCreatePayment = async (orderOrCheckoutId: string, amountOverride?: number) => {
-    setIsCreatingPayment(true)
-    try {
       const accountEmail = getAccountEmail()
-      const {
-        shippingIsFree: payShippingIsFree,
-        totalPrice: cartTotalPrice,
-        promoShippingDiscount,
-      } = useCartStore.getState()
-      const effectiveShipping = payShippingIsFree ? 0 : Number(shippingPrice) || 0
-      const receiptShipping = Math.max(0, effectiveShipping - (promoShippingDiscount || 0))
-
-      const paymentItems = items
-        .filter((item: any) => item?.product?.name && Number(item.product.price) > 0)
-        .map((item: any) => ({
-          name: String(item.product.name),
-          quantity: Number(item.quantity) || 1,
-          price: Number(item.product.price),
-          sku: item.variantId || item.id,
-        }))
-
-      if (paymentItems.length === 0) {
-        throw new Error('Не удалось подготовить товары к оплате. Обновите корзину и попробуйте снова.')
+      const guestEmail = useUserStore.getState().user.email?.trim().toLowerCase() || ''
+      const email = accountEmail || guestEmail
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        toast.error('Укажите корректный email для заказа.')
+        return
       }
 
-      // Complete сверяет оплату с итогом Saleor, поэтому списываем ровно его.
-      const totalAmount = Number(amountOverride ?? 0)
-      if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
-        throw new Error('Некорректная сумма заказа. Обновите страницу и попробуйте снова.')
-      }
+      const contact = getCheckoutContact()
+      const customerName =
+        [contact.firstName, contact.lastName].filter(Boolean).join(' ').trim() ||
+        resolvedDelivery.firstName ||
+        'Покупатель'
 
-      if (Math.abs(totalAmount - cartTotalPrice) >= 1) {
-        console.warn('Payment amount: cart vs Saleor', {
-          cartTotalPrice,
-          saleorAmount: totalAmount,
-          effectiveShipping,
-        })
-        toast.info(`Итог пересчитан магазином: ${formatCurrency(totalAmount)} ₽`)
-      }
-      const shortId = orderOrCheckoutId.length > 8
-        ? orderOrCheckoutId.substring(orderOrCheckoutId.length - 8)
-        : orderOrCheckoutId
-      const description = `Заказ #${shortId} - ${items.length} товар(ов)`
-
-      // Вызываем API для создания платежа
-      const response = await fetch('/api/yookassa/create-payment', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          amount: totalAmount,
-          currency: 'RUB',
-          description: description,
-          orderId: orderOrCheckoutId,
-          userEmail: accountEmail,
-          shippingAmount: effectiveShipping,
-          receiptShippingAmount: receiptShipping,
-          allowFreeShipping: payShippingIsFree,
-          items: paymentItems,
-          returnUrl: `${window.location.origin}/checkout/success`,
-          metadata: {
-            userId: accountEmail,
-            userEmail: accountEmail,
-            orderId: orderOrCheckoutId,
-            itemsCount: items.length,
-            shippingAmount: String(effectiveShipping),
-            shippingCarrier: shippingCarrier || 'cdek',
-            allowFreeShipping: payShippingIsFree ? 'true' : 'false',
-          },
-        }),
+      // 2–4) shipping-quote → create → pay
+      const prepared = await prepareNestPayment({
+        items: useCartStore.getState().items,
+        email,
+        phone: contact.phone || resolvedDelivery.phone || '',
+        customerName,
+        address: resolvedDelivery,
+        contact,
+        promoCode: currentPromo,
+        shippingEstimate: currentShippingPrice,
+        shippingFree: currentShippingIsFree,
+        carrier: currentShippingCarrier,
       })
 
-      const result = await response.json()
+      const { order, pay } = prepared
+      setOrderId(order.id)
+      setOrderNumber(order.number)
+      setPayToken(order.payToken)
 
-      if (!response.ok) {
-        throw new Error(
-          result.message ||
-          result.error ||
-          'Failed to create payment',
-        )
+      if (pay.alreadyPaid) {
+        paymentCompletedRef.current = true
+        setPaymentCompleted(true)
+        redirectToSuccess(order.id, order.number)
+        return
       }
 
-      if (result.confirmationToken) {
-        const { shippingPrice: currentShipping, shippingCarrier: currentCarrier } =
-          useCartStore.getState()
-        persistPendingPaymentStorage(
-          orderOrCheckoutId,
-          totalAmount,
-          result.paymentId,
-          { amount: currentShipping || 0, carrier: currentCarrier },
-        )
-        console.log('Saved checkoutId to localStorage:', orderOrCheckoutId)
-        console.log('Saved paymentId to localStorage:', result.paymentId)
-        console.log('Current checkoutId state:', checkoutId)
+      if (!pay.confirmationToken) {
+        throw new Error('Nest не вернул confirmationToken для виджета оплаты')
+      }
 
-        setConfirmationToken(result.confirmationToken)
-        if (result.paymentId) {
-          setPaymentId(result.paymentId)
+      const cartTotal = useCartStore.getState().totalPrice
+      if (Math.abs((order.total || 0) - cartTotal) >= 1) {
+        toast.info(`Итог пересчитан магазином: ${formatCurrency(order.total)} ₽`)
+      }
+
+      setConfirmationToken(pay.confirmationToken)
+      if (pay.paymentId) setPaymentId(pay.paymentId)
+      setShowYooKassaWidget(true)
+    } catch (error: unknown) {
+      console.error('Error creating checkout:', error)
+      if (error instanceof CheckoutError) {
+        if (error.code === 'SHIPPING_CHANGED' && error.extra?.shippingCost != null) {
+          // Nest — источник правды по доставке: подставляем и просим подтвердить итог
+          const cost = error.extra.shippingCost
+          useCartStore.getState().setShippingPrice(cost)
+          useCartStore.getState().setShippingIsFree(cost === 0)
+          toast.warn(error.message)
+        } else if (error.code === 'PROMO_REJECTED') {
+          const code = useCartStore.getState().appliedPromoCode ?? ''
+          useCartStore
+            .getState()
+            .removePromoCode(`Промокод ${code} снят: ${error.message}`)
+          clearPendingCheckoutOrder()
+          toast.error(
+            `Промокод не применён: ${error.message}. Итог пересчитан — проверьте сумму и нажмите «Оплатить» ещё раз.`,
+          )
+        } else if (error.code === 'CART_CHANGED') {
+          void syncCartWithNest()
+          toast.error(error.message)
+        } else {
+          toast.error(error.message)
         }
-        setShowYooKassaWidget(true)
       } else {
-        throw new Error('No confirmation token received')
+        const message =
+          error instanceof Error ? error.message : 'Ошибка создания заказа'
+        toast.error(
+          /failed to fetch|networkerror/i.test(message)
+            ? 'Сервер не отвечает. Пожалуйста, попробуйте позже или обратитесь в поддержку.'
+            : message,
+        )
       }
-    } catch (error: any) {
-      console.error('Error creating payment:', error)
-      let errorMessage = error.message || 'Ошибка создания платежа. Пожалуйста, попробуйте позже.'
-      if (
-        errorMessage.includes('метод оплаты') &&
-        errorMessage.toLowerCase().includes('недоступен')
-      ) {
-        errorMessage =
-          'Метод оплаты недоступен. Проверьте в личном кабинете ЮKassa: способы оплаты и валюту RUB для магазина.'
-      }
-      toast.error(errorMessage)
     } finally {
       setIsCreatingPayment(false)
     }
   }
 
-  const handleYooKassaError = (error: any) => {
+  const handleYooKassaError = (error: unknown) => {
     console.error('Payment error:', error)
     toast.error('Ошибка при оплате. Попробуйте ещё раз.')
   }
@@ -494,7 +222,7 @@ export default function PaymentBlock() {
   const checkPaymentStatus = useCallback(async () => {
     if (!paymentId || paymentCompletedRef.current) return false
     try {
-      const data = await fetchPaymentStatus(paymentId)
+      const data = await fetchPaymentStatus(paymentId, payToken)
       if (data?.status === 'succeeded' || data?.paid) {
         await handleYooKassaSuccess()
         return true
@@ -503,7 +231,7 @@ export default function PaymentBlock() {
       // ignore polling errors
     }
     return false
-  }, [paymentId, handleYooKassaSuccess])
+  }, [paymentId, payToken, handleYooKassaSuccess])
 
   useEffect(() => {
     if (!paymentId || paymentCompleted) return
@@ -526,6 +254,7 @@ export default function PaymentBlock() {
           <YooKassaWidget
             confirmationToken={confirmationToken}
             paymentId={paymentId}
+            payToken={payToken}
             onSuccess={handleYooKassaSuccess}
             onError={handleYooKassaError}
             onClose={() => setShowYooKassaWidget(false)}
@@ -543,7 +272,8 @@ export default function PaymentBlock() {
         </button>
       )}
 
-      {!showYooKassaWidget && !paymentId && (
+      {/* После закрытия виджета повторный «Оплатить» переиспользует тот же заказ (pending по signature) */}
+      {!showYooKassaWidget && !paymentCompleted && (
       <>
       {shippingError ? (
         <p className="mb-3 text-sm text-red-600">{shippingError}</p>
@@ -562,7 +292,9 @@ export default function PaymentBlock() {
           !Boolean(
             user.name.trim().length >= 2 &&
             user.familyName.trim().length >= 1 &&
-            getAccountEmail().length > 5 &&
+            /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+              getAccountEmail() || user.email?.trim().toLowerCase() || '',
+            ) &&
             isValidRuPhone(user.phone),
           )
         }

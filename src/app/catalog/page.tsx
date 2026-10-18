@@ -55,7 +55,7 @@ export default async function CatalogPage() {
           items={breadcrumbCatalogPage()}
           currentPath="/catalog"
           variant="container"
-          className="relative z-10"
+          className="relative z-10 mb-4 sm:mb-6"
         />
         <CatalogCategoryBannersView categories={sortedCategories} />
         <ProductGrid />
