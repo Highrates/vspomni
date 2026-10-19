@@ -45,7 +45,8 @@ sleep 2
 systemctl is-active vspomni-admin >/dev/null && echo "vspomni-admin: active" \
   || { echo "vspomni-admin: DOWN"; journalctl -u vspomni-admin -n 40 --no-pager; exit 1; }
 
-echo "==> Front npm ci + build"
+# Front не в workspaces; hero-types file: — dist из build:packages выше
+echo "==> Front npm ci + build (после build:packages)"
 (
   cd Front
   unset NODE_ENV

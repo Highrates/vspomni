@@ -24,6 +24,7 @@ DO_FRONT=1
 DO_ADMIN=1
 DO_UPLOAD=1
 DO_MIGRATE=1
+SCOPE_SET=0
 
 usage() {
   cat <<'EOF'
@@ -31,6 +32,7 @@ Deploy Nest + Front + Admin → /opt/vspomni (отдельный VPS, не Mira)
 
   ./deploy/scripts/deploy.sh
   ./deploy/scripts/deploy.sh --api|--front|--admin
+  ./deploy/scripts/deploy.sh --api --front   # можно комбинировать
   ./deploy/scripts/deploy.sh --skip-upload
   ./deploy/scripts/deploy.sh --skip-migrate
 
@@ -41,9 +43,18 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --api) DO_API=1; DO_FRONT=0; DO_ADMIN=0 ;;
-    --front) DO_API=0; DO_FRONT=1; DO_ADMIN=0 ;;
-    --admin) DO_API=0; DO_FRONT=0; DO_ADMIN=1 ;;
+    --api)
+      if [[ "$SCOPE_SET" -eq 0 ]]; then DO_API=0; DO_FRONT=0; DO_ADMIN=0; SCOPE_SET=1; fi
+      DO_API=1
+      ;;
+    --front)
+      if [[ "$SCOPE_SET" -eq 0 ]]; then DO_API=0; DO_FRONT=0; DO_ADMIN=0; SCOPE_SET=1; fi
+      DO_FRONT=1
+      ;;
+    --admin)
+      if [[ "$SCOPE_SET" -eq 0 ]]; then DO_API=0; DO_FRONT=0; DO_ADMIN=0; SCOPE_SET=1; fi
+      DO_ADMIN=1
+      ;;
     --skip-upload) DO_UPLOAD=0 ;;
     --skip-migrate) DO_MIGRATE=0 ;;
     -h|--help) usage 0 ;;
@@ -121,7 +132,8 @@ if [[ "\$DO_FRONT" -eq 1 ]]; then
   if [[ ! -f Front/.env.local && ! -f Front/.env ]]; then
     echo "warn: нет Front/.env.local — создайте перед продом (NEXT_PUBLIC_*)"
   fi
-  echo "==> Front npm ci + build"
+  # Front не в workspaces; @vspomni/hero-types через file: — dist уже из build:packages выше
+  echo "==> Front npm ci + build (после build:packages)"
   (
     cd Front
     unset NODE_ENV

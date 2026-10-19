@@ -36,7 +36,7 @@ function filterValidProductCards(items: ProductCardItem[]): ProductCardItem[] {
 const LEGACY_COLLECTION_GID_TO_SLUG: Record<string, string> = {
   // «Популярное»
   Q29sbGVjdGlvbjoz: POPULAR_COLLECTION_SLUG,
-  // «Ваши вкусовые сосочки будут в восторге» (CollectionNoseBlock)
+  // «Ваши носовые сосочки будут в восторге» (CollectionNoseBlock)
   Q29sbGVjdGlvbjo1: NEW_COLLECTION_SLUG,
 }
 

@@ -3,6 +3,13 @@ import { Prisma } from '@prisma/client';
 import {
   type ProductAttributeKind,
 } from '@vspomni/admin-types';
+import {
+  HERO_PLAQUE_HREF_DEFAULT,
+  HERO_PLAQUE_TEMPLATE_SEED_HREF,
+  HERO_SLIDE_HREF_DEFAULT,
+  plaqueFromFlatColumns,
+  toRelativeMediaPath,
+} from '@vspomni/hero-types';
 import { extractMediaUrlsFromRichHtml } from '../blog/blog-html.util';
 import { sanitizeProductRichHtml } from '../catalog/catalog-html.util';
 import { sanitizeFaqTextForWrite } from './faq-html.util';
@@ -16,7 +23,7 @@ import type { ReplaceFaqItemsDto } from './dto/faq.dto';
 import type { ReplaceGratitudeDto } from './dto/gratitude.dto';
 import type {
   ReplaceHeroSlidesDto,
-  UpdateHeroSecondaryBannerDto,
+  UpdateHeroPlaqueTemplateDto,
 } from './dto/hero.dto';
 import type { ReplaceStoriesDto } from './dto/stories.dto';
 import { slugify } from '../catalog/slug.util';
@@ -113,11 +120,33 @@ async function readAttributeCatalogVersion(
   return row?.version ?? 0;
 }
 
+/**
+ * Каноническая плашка (plaque): все обязательные поля сразу, иначе null.
+ * Частичный merge на витрине запрещён. DB-колонки пока badge*.
+ */
+function heroPlaqueFromRow(row: {
+  badgeTitle: string | null;
+  badgeSubtitle: string | null;
+  badgeImageUrl: string | null;
+  badgeHref: string | null;
+}) {
+  return plaqueFromFlatColumns({
+    badgeTitle: row.badgeTitle,
+    badgeSubtitle: row.badgeSubtitle,
+    badgeImageUrl: toRelativeMediaPath(row.badgeImageUrl),
+    badgeHref: row.badgeHref,
+  });
+}
+
 function serializeHero(row: {
   id: string;
   imageUrl: string;
   mobileImageUrl: string | null;
   href: string;
+  badgeTitle: string | null;
+  badgeSubtitle: string | null;
+  badgeImageUrl: string | null;
+  badgeHref: string | null;
   sortOrder: number;
   active: boolean;
   createdAt: Date;
@@ -127,7 +156,8 @@ function serializeHero(row: {
     id: row.id,
     imageUrl: row.imageUrl,
     mobileImageUrl: row.mobileImageUrl,
-    href: row.href?.trim() || '/catalog',
+    href: row.href?.trim() || HERO_SLIDE_HREF_DEFAULT,
+    plaque: heroPlaqueFromRow(row),
     sortOrder: row.sortOrder,
     active: row.active,
     createdAt: row.createdAt.toISOString(),
@@ -719,16 +749,45 @@ export class SettingsAdminService {
   }
 
   async replaceHero(dto: ReplaceHeroSlidesDto) {
-    const cleaned = (dto.items ?? []).map((it) => ({
-      id: typeof it.id === 'string' && it.id.trim() ? it.id.trim() : undefined,
-      imageUrl: it.imageUrl.trim(),
-      mobileImageUrl: trimOrNull(it.mobileImageUrl ?? null),
-      href:
-        typeof it.href === 'string' && it.href.trim()
-          ? it.href.trim()
-          : '/catalog',
-      active: it.active ?? true,
-    }));
+    const cleaned = (dto.items ?? []).map((it, index) => {
+      const imageUrl = it.imageUrl.trim();
+      const plaqueIn = it.plaque;
+      let badgeTitle: string | null = null;
+      let badgeSubtitle: string | null = null;
+      let badgeImageUrl: string | null = null;
+      let badgeHref: string | null = null;
+      if (plaqueIn != null) {
+        const title = plaqueIn.title?.trim() || '';
+        const subtitle = plaqueIn.subtitle?.trim() || '';
+        const pImage = plaqueIn.imageUrl?.trim() || '';
+        if (!title || !subtitle || !pImage) {
+          throw new BadRequestException(
+            `Слайд #${index + 1}: плашка — заголовок, подзаголовок и обложка целиком (или plaque: null)`,
+          );
+        }
+        badgeTitle = title;
+        badgeSubtitle = subtitle;
+        badgeImageUrl = pImage;
+        badgeHref =
+          typeof plaqueIn.href === 'string' && plaqueIn.href.trim()
+            ? plaqueIn.href.trim()
+            : HERO_PLAQUE_HREF_DEFAULT;
+      }
+      return {
+        id: typeof it.id === 'string' && it.id.trim() ? it.id.trim() : undefined,
+        imageUrl,
+        mobileImageUrl: trimOrNull(it.mobileImageUrl ?? null),
+        href:
+          typeof it.href === 'string' && it.href.trim()
+            ? it.href.trim()
+            : HERO_SLIDE_HREF_DEFAULT,
+        badgeTitle,
+        badgeSubtitle,
+        badgeImageUrl,
+        badgeHref,
+        active: it.active ?? true,
+      };
+    });
     const incomplete = cleaned.filter((it) => !it.imageUrl);
     if (incomplete.length > 0) {
       throw new BadRequestException(
@@ -760,6 +819,10 @@ export class SettingsAdminService {
           imageUrl: it.imageUrl,
           mobileImageUrl: it.mobileImageUrl,
           href: it.href,
+          badgeTitle: it.badgeTitle,
+          badgeSubtitle: it.badgeSubtitle,
+          badgeImageUrl: it.badgeImageUrl,
+          badgeHref: it.badgeHref,
           active: it.active,
           sortOrder: i,
         };
@@ -775,7 +838,7 @@ export class SettingsAdminService {
     return { items: rows.map(serializeHero) };
   }
 
-  async getHeroSecondary() {
+  async getHeroPlaqueTemplate() {
     const row = await this.prisma.heroSecondaryBanner.upsert({
       where: { id: 'default' },
       create: { id: 'default' },
@@ -790,14 +853,14 @@ export class SettingsAdminService {
     };
   }
 
-  async updateHeroSecondary(dto: UpdateHeroSecondaryBannerDto) {
+  async updateHeroPlaqueTemplate(dto: UpdateHeroPlaqueTemplateDto) {
     const title = dto.title.trim();
     const subtitle = dto.subtitle.trim();
     const imageUrl = dto.imageUrl.trim();
     const href =
       typeof dto.href === 'string' && dto.href.trim()
         ? dto.href.trim()
-        : '/catalog/aroma/teplichka-u-babuli';
+        : HERO_PLAQUE_TEMPLATE_SEED_HREF;
     if (!title || !subtitle || !imageUrl) {
       throw new BadRequestException('Заполните заголовок, подзаголовок и картинку');
     }
@@ -1652,6 +1715,11 @@ export class SettingsPublicService {
     return { items: rows };
   }
 
+  /**
+   * Публичный Hero для витрины: уже resolved-слайды.
+   * — imageUrl / mobileImageUrl (mobile всегда заполнен: своя или десктоп)
+   * — plaque целиком или null (без partial merge / шаблона)
+   */
   async listHero() {
     const rows = await this.prisma.heroSlide.findMany({
       where: { active: true },
@@ -1661,27 +1729,28 @@ export class SettingsPublicService {
         imageUrl: true,
         mobileImageUrl: true,
         href: true,
+        badgeTitle: true,
+        badgeSubtitle: true,
+        badgeImageUrl: true,
+        badgeHref: true,
       },
     });
     return {
-      items: rows.map((r) => ({
-        ...r,
-        href: r.href?.trim() || '/catalog',
-      })),
-    };
-  }
-
-  async getHeroSecondary() {
-    const row = await this.prisma.heroSecondaryBanner.upsert({
-      where: { id: 'default' },
-      create: { id: 'default' },
-      update: {},
-    });
-    return {
-      title: row.title,
-      subtitle: row.subtitle,
-      imageUrl: row.imageUrl,
-      href: row.href,
+      items: rows
+        .map((r) => {
+          const imageUrl = toRelativeMediaPath(r.imageUrl);
+          if (!imageUrl) return null;
+          const mobileImageUrl =
+            toRelativeMediaPath(r.mobileImageUrl) || imageUrl;
+          return {
+            id: r.id,
+            imageUrl,
+            mobileImageUrl,
+            href: r.href?.trim() || HERO_SLIDE_HREF_DEFAULT,
+            plaque: heroPlaqueFromRow(r),
+          };
+        })
+        .filter((s): s is NonNullable<typeof s> => s != null),
     };
   }
 

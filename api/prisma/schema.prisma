@@ -72,6 +72,8 @@ model User {
   email            String    @unique
   /// null после soft-delete сотрудника
   passwordHash     String?
+  /// ID аккаунта Яндекс ID (OAuth); null — только email/пароль
+  yandexId         String?   @unique
   role             UserRole  @default(USER)
   isActive         Boolean   @default(true)
   displayName      String?
@@ -1086,8 +1088,14 @@ model HeroSlide {
   imageUrl        String
   /// Мобильная / маленькая (опционально)
   mobileImageUrl  String?
-  /// Куда ведёт клик по большому баннеру
+  /// Куда ведёт клик по большому баннеру (пустой href при save → /catalog)
   href            String   @default("/catalog")
+  /// Плашка поверх слайда (API: plaque; колонки legacy badge*)
+  badgeTitle      String?
+  badgeSubtitle   String?
+  badgeImageUrl   String?
+  /// Пустой href плашки при save → /catalog (не seed шаблона)
+  badgeHref       String?
   sortOrder       Int      @default(0)
   active          Boolean  @default(true)
   createdAt       DateTime @default(now())
@@ -1096,13 +1104,13 @@ model HeroSlide {
   @@index([active, sortOrder])
 }
 
-/// Нижняя плашка Hero (заголовок / подзаголовок / картинка)
+/// Шаблон плашки Hero только для админки («заполнить пустые»). На витрину не отдаётся как fallback.
 model HeroSecondaryBanner {
   id        String   @id @default("default")
   title     String   @default("Аромат, что остаётся. История, что звучит в памяти")
   subtitle  String   @default("Каждый аромат — это история, сотканная из чувств, мгновений и памяти.")
   imageUrl  String   @default("/images/hero-badge.png")
-  /// Куда ведёт плашка
+  /// Seed deep-link шаблона (≠ HERO_PLAQUE_HREF_DEFAULT=/catalog у сохранённой plaque)
   href      String   @default("/catalog/aroma/teplichka-u-babuli")
   updatedAt DateTime @updatedAt
 }

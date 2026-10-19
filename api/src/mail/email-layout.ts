@@ -4,7 +4,10 @@
  */
 
 export const MAIL_BRAND = {
-  name: 'Vspomni',
+  /** Бренд в письмах (subject / alt логотипа). */
+  name: 'ВСПОМНИ.',
+  /** CID вложения логотипа (nodemailer attachments). */
+  logoCid: 'vspomni-logo',
   ink: '#111111',
   inkSoft: '#2a2a2a',
   muted: '#5b6166',
@@ -39,17 +42,22 @@ export type MailLayoutInput = {
   bodyHtml: string;
   /** Абсолютный URL витрины — для лого и футера */
   siteUrl?: string | null;
+  /**
+   * true — src=cid:… (вложение при SMTP).
+   * false/undefined — https URL (превью в админке без CID).
+   */
+  logoAsCid?: boolean;
 };
 
-function logoBlock(site: string): string {
-  const { ink, name } = MAIL_BRAND;
-  const text = `<span style="font-family:${FONT};font-size:18px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:${ink};line-height:1;">${esc(name)}</span>`;
-  if (!site) return text;
-  const src = `${site}/logo/logo-vspomni.png`;
-  return `<a href="${esc(site)}" style="text-decoration:none;display:inline-block;">
-  <img src="${esc(src)}" width="140" height="40" alt="${esc(name)}" style="display:block;border:0;outline:none;height:40px;width:auto;max-width:160px;"/>
-</a>
-<!--[if !mso]><!--><div style="display:none;max-height:0;overflow:hidden;">${text}</div><!--<![endif]-->`;
+function logoBlock(site: string, logoAsCid: boolean): string {
+  const { name, logoCid } = MAIL_BRAND;
+  const href = site || 'https://vspomni.store';
+  const src = logoAsCid
+    ? `cid:${logoCid}`
+    : `${href}/logo/logo-vspomni.png`;
+  return `<a href="${esc(href)}" style="text-decoration:none;display:inline-block;border:0;">
+  <img src="${esc(src)}" width="160" height="36" alt="${esc(name)}" style="display:block;border:0;outline:none;text-decoration:none;height:36px;width:auto;max-width:180px;"/>
+</a>`;
 }
 
 /**
@@ -58,10 +66,9 @@ function logoBlock(site: string): string {
 export function renderVspomniEmailLayout(input: MailLayoutInput): string {
   const { ink, muted, line, snow, white, name, replyHint, accent } = MAIL_BRAND;
   const pre = esc((input.preheader ?? '').trim());
-  const site = (input.siteUrl ?? '').replace(/\/+$/, '');
-  const siteLink = site
-    ? `<a href="${esc(site)}" style="color:${accent};text-decoration:none">${esc(site.replace(/^https?:\/\//, ''))}</a>`
-    : `<span style="color:${muted}">vspomni.store</span>`;
+  const site = (input.siteUrl ?? '').replace(/\/+$/, '') || 'https://vspomni.store';
+  const siteLink = `<a href="${esc(site)}" style="color:${accent};text-decoration:none">${esc(site.replace(/^https?:\/\//, ''))}</a>`;
+  const logoAsCid = input.logoAsCid === true;
 
   return `<!DOCTYPE html>
 <html lang="ru">
@@ -80,7 +87,7 @@ ${pre ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:t
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:${white};border-radius:0;overflow:hidden;border:1px solid ${line};">
         <tr>
           <td style="padding:28px 32px 20px;border-bottom:1px solid ${line};">
-            ${logoBlock(site)}
+            ${logoBlock(site, logoAsCid)}
           </td>
         </tr>
         <tr>

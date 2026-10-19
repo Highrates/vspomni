@@ -16,55 +16,85 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  assertHeroPlaqueComplete,
+  heroPlaqueTitleLines,
+  HERO_PLAQUE_HREF_DEFAULT,
+  HERO_PLAQUE_TEMPLATE_SEED_HREF,
+  HERO_SLIDE_HREF_DEFAULT,
+  normalizeHeroPlaque,
+  toRelativeMediaPath,
+  type HeroPlaque,
+  type HeroPlaqueTemplate,
+  type HeroSlideAdmin,
+} from '@vspomni/hero-types';
 import { AdminCheckbox } from '@/components/admin/AdminCheckbox/AdminCheckbox';
 import { AdminCompactBtn } from '@/components/AdminCompactBtn/AdminCompactBtn';
 import { AdminSettingsListErrors } from '@/components/admin/AdminSettingsListErrors/AdminSettingsListErrors';
 import { AdminTabs, AdminTabsPanel } from '@/components/AdminTabs/AdminTabs';
 import { useToast } from '@/components/Toast/ToastProvider';
-import { adminBackendFetch, adminBackendJson } from '@/lib/adminBackendFetch';
+import {
+  AdminBackendRequestError,
+  adminBackendFetch,
+  adminBackendJson,
+  readAdminApiError,
+} from '@/lib/adminBackendFetch';
 import { useAdminSettingsListShell } from '@/lib/useAdminSettingsListShell';
-import { revalidateHomeStorefront } from '@/lib/revalidateHomeStorefront';
+import {
+  homeRevalidateLagToast,
+  revalidateHomeStorefront,
+} from '@/lib/revalidateHomeStorefront';
 import catalogStyles from '@/app/(admin)/admin/catalog/catalogAdmin.module.css';
 import styles from '@/app/(admin)/admin/settings/Settings.module.css';
 
-type HeroTab = 'main' | 'secondary';
+type HeroTab = 'slides' | 'template';
 
-type HeroDraft = {
+type SlideDraft = {
   key: string;
   id?: string;
   imageUrl: string;
   mobileImageUrl: string;
   href: string;
+  /** Каноническая плашка; null = без плашки на витрине */
+  plaque: HeroPlaque | null;
   active: boolean;
 };
 
-type HeroApiItem = {
-  id: string;
-  imageUrl: string;
-  mobileImageUrl: string | null;
-  href?: string | null;
-  sortOrder: number;
-  active: boolean;
-};
-
-const MAIN_HREF_DEFAULT = '/catalog';
-
-type SecondaryDraft = {
-  title: string;
-  subtitle: string;
-  imageUrl: string;
-  href: string;
-};
-
-const SECONDARY_DEFAULTS: SecondaryDraft = {
+/** Seed контента шаблона (не fallback пустого href плашки — тот HERO_PLAQUE_HREF_DEFAULT). */
+const TEMPLATE_DEFAULTS: HeroPlaqueTemplate = {
   title: 'Аромат, что остаётся. История, что звучит в памяти',
   subtitle: 'Каждый аромат — это история, сотканная из чувств, мгновений и памяти.',
   imageUrl: '/images/hero-badge.png',
-  href: '/catalog/aroma/teplichka-u-babuli',
+  href: HERO_PLAQUE_TEMPLATE_SEED_HREF,
 };
 
 function newKey() {
   return `tmp-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function normalizeUploadUrl(url: string): string {
+  return toRelativeMediaPath(url) || url.trim();
+}
+
+function emptyPlaque(template?: HeroPlaqueTemplate): HeroPlaque {
+  return {
+    title: template?.title?.trim() || '',
+    subtitle: template?.subtitle?.trim() || '',
+    imageUrl: template?.imageUrl?.trim() || '',
+    href: template?.href?.trim() || HERO_PLAQUE_HREF_DEFAULT,
+  };
+}
+
+function mapApiItem(it: HeroSlideAdmin): SlideDraft {
+  return {
+    key: it.id,
+    id: it.id,
+    imageUrl: it.imageUrl,
+    mobileImageUrl: it.mobileImageUrl ?? '',
+    href: it.href?.trim() || HERO_SLIDE_HREF_DEFAULT,
+    plaque: normalizeHeroPlaque(it.plaque),
+    active: it.active,
+  };
 }
 
 async function uploadImage(file: File): Promise<string> {
@@ -74,32 +104,162 @@ async function uploadImage(file: File): Promise<string> {
     method: 'POST',
     body: fd,
   });
-  const data = (await res.json()) as { url?: string };
-  if (!res.ok || !data.url) {
-    throw new Error('Не удалось загрузить изображение');
+  if (!res.ok) {
+    throw new AdminBackendRequestError(await readAdminApiError(res), res.status);
   }
-  return data.url;
+  const data = (await res.json()) as { url?: string };
+  if (!data.url) {
+    throw new Error('Сервер не вернул URL изображения');
+  }
+  return normalizeUploadUrl(data.url);
+}
+
+function ImageUploadField({
+  label,
+  url,
+  disabled,
+  emptyHint,
+  thumbClassName,
+  onUrlChange,
+  onUpload,
+  onClear,
+}: {
+  label: string;
+  url: string;
+  disabled: boolean;
+  emptyHint: string;
+  thumbClassName?: string;
+  onUrlChange: (url: string) => void;
+  onUpload: (file: File) => Promise<void>;
+  onClear: () => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const preview = toRelativeMediaPath(url);
+
+  return (
+    <div className={styles.heroImageCol}>
+      <p className={styles.heroImageLabel}>{label}</p>
+      {preview ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className={thumbClassName || styles.heroThumb} src={preview} alt="" />
+      ) : (
+        <p className={catalogStyles.lead}>{emptyHint}</p>
+      )}
+      <input
+        type="text"
+        className={styles.heroTextInput}
+        value={url}
+        disabled={disabled}
+        placeholder="/uploads/… или /images/…"
+        onChange={(e) => onUrlChange(e.target.value)}
+      />
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        className={styles.heroFileInput}
+        disabled={disabled}
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void onUpload(f);
+          if (fileRef.current) fileRef.current.value = '';
+        }}
+      />
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <AdminCompactBtn
+          type="button"
+          variant="outline"
+          disabled={disabled}
+          onClick={() => fileRef.current?.click()}
+        >
+          Загрузить
+        </AdminCompactBtn>
+        {url ? (
+          <AdminCompactBtn type="button" variant="outline" disabled={disabled} onClick={onClear}>
+            Убрать
+          </AdminCompactBtn>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/** Мини-превью как на главной: баннер + плашка снизу. */
+function SlideHomePreview({ item }: { item: SlideDraft }) {
+  const cover = toRelativeMediaPath(item.imageUrl) || toRelativeMediaPath(item.mobileImageUrl);
+  const plaque = item.plaque;
+  const plaqueImg = plaque ? toRelativeMediaPath(plaque.imageUrl) : '';
+  const titleLines = plaque ? heroPlaqueTitleLines(plaque.title) : (['Заголовок'] as [string]);
+
+  return (
+    <div className={styles.heroSlidePreview} aria-hidden={!cover}>
+      {cover ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className={styles.heroSlidePreviewBg} src={cover} alt="" />
+      ) : (
+        <div className={styles.heroSlidePreviewEmpty}>Нет обложки слайда</div>
+      )}
+      {plaque ? (
+        <div className={styles.heroPlaquePreview}>
+          {plaqueImg ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className={styles.heroPlaquePreviewThumb} src={plaqueImg} alt="" />
+          ) : (
+            <div className={styles.heroPlaquePreviewThumbEmpty} />
+          )}
+          <div className={styles.heroPlaquePreviewText}>
+            <p className={styles.heroPlaquePreviewTitle}>
+              {titleLines[0] || 'Заголовок'}
+              {titleLines[1] ? (
+                <>
+                  <br />
+                  {titleLines[1]}
+                </>
+              ) : null}
+            </p>
+            <p className={styles.heroPlaquePreviewSub}>
+              {plaque.subtitle.trim() || 'Подзаголовок'}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <p className={styles.heroSlidePreviewHint}>Без плашки</p>
+      )}
+    </div>
+  );
 }
 
 function SortableHeroRow({
   item,
+  index,
   disabled,
+  template,
   onChange,
   onRemove,
-  onUpload,
+  onUploadMain,
+  onUploadPlaque,
 }: {
-  item: HeroDraft;
+  item: SlideDraft;
+  index: number;
   disabled: boolean;
-  onChange: (patch: Partial<HeroDraft>) => void;
+  template: HeroPlaqueTemplate;
+  onChange: (patch: Partial<SlideDraft>) => void;
   onRemove: () => void;
-  onUpload: (field: 'imageUrl' | 'mobileImageUrl', file: File) => Promise<void>;
+  onUploadMain: (field: 'imageUrl' | 'mobileImageUrl', file: File) => Promise<void>;
+  onUploadPlaque: (file: File) => Promise<void>;
 }) {
-  const desktopRef = useRef<HTMLInputElement>(null);
-  const mobileRef = useRef<HTMLInputElement>(null);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.key,
     disabled,
   });
+  const hasPlaque = item.plaque != null;
+  const plaque = item.plaque ?? emptyPlaque();
+  const [plaqueOpen, setPlaqueOpen] = useState(hasPlaque);
+
+  useEffect(() => {
+    if (hasPlaque) setPlaqueOpen(true);
+  }, [hasPlaque]);
 
   return (
     <li
@@ -121,6 +281,7 @@ function SortableHeroRow({
         >
           ⋮⋮
         </button>
+        <span className={styles.heroImageLabel}>Слайд {index + 1}</span>
         <label className={styles.activeLabel}>
           <AdminCheckbox
             checked={item.active}
@@ -140,83 +301,129 @@ function SortableHeroRow({
         </AdminCompactBtn>
       </div>
 
-      <div className={styles.heroImages}>
-        <div className={styles.heroImageCol}>
-          <p className={styles.heroImageLabel}>Десктоп</p>
-          {item.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img className={styles.heroThumb} src={item.imageUrl} alt="" />
-          ) : (
-            <p className={catalogStyles.lead}>Не выбрано</p>
-          )}
-          <input
-            ref={desktopRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif"
-            className={styles.heroFileInput}
-            disabled={disabled}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void onUpload('imageUrl', f);
-              if (desktopRef.current) desktopRef.current.value = '';
-            }}
-          />
-          {item.imageUrl ? (
-            <AdminCompactBtn
-              type="button"
-              variant="outline"
+      <div className={styles.heroSlideLayout}>
+        <div className={styles.heroSlideFields}>
+          <div className={styles.heroImages}>
+            <ImageUploadField
+              label="Десктоп"
+              url={item.imageUrl}
               disabled={disabled}
-              onClick={() => onChange({ imageUrl: '' })}
-            >
-              Убрать
-            </AdminCompactBtn>
-          ) : null}
-        </div>
-
-        <div className={styles.heroImageCol}>
-          <p className={styles.heroImageLabel}>Мобильная (опционально)</p>
-          {item.mobileImageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img className={styles.heroThumb} src={item.mobileImageUrl} alt="" />
-          ) : (
-            <p className={catalogStyles.lead}>Как десктоп</p>
-          )}
-          <input
-            ref={mobileRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif"
-            className={styles.heroFileInput}
-            disabled={disabled}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void onUpload('mobileImageUrl', f);
-              if (mobileRef.current) mobileRef.current.value = '';
-            }}
-          />
-          {item.mobileImageUrl ? (
-            <AdminCompactBtn
-              type="button"
-              variant="outline"
+              emptyHint="Не выбрано"
+              onUrlChange={(imageUrl) => onChange({ imageUrl })}
+              onUpload={(file) => onUploadMain('imageUrl', file)}
+              onClear={() => onChange({ imageUrl: '' })}
+            />
+            <ImageUploadField
+              label="Мобильная"
+              url={item.mobileImageUrl}
               disabled={disabled}
-              onClick={() => onChange({ mobileImageUrl: '' })}
-            >
-              Убрать
-            </AdminCompactBtn>
-          ) : null}
+              emptyHint="Как десктоп"
+              onUrlChange={(mobileImageUrl) => onChange({ mobileImageUrl })}
+              onUpload={(file) => onUploadMain('mobileImageUrl', file)}
+              onClear={() => onChange({ mobileImageUrl: '' })}
+            />
+          </div>
+          <label className={styles.heroImageCol}>
+            <span className={styles.heroImageLabel}>Ссылка слайда</span>
+            <input
+              type="text"
+              className={styles.heroTextInput}
+              value={item.href}
+              disabled={disabled}
+              placeholder="/catalog/…"
+              onChange={(e) => onChange({ href: e.target.value })}
+            />
+          </label>
         </div>
+        <SlideHomePreview item={item} />
       </div>
 
-      <label className={styles.heroImageCol}>
-        <span className={styles.heroImageLabel}>Ссылка баннера</span>
-        <input
-          type="text"
-          className={styles.heroTextInput}
-          value={item.href}
-          disabled={disabled}
-          placeholder="/catalog/…"
-          onChange={(e) => onChange({ href: e.target.value })}
-        />
-      </label>
+      <div className={styles.heroPlaqueBar}>
+        <label className={styles.activeLabel}>
+          <AdminCheckbox
+            checked={hasPlaque}
+            onChange={(e) => {
+              if (e.target.checked) {
+                onChange({ plaque: emptyPlaque(template) });
+                setPlaqueOpen(true);
+              } else {
+                onChange({ plaque: null });
+                setPlaqueOpen(false);
+              }
+            }}
+            disabled={disabled}
+          />
+          Плашка на слайде
+        </label>
+        {hasPlaque ? (
+          <>
+            <AdminCompactBtn
+              type="button"
+              variant="outline"
+              disabled={disabled}
+              onClick={() => setPlaqueOpen((v) => !v)}
+            >
+              {plaqueOpen ? 'Скрыть поля' : 'Поля плашки'}
+            </AdminCompactBtn>
+            <AdminCompactBtn
+              type="button"
+              variant="outline"
+              disabled={disabled}
+              onClick={() => onChange({ plaque: emptyPlaque(template) })}
+            >
+              Из шаблона
+            </AdminCompactBtn>
+          </>
+        ) : null}
+      </div>
+
+      {hasPlaque && plaqueOpen ? (
+        <div className={styles.heroPlaqueFields}>
+          <ImageUploadField
+            label="Обложка плашки"
+            url={plaque.imageUrl}
+            disabled={disabled}
+            emptyHint="Обязательна"
+            thumbClassName={styles.heroThumbSecondary}
+            onUrlChange={(imageUrl) => onChange({ plaque: { ...plaque, imageUrl } })}
+            onUpload={onUploadPlaque}
+            onClear={() => onChange({ plaque: { ...plaque, imageUrl: '' } })}
+          />
+          <div className={styles.heroImageCol}>
+            <label className={styles.heroImageCol}>
+              <span className={styles.heroImageLabel}>Заголовок</span>
+              <input
+                type="text"
+                className={styles.heroTextInput}
+                value={plaque.title}
+                disabled={disabled}
+                onChange={(e) => onChange({ plaque: { ...plaque, title: e.target.value } })}
+              />
+            </label>
+            <label className={styles.heroImageCol}>
+              <span className={styles.heroImageLabel}>Подзаголовок</span>
+              <textarea
+                rows={2}
+                className={styles.heroTextInput}
+                value={plaque.subtitle}
+                disabled={disabled}
+                onChange={(e) => onChange({ plaque: { ...plaque, subtitle: e.target.value } })}
+              />
+            </label>
+            <label className={styles.heroImageCol}>
+              <span className={styles.heroImageLabel}>Ссылка плашки</span>
+              <input
+                type="text"
+                className={styles.heroTextInput}
+                value={plaque.href}
+                disabled={disabled}
+                placeholder="/catalog/…"
+                onChange={(e) => onChange({ plaque: { ...plaque, href: e.target.value } })}
+              />
+            </label>
+          </div>
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -224,7 +431,6 @@ function SortableHeroRow({
 export function HeroAdminClient({
   embedded = false,
 }: {
-  /** Без собственного h1 — для встраивания (legacy). */
   embedded?: boolean;
 } = {}) {
   const { showToast } = useToast();
@@ -233,25 +439,38 @@ export function HeroAdminClient({
     loading,
     loadedOk,
     saving,
-    dirty,
     loadError,
     actionError,
-    markDirty,
     beginLoad,
     succeedLoad,
     failLoad,
     beginSave,
-    succeedSave,
     failSave,
     failAction,
     setActionError,
     setLoadError,
+    setSaving,
   } = shell;
-  const [tab, setTab] = useState<HeroTab>('main');
+
+  const [tab, setTab] = useState<HeroTab>('slides');
   const [uploading, setUploading] = useState(false);
-  const [items, setItems] = useState<HeroDraft[]>([]);
-  const [secondary, setSecondary] = useState<SecondaryDraft>(SECONDARY_DEFAULTS);
-  const secondaryFileRef = useRef<HTMLInputElement>(null);
+  const [items, setItems] = useState<SlideDraft[]>([]);
+  const [template, setTemplate] = useState<HeroPlaqueTemplate>(TEMPLATE_DEFAULTS);
+  /** Раздельный dirty: сохранение одной вкладки не маскирует другую */
+  const [slidesDirty, setSlidesDirty] = useState(false);
+  const [templateDirty, setTemplateDirty] = useState(false);
+
+  const anyDirty = slidesDirty || templateDirty;
+
+  useEffect(() => {
+    if (!anyDirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [anyDirty]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -261,25 +480,18 @@ export function HeroAdminClient({
     beginLoad();
     try {
       const [hero, sec] = await Promise.all([
-        adminBackendJson<{ items: HeroApiItem[] }>('settings/admin/hero'),
-        adminBackendJson<SecondaryDraft>('settings/admin/hero-secondary'),
+        adminBackendJson<{ items: HeroSlideAdmin[] }>('settings/admin/hero'),
+        adminBackendJson<HeroPlaqueTemplate>('settings/admin/hero-plaque-template'),
       ]);
-      setItems(
-        (hero.items ?? []).map((it) => ({
-          key: it.id,
-          id: it.id,
-          imageUrl: it.imageUrl,
-          mobileImageUrl: it.mobileImageUrl ?? '',
-          href: it.href?.trim() || MAIN_HREF_DEFAULT,
-          active: it.active,
-        })),
-      );
-      setSecondary({
-        title: sec.title?.trim() || SECONDARY_DEFAULTS.title,
-        subtitle: sec.subtitle?.trim() || SECONDARY_DEFAULTS.subtitle,
-        imageUrl: sec.imageUrl?.trim() || SECONDARY_DEFAULTS.imageUrl,
-        href: sec.href?.trim() || SECONDARY_DEFAULTS.href,
+      setItems((hero.items ?? []).map(mapApiItem));
+      setTemplate({
+        title: sec.title?.trim() || TEMPLATE_DEFAULTS.title,
+        subtitle: sec.subtitle?.trim() || TEMPLATE_DEFAULTS.subtitle,
+        imageUrl: sec.imageUrl?.trim() || TEMPLATE_DEFAULTS.imageUrl,
+        href: sec.href?.trim() || TEMPLATE_DEFAULTS.href,
       });
+      setSlidesDirty(false);
+      setTemplateDirty(false);
       succeedLoad();
     } catch (e) {
       setItems([]);
@@ -298,42 +510,88 @@ export function HeroAdminClient({
       const oldIndex = prev.findIndex((i) => i.key === active.id);
       const newIndex = prev.findIndex((i) => i.key === over.id);
       if (oldIndex < 0 || newIndex < 0) return prev;
-      markDirty();
+      setSlidesDirty(true);
       return arrayMove(prev, oldIndex, newIndex);
     });
   }
 
-  async function onUpload(key: string, field: 'imageUrl' | 'mobileImageUrl', file: File) {
+  async function onUploadMain(
+    key: string,
+    field: 'imageUrl' | 'mobileImageUrl',
+    file: File,
+  ) {
     setUploading(true);
     setActionError(null);
     try {
       const url = await uploadImage(file);
-      markDirty();
+      setSlidesDirty(true);
       setItems((prev) =>
         prev.map((row) => (row.key === key ? { ...row, [field]: url } : row)),
       );
+      showToast('Обложка загружена');
     } catch (err) {
-      showToast(failAction(err, 'Ошибка загрузки'));
+      showToast(failAction(err, 'Ошибка загрузки обложки'));
     } finally {
       setUploading(false);
     }
   }
 
-  async function onUploadSecondary(file: File) {
+  async function onUploadPlaque(key: string, file: File) {
     setUploading(true);
     setActionError(null);
     try {
       const url = await uploadImage(file);
-      markDirty();
-      setSecondary((prev) => ({ ...prev, imageUrl: url }));
+      setSlidesDirty(true);
+      setItems((prev) =>
+        prev.map((row) => {
+          if (row.key !== key) return row;
+          const plaque = row.plaque ?? emptyPlaque(template);
+          return { ...row, plaque: { ...plaque, imageUrl: url } };
+        }),
+      );
+      showToast('Обложка загружена');
     } catch (err) {
-      showToast(failAction(err, 'Ошибка загрузки'));
+      showToast(failAction(err, 'Ошибка загрузки обложки'));
     } finally {
       setUploading(false);
     }
   }
 
-  async function onSaveMain(e: React.FormEvent) {
+  async function onUploadTemplate(file: File) {
+    setUploading(true);
+    setActionError(null);
+    try {
+      const url = await uploadImage(file);
+      setTemplateDirty(true);
+      setTemplate((prev) => ({ ...prev, imageUrl: url }));
+      showToast('Обложка загружена');
+    } catch (err) {
+      showToast(failAction(err, 'Ошибка загрузки обложки'));
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function fillEmptyFromTemplate() {
+    const t = emptyPlaque(template);
+    if (!t.title || !t.subtitle || !t.imageUrl) {
+      showToast('Сначала заполните шаблон (заголовок, текст, обложка)');
+      return;
+    }
+    const emptyKeys = items.filter((row) => row.plaque == null).map((row) => row.key);
+    if (emptyKeys.length === 0) {
+      showToast('У всех слайдов уже есть плашка');
+      return;
+    }
+    setSlidesDirty(true);
+    setItems((prev) =>
+      prev.map((row) => (row.plaque != null ? row : { ...row, plaque: { ...t } })),
+    );
+    showToast(`Заполнено слайдов: ${emptyKeys.length}. Не забудьте сохранить слайды.`);
+    setTab('slides');
+  }
+
+  async function onSaveSlides(e: React.FormEvent) {
     e.preventDefault();
     if (!loadedOk) return;
 
@@ -341,93 +599,94 @@ export function HeroAdminClient({
     if (incomplete.length > 0) {
       showToast(
         incomplete.length === 1
-          ? 'Добавьте десктоп-картинку или удалите пустой слайд'
-          : `Есть слайды без картинки (${incomplete.length})`,
+          ? 'Добавьте десктоп-обложку или удалите пустой слайд'
+          : `Есть слайды без обложки (${incomplete.length})`,
       );
       return;
     }
 
-    const payload = {
-      items: items.map((it) => ({
+    let payloadItems: Array<{
+      id?: string;
+      imageUrl: string;
+      mobileImageUrl: string | null;
+      href: string;
+      plaque: HeroPlaque | null;
+      active: boolean;
+    }>;
+    try {
+      payloadItems = items.map((it, i) => ({
         ...(it.id ? { id: it.id } : {}),
         imageUrl: it.imageUrl.trim(),
         mobileImageUrl: it.mobileImageUrl.trim() || null,
-        href: it.href.trim() || MAIN_HREF_DEFAULT,
+        href: it.href.trim() || HERO_SLIDE_HREF_DEFAULT,
+        plaque: assertHeroPlaqueComplete(it.plaque, `Слайд #${i + 1}`),
         active: it.active,
-      })),
-    };
+      }));
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Проверьте плашки');
+      return;
+    }
 
     beginSave();
     try {
-      const data = await adminBackendJson<{ items: HeroApiItem[] }>('settings/admin/hero', {
+      const data = await adminBackendJson<{ items: HeroSlideAdmin[] }>('settings/admin/hero', {
         method: 'PUT',
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ items: payloadItems }),
       });
-      setItems(
-        (data.items ?? []).map((it) => ({
-          key: it.id,
-          id: it.id,
-          imageUrl: it.imageUrl,
-          mobileImageUrl: it.mobileImageUrl ?? '',
-          href: it.href?.trim() || MAIN_HREF_DEFAULT,
-          active: it.active,
-        })),
-      );
-      succeedSave();
-      showToast('Основной Hero сохранён');
-      const revalidated = await revalidateHomeStorefront();
-      if (!revalidated) {
-        showToast('Сохранено, но кэш витрины не обновился — обновите главную вручную');
-      }
+      setItems((data.items ?? []).map(mapApiItem));
+      setSlidesDirty(false);
+      setSaving(false);
+      showToast('Слайды сохранены');
+      const lag = homeRevalidateLagToast(await revalidateHomeStorefront());
+      if (lag) showToast(lag);
     } catch (err) {
       showToast(failSave(err));
     }
   }
 
-  async function onSaveSecondary(e: React.FormEvent) {
+  async function onSaveTemplate(e: React.FormEvent) {
     e.preventDefault();
     if (!loadedOk) return;
-    const title = secondary.title.trim();
-    const subtitle = secondary.subtitle.trim();
-    const imageUrl = secondary.imageUrl.trim();
-    const href = secondary.href.trim() || SECONDARY_DEFAULTS.href;
+    const title = template.title.trim();
+    const subtitle = template.subtitle.trim();
+    const imageUrl = template.imageUrl.trim();
+    const href = template.href.trim() || TEMPLATE_DEFAULTS.href;
     if (!title || !subtitle || !imageUrl) {
-      showToast('Заполните заголовок, подзаголовок и картинку');
+      showToast('Заполните заголовок, подзаголовок и картинку шаблона');
       return;
     }
 
     beginSave();
     try {
-      const data = await adminBackendJson<SecondaryDraft>('settings/admin/hero-secondary', {
+      const data = await adminBackendJson<HeroPlaqueTemplate>('settings/admin/hero-plaque-template', {
         method: 'PUT',
         body: JSON.stringify({ title, subtitle, imageUrl, href }),
       });
-      setSecondary({
+      setTemplate({
         title: data.title,
         subtitle: data.subtitle,
         imageUrl: data.imageUrl,
-        href: data.href || SECONDARY_DEFAULTS.href,
+        href: data.href || TEMPLATE_DEFAULTS.href,
       });
-      succeedSave();
-      showToast('Дополнительный баннер сохранён');
-      const revalidated = await revalidateHomeStorefront();
-      if (!revalidated) {
-        showToast('Сохранено, но кэш витрины не обновился — обновите главную вручную');
-      }
+      setTemplateDirty(false);
+      setSaving(false);
+      showToast('Шаблон плашки сохранён');
     } catch (err) {
       showToast(failSave(err));
     }
   }
 
   const canEdit = loadedOk && !loading && !uploading;
-  const canSave = canEdit && dirty && !saving;
+  const canSaveSlides = canEdit && slidesDirty && !saving;
+  const canSaveTemplate = canEdit && templateDirty && !saving;
+  const emptyPlaqueCount = items.filter((i) => i.plaque == null).length;
 
   return (
     <div>
       {!embedded ? <h1 className={catalogStyles.title}>Hero</h1> : null}
       <p className={catalogStyles.lead}>
-        Основной — слайдер на главной (картинки + ссылка клика). Дополнительный — нижняя плашка
-        (заголовок, текст, картинка, ссылка).
+        Слайд + плашка поверх него. Шаблон — только для «Из шаблона» / «Заполнить пустые» в
+        админке; на витрину сам не подмешивается.
       </p>
 
       <AdminTabs
@@ -435,8 +694,14 @@ export function HeroAdminClient({
         activeId={tab}
         onChange={setTab}
         items={[
-          { id: 'main' as const, label: 'Основной' },
-          { id: 'secondary' as const, label: 'Дополнительный' },
+          {
+            id: 'slides' as const,
+            label: slidesDirty ? 'Слайды •' : 'Слайды',
+          },
+          {
+            id: 'template' as const,
+            label: templateDirty ? 'Шаблон плашки •' : 'Шаблон плашки',
+          },
         ]}
       />
 
@@ -455,13 +720,20 @@ export function HeroAdminClient({
           Не удалось загрузить Hero. Нажмите «Повторить» — сохранение отключено, чтобы не стереть
           данные.
         </p>
-      ) : tab === 'main' ? (
+      ) : tab === 'slides' ? (
         <AdminTabsPanel>
           <form
-            onSubmit={(e) => void onSaveMain(e)}
+            onSubmit={(e) => void onSaveSlides(e)}
             className={`${catalogStyles.form} ${catalogStyles.formWide}`}
           >
-            {dirty ? <p className={catalogStyles.lead}>Несохранённые изменения</p> : null}
+            {slidesDirty ? (
+              <p className={catalogStyles.lead}>Несохранённые изменения слайдов</p>
+            ) : null}
+            {templateDirty ? (
+              <p className={catalogStyles.lead}>
+                Есть несохранённый шаблон — сохраните на вкладке «Шаблон плашки».
+              </p>
+            ) : null}
             {uploading ? <p className={catalogStyles.lead}>Загрузка изображения…</p> : null}
 
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
@@ -474,18 +746,21 @@ export function HeroAdminClient({
                     <SortableHeroRow
                       key={item.key}
                       item={item}
+                      index={index}
+                      template={template}
                       disabled={saving || uploading}
                       onChange={(patch) => {
-                        markDirty();
+                        setSlidesDirty(true);
                         setItems((prev) =>
                           prev.map((row, i) => (i === index ? { ...row, ...patch } : row)),
                         );
                       }}
                       onRemove={() => {
-                        markDirty();
+                        setSlidesDirty(true);
                         setItems((prev) => prev.filter((_, i) => i !== index));
                       }}
-                      onUpload={(field, file) => onUpload(item.key, field, file)}
+                      onUploadMain={(field, file) => onUploadMain(item.key, field, file)}
+                      onUploadPlaque={(file) => onUploadPlaque(item.key, file)}
                     />
                   ))}
                 </ul>
@@ -502,14 +777,15 @@ export function HeroAdminClient({
                 variant="outline"
                 disabled={saving || uploading}
                 onClick={() => {
-                  markDirty();
+                  setSlidesDirty(true);
                   setItems((prev) => [
                     ...prev,
                     {
                       key: newKey(),
                       imageUrl: '',
                       mobileImageUrl: '',
-                      href: MAIN_HREF_DEFAULT,
+                      href: HERO_SLIDE_HREF_DEFAULT,
+                      plaque: null,
                       active: true,
                     },
                   ]);
@@ -517,8 +793,18 @@ export function HeroAdminClient({
               >
                 Добавить слайд
               </AdminCompactBtn>
-              <AdminCompactBtn type="submit" variant="accent" disabled={!canSave}>
-                {saving ? 'Сохранение…' : 'Сохранить'}
+              {emptyPlaqueCount > 0 ? (
+                <AdminCompactBtn
+                  type="button"
+                  variant="outline"
+                  disabled={saving || uploading}
+                  onClick={fillEmptyFromTemplate}
+                >
+                  Заполнить пустые из шаблона ({emptyPlaqueCount})
+                </AdminCompactBtn>
+              ) : null}
+              <AdminCompactBtn type="submit" variant="accent" disabled={!canSaveSlides}>
+                {saving ? 'Сохранение…' : 'Сохранить слайды'}
               </AdminCompactBtn>
             </div>
           </form>
@@ -526,10 +812,21 @@ export function HeroAdminClient({
       ) : (
         <AdminTabsPanel>
           <form
-            onSubmit={(e) => void onSaveSecondary(e)}
+            onSubmit={(e) => void onSaveTemplate(e)}
             className={`${catalogStyles.form} ${catalogStyles.formWide}`}
           >
-            {dirty ? <p className={catalogStyles.lead}>Несохранённые изменения</p> : null}
+            <p className={catalogStyles.lead}>
+              Шаблон копируется в слайды только по кнопке. После миграции пустые слайды уже получили
+              копию — витрина берёт плашку только из сохранённого слайда.
+            </p>
+            {templateDirty ? (
+              <p className={catalogStyles.lead}>Несохранённые изменения шаблона</p>
+            ) : null}
+            {slidesDirty ? (
+              <p className={catalogStyles.lead}>
+                Есть несохранённые слайды — сохраните на вкладке «Слайды».
+              </p>
+            ) : null}
             {uploading ? <p className={catalogStyles.lead}>Загрузка изображения…</p> : null}
 
             <div className={styles.faqCard}>
@@ -538,11 +835,11 @@ export function HeroAdminClient({
                 <input
                   type="text"
                   className={styles.heroTextInput}
-                  value={secondary.title}
+                  value={template.title}
                   disabled={saving || uploading}
                   onChange={(e) => {
-                    markDirty();
-                    setSecondary((prev) => ({ ...prev, title: e.target.value }));
+                    setTemplateDirty(true);
+                    setTemplate((prev) => ({ ...prev, title: e.target.value }));
                   }}
                 />
               </label>
@@ -552,11 +849,11 @@ export function HeroAdminClient({
                 <textarea
                   rows={3}
                   className={styles.heroTextInput}
-                  value={secondary.subtitle}
+                  value={template.subtitle}
                   disabled={saving || uploading}
                   onChange={(e) => {
-                    markDirty();
-                    setSecondary((prev) => ({ ...prev, subtitle: e.target.value }));
+                    setTemplateDirty(true);
+                    setTemplate((prev) => ({ ...prev, subtitle: e.target.value }));
                   }}
                 />
               </label>
@@ -566,48 +863,47 @@ export function HeroAdminClient({
                 <input
                   type="text"
                   className={styles.heroTextInput}
-                  value={secondary.href}
+                  value={template.href}
                   disabled={saving || uploading}
                   placeholder="/catalog/…"
                   onChange={(e) => {
-                    markDirty();
-                    setSecondary((prev) => ({ ...prev, href: e.target.value }));
+                    setTemplateDirty(true);
+                    setTemplate((prev) => ({ ...prev, href: e.target.value }));
                   }}
                 />
               </label>
             </div>
 
             <div className={styles.heroImages}>
-              <div className={styles.heroImageCol}>
-                <p className={styles.heroImageLabel}>Картинка плашки</p>
-                {secondary.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    className={styles.heroThumbSecondary}
-                    src={secondary.imageUrl}
-                    alt=""
-                  />
-                ) : (
-                  <p className={catalogStyles.lead}>Не выбрано</p>
-                )}
-                <input
-                  ref={secondaryFileRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  className={styles.heroFileInput}
-                  disabled={saving || uploading}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) void onUploadSecondary(f);
-                    if (secondaryFileRef.current) secondaryFileRef.current.value = '';
-                  }}
-                />
-              </div>
+              <ImageUploadField
+                label="Обложка шаблона"
+                url={template.imageUrl}
+                disabled={saving || uploading}
+                emptyHint="Не выбрано"
+                thumbClassName={styles.heroThumbSecondary}
+                onUrlChange={(imageUrl) => {
+                  setTemplateDirty(true);
+                  setTemplate((prev) => ({ ...prev, imageUrl }));
+                }}
+                onUpload={onUploadTemplate}
+                onClear={() => {
+                  setTemplateDirty(true);
+                  setTemplate((prev) => ({ ...prev, imageUrl: '' }));
+                }}
+              />
             </div>
 
             <div className={catalogStyles.formActions}>
-              <AdminCompactBtn type="submit" variant="accent" disabled={!canSave}>
-                {saving ? 'Сохранение…' : 'Сохранить'}
+              <AdminCompactBtn
+                type="button"
+                variant="outline"
+                disabled={saving || uploading || emptyPlaqueCount === 0}
+                onClick={fillEmptyFromTemplate}
+              >
+                Заполнить пустые слайды ({emptyPlaqueCount})
+              </AdminCompactBtn>
+              <AdminCompactBtn type="submit" variant="accent" disabled={!canSaveTemplate}>
+                {saving ? 'Сохранение…' : 'Сохранить шаблон'}
               </AdminCompactBtn>
             </div>
           </form>

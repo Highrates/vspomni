@@ -169,7 +169,7 @@
   background: var(--color-bright-snow, #f5f7f8);
 }
 
-/** Превью доп. плашки: натуральные пропорции, без квадрата 1:1 */
+/** Превью обложки плашки: натуральные пропорции, без квадрата 1:1 */
 .heroThumbSecondary {
   width: auto;
   max-width: 280px;
@@ -179,6 +179,150 @@
   border-radius: 12px;
   border: 1px solid var(--account-hairline-color, #e2e6e8);
   background: var(--color-bright-snow, #f5f7f8);
+}
+
+.heroSlideLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .heroSlideLayout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.heroSlideFields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+/** Превью «как на главной»: баннер + плашка */
+.heroSlidePreview {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--account-hairline-color, #e2e6e8);
+  background: var(--color-bright-snow, #f5f7f8);
+}
+
+.heroSlidePreviewBg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.heroSlidePreviewEmpty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-gray, #9d9d9d);
+}
+
+.heroSlidePreviewHint {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 0.6875rem;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.heroPlaquePreview {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+
+.heroPlaquePreviewThumb {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.heroPlaquePreviewThumbEmpty {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: #e2e6e8;
+}
+
+.heroPlaquePreviewText {
+  min-width: 0;
+  flex: 1;
+  color: #000;
+}
+
+.heroPlaquePreviewTitle {
+  margin: 0 0 2px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.heroPlaquePreviewSub {
+  margin: 0;
+  font-size: 0.625rem;
+  line-height: 1.25;
+  color: rgba(0, 0, 0, 0.75);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.heroPlaqueBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.heroPlaqueFields {
+  display: grid;
+  grid-template-columns: minmax(120px, 200px) minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 10px;
+}
+
+@media (max-width: 720px) {
+  .heroPlaqueFields {
+    grid-template-columns: 1fr;
+  }
 }
 
 .heroFileInput {

@@ -23,7 +23,10 @@ import { AdminSettingsListErrors } from '@/components/admin/AdminSettingsListErr
 import { useToast } from '@/components/Toast/ToastProvider';
 import { adminBackendFetch, adminBackendJson } from '@/lib/adminBackendFetch';
 import { useAdminSettingsListShell } from '@/lib/useAdminSettingsListShell';
-import { revalidateHomeStorefront } from '@/lib/revalidateHomeStorefront';
+import {
+  homeRevalidateLagToast,
+  revalidateHomeStorefront,
+} from '@/lib/revalidateHomeStorefront';
 import catalogStyles from '@/app/(admin)/admin/catalog/catalogAdmin.module.css';
 import styles from '@/app/(admin)/admin/settings/Settings.module.css';
 
@@ -327,10 +330,8 @@ export function HomepageSetsAdminClient({
       );
       succeedSave();
       showToast('Наборы сохранены');
-      const revalidated = await revalidateHomeStorefront();
-      if (!revalidated) {
-        showToast('Сохранено, но кэш витрины не обновился — обновите главную вручную');
-      }
+      const lag = homeRevalidateLagToast(await revalidateHomeStorefront());
+      if (lag) showToast(lag);
     } catch (err) {
       showToast(failSave(err));
     }

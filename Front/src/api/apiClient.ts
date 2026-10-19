@@ -9,6 +9,7 @@
 
 import { notifyUnauthorized } from '@/api/authSession'
 import { clearRegisterPassword } from '@/api/registerSession'
+import { toRelativeMediaPath } from '@vspomni/hero-types'
 
 const DEFAULT_API_URL = 'http://127.0.0.1:3011/api/v1'
 
@@ -91,9 +92,10 @@ function isFrontPublicPath(pathname: string): boolean {
 
 /**
  * Абсолютный URL медиа с Nest.
+ * Path-нормализация — `toRelativeMediaPath`; origin — только здесь (витрина).
  * - relative `/uploads/x` → `${uploadsOrigin}/uploads/x` (в браузере → `/uploads/x`)
  * - relative `/images/…` → как есть (Front public)
- * - абсолютный localhost-URL с /uploads → переписываем на uploadsOrigin
+ * - absolute localhost/vspomni `/uploads` → uploadsOrigin
  * - внешние URL и data: — без изменений
  */
 export function uploadsUrl(pathOrUrl: string | null | undefined): string | null {
@@ -105,25 +107,25 @@ export function uploadsUrl(pathOrUrl: string | null | undefined): string | null 
   if (/^https?:\/\//i.test(s)) {
     try {
       const u = new URL(s)
-      if (isFrontPublicPath(u.pathname)) {
-        return `${u.pathname}${u.search}`
-      }
-      const isUploads = u.pathname.startsWith('/uploads')
-      // localhost / staging: DNS vspomni.store ещё на старом VPS → 404 в /_next/image
-      if (
-        isUploads &&
-        (isLocalHost(u.hostname) ||
-          u.hostname === 'vspomni.store' ||
-          u.hostname === 'www.vspomni.store')
-      ) {
-        return `${uploadsOrigin()}${u.pathname}${u.search}`
+      const rel = toRelativeMediaPath(s)
+      if (rel.startsWith('/') && !/^https?:/i.test(rel)) {
+        if (isFrontPublicPath(rel)) return rel
+        // localhost / staging: DNS vspomni.store ещё на старом VPS → 404 в /_next/image
+        if (
+          rel.startsWith('/uploads') &&
+          (isLocalHost(u.hostname) ||
+            u.hostname === 'vspomni.store' ||
+            u.hostname === 'www.vspomni.store')
+        ) {
+          return `${uploadsOrigin()}${rel}`
+        }
       }
     } catch {
       /* fall through */
     }
     return s
   }
-  const path = s.startsWith('/') ? s : `/${s}`
+  const path = toRelativeMediaPath(s.startsWith('/') ? s : `/${s}`)
   if (isFrontPublicPath(path)) return path
   return `${uploadsOrigin()}${path}`
 }

@@ -17,7 +17,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ReplaceFaqItemsDto } from './dto/faq.dto';
 import {
   ReplaceHeroSlidesDto,
-  UpdateHeroSecondaryBannerDto,
+  UpdateHeroPlaqueTemplateDto,
 } from './dto/hero.dto';
 import { ReplaceStoriesDto } from './dto/stories.dto';
 import { ReplaceHomepageSetsDto } from './dto/homepage-sets.dto';
@@ -69,14 +69,14 @@ export class SettingsAdminController {
     return this.settings.replaceHero(dto);
   }
 
-  @Get('hero-secondary')
-  getHeroSecondary() {
-    return this.settings.getHeroSecondary();
+  @Get('hero-plaque-template')
+  getHeroPlaqueTemplate() {
+    return this.settings.getHeroPlaqueTemplate();
   }
 
-  @Put('hero-secondary')
-  updateHeroSecondary(@Body() dto: UpdateHeroSecondaryBannerDto) {
-    return this.settings.updateHeroSecondary(dto);
+  @Put('hero-plaque-template')
+  updateHeroPlaqueTemplate(@Body() dto: UpdateHeroPlaqueTemplateDto) {
+    return this.settings.updateHeroPlaqueTemplate(dto);
   }
 
   @Get('stories')

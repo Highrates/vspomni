@@ -7,6 +7,7 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { RegistrationService } from './registration.service';
 import { RegistrationCleanupWorker } from './registration-cleanup.worker';
+import { YandexOauthService } from './yandex-oauth.service';
 import { resolveJwtSecret } from './jwt-secret';
 import { PrismaModule } from '../prisma/prisma.module';
 
@@ -23,7 +24,13 @@ import { PrismaModule } from '../prisma/prisma.module';
       inject: [ConfigService],
     }),
   ],
-  providers: [AuthService, RegistrationService, RegistrationCleanupWorker, JwtStrategy],
+  providers: [
+    AuthService,
+    RegistrationService,
+    RegistrationCleanupWorker,
+    YandexOauthService,
+    JwtStrategy,
+  ],
   controllers: [AuthController],
   exports: [AuthService, JwtModule],
 })

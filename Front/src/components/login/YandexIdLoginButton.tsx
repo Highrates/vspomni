@@ -1,23 +1,42 @@
 'use client'
 
-/**
- * Яндекс ID OAuth: в Nest (`/auth/*`) эквивалента нет (Saleor external-auth плагин удалён).
- * Кнопка скрыта, чтобы не ломать вход; вернуть — когда появится Nest OAuth endpoint.
- * Включить принудительно (UI-превью, без рабочего OAuth): NEXT_PUBLIC_YANDEX_ID_LOGIN=1.
- */
 import Image from 'next/image'
-
-const ENABLED = process.env.NEXT_PUBLIC_YANDEX_ID_LOGIN === '1'
+import { useState } from 'react'
+import { toast } from 'react-toastify'
+import { startYandexOauth } from '@/api/authApi'
 
 export default function YandexIdLoginButton() {
-  if (!ENABLED) return null
+  const [loading, setLoading] = useState(false)
+
+  const handleYandexLogin = async () => {
+    if (loading) return
+    setLoading(true)
+    try {
+      const next =
+        typeof window !== 'undefined' &&
+        window.location.pathname &&
+        window.location.pathname !== '/login'
+          ? `${window.location.pathname}${window.location.search || ''}`
+          : '/'
+      const { url } = await startYandexOauth(next)
+      window.location.href = url
+    } catch (error: unknown) {
+      console.error('Yandex auth error:', error)
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Ошибка при авторизации через Яндекс'
+      toast.error(message)
+      setLoading(false)
+    }
+  }
 
   return (
     <button
       type="button"
-      disabled
-      title="Вход через Яндекс ID временно недоступен"
-      className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-full font-medium bg-black/40 text-white cursor-not-allowed"
+      onClick={handleYandexLogin}
+      disabled={loading}
+      className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-full font-medium transition-colors duration-200 bg-black text-white hover:bg-gray-900 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
     >
       <Image
         src="/images/Yandex_icon.png"
@@ -27,7 +46,7 @@ export default function YandexIdLoginButton() {
         className="shrink-0"
         aria-hidden
       />
-      <span>Войти через яндекс ID</span>
+      <span>{loading ? 'Переход в Яндекс…' : 'Войти через яндекс ID'}</span>
     </button>
   )
 }

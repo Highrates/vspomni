@@ -17,11 +17,6 @@ export class SettingsPublicController {
     return this.settings.listHero();
   }
 
-  @Get('hero-secondary')
-  getHeroSecondary() {
-    return this.settings.getHeroSecondary();
-  }
-
   @Get('stories')
   listStories() {
     return this.settings.listStoriesPublic();

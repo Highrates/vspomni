@@ -22,7 +22,7 @@ describe('giftPurchasePaidEmail', () => {
     expect(mail.text).toContain('JC-DDDD-EEEE-FFFF');
     expect(mail.text).toContain('5\u00a0000');
     expect(mail.subject).toContain('JCOS-1');
-    expect(mail.html).toContain('Vspomni');
+    expect(mail.html).toContain('logo-vspomni.png');
   });
 });
 
@@ -36,7 +36,7 @@ describe('giftCertificateIssuedEmail', () => {
     expect(mail.to).toBe('a@b.co');
     expect(mail.subject).toContain('Повторная');
     expect(mail.html).toContain('JC-AAAA-BBBB-CCCC');
-    expect(mail.html).toContain('Vspomni');
+    expect(mail.html).toContain('logo-vspomni.png');
   });
 });
 

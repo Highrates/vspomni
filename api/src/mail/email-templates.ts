@@ -378,7 +378,7 @@ export function buildOrderCancelledEmail(params: {
     title('Заказ отменён'),
     `<p style="margin:0 0 16px;">Заказ <strong>${escapeHtml(number)}</strong> отменён. Если это произошло по ошибке или нужна помощь — ответьте на это письмо или напишите на info@vspomni.store.</p>`,
     orderNumberCard(number),
-    mailCtaButton(site, 'На сайт Vspomni'),
+    mailCtaButton(site, 'На сайт ВСПОМНИ.'),
     mailMutedNote('Новый заказ можно оформить в любое время на сайте.'),
   ].join('');
 
@@ -752,7 +752,7 @@ export function buildGiftBuyerCopyEmail(params: {
     title('Сертификат оплачен'),
     `<p style="margin:0 0 16px;">Оплата заказа <strong>${escapeHtml(number)}</strong> прошла успешно. Код отправлен на <strong>${escapeHtml(recipient)}</strong>.</p>`,
     orderNumberCard(number),
-    mailCtaButton(site, 'На сайт Vspomni'),
+    mailCtaButton(site, 'На сайт ВСПОМНИ.'),
     mailMutedNote('Если адрес получателя указан неверно — напишите на info@vspomni.store.'),
   ].join('');
 

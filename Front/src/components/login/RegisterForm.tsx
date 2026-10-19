@@ -20,7 +20,7 @@ const RegisterForm = ({ onVerify, onLogin }: TPropss) => {
   const [password, setPassword] = useState<string>('')
   const [firstName, setFirstName] = useState<string>('')
   const [lastName, setLastName] = useState<string>('')
-  const [phone, setPhone] = useState<string>('')
+  const [phone, setPhone] = useState<string>('+7')
   const [checked, setChecked] = useState<boolean>(false)
 
   const router = useRouter()
@@ -148,7 +148,7 @@ const RegisterForm = ({ onVerify, onLogin }: TPropss) => {
         <div>
           <PhoneInput
             value={phone}
-            onChange={(value) => setPhone(value)}
+            onChange={(value) => setPhone(value.trim() ? value : '+7')}
             placeholder="+7 (900) 000-00-00"
           />
         </div>

@@ -236,7 +236,7 @@ function snippetHtml(key: EmailSnippetKey, vars: EmailTemplateVars): string {
     }
     case 'cta.site': {
       const href = String(vars['site.url'] ?? '').trim();
-      return href ? mailCtaButton(href, 'На сайт Vspomni') : '';
+      return href ? mailCtaButton(href, 'На сайт ВСПОМНИ.') : '';
     }
     case 'block.order_card':
       return orderCardHtml(vars);
@@ -265,7 +265,7 @@ function maybeAutoCtaHtml(plainBlock: string, vars: EmailTemplateVars): string |
   const site = String(vars['site.url'] ?? '').trim();
   if (pay && t === pay) return mailCtaButton(pay, 'Оплатить');
   if (order && t === order) return mailCtaButton(order, 'Смотреть заказ');
-  if (site && t === site) return mailCtaButton(site, 'На сайт Vspomni');
+  if (site && t === site) return mailCtaButton(site, 'На сайт ВСПОМНИ.');
   return null;
 }
 

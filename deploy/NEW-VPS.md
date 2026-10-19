@@ -12,7 +12,8 @@
 ```
 https://vspomni.store/
   /                 → Next Front   systemd vspomni-front 127.0.0.1:3001
-  /api/v1/          → Nest API     systemd vspomni-api   127.0.0.1:3011
+  /api/v1/          → Front BFF → Nest (httpOnly buyer cookie)
+  /api/v1/orders/yookassa/webhook → Nest напрямую
   /uploads/         → Nest
   /admin            → Next Admin   systemd vspomni-admin 127.0.0.1:3020
   /api/cdek|…       → Front BFF
@@ -80,13 +81,13 @@ bash /opt/vspomni/deploy/scripts/bootstrap-vps.sh
 | Файл на VPS | Минимум |
 |------|---------|
 | `/opt/vspomni/api/.env` | `DATABASE_URL`, `JWT_SECRET`, `YOOKASSA_*`, `YOOKASSA_WEBHOOK_SECRET`, `TRUST_PROXY=1`, `SMTP_*`, `FRONTEND_PUBLIC_URL=https://vspomni.store`, `CORS_ORIGIN` с `https://vspomni.store` |
-| `/opt/vspomni/Front/.env.local` | `NEXT_PUBLIC_API_URL=http://127.0.0.1:3011/api/v1`, `NEXT_PUBLIC_SITE_URL=https://vspomni.store`, CDEK/Yandex/Ozon BFF |
-| `/opt/vspomni/Admin/.env.local` | API → `http://127.0.0.1:3011/api/v1` |
+| `/opt/vspomni/Front/.env.local` | `NEXT_PUBLIC_API_URL=http://127.0.0.1:3011/api/v1`, `NEXT_PUBLIC_SITE_URL=https://vspomni.store`, `REVALIDATE_SECRET`, CDEK/Yandex/Ozon BFF |
+| `/opt/vspomni/Admin/.env.local` | API → `http://127.0.0.1:3011/api/v1`, `STOREFRONT_URL=http://127.0.0.1:3001`, тот же `REVALIDATE_SECRET` |
 
 `deploy/deploy.env` на Mac — только `DEPLOY_HOST` / SSH-ключ / путь (без JWT/DB/webhook).  
 `upload-to-server.sh` **не** заливает `.env*`.
 
-После DNS cutover, если секреты когда-либо лежали на ноутбуке или в чате — **ротация**: `JWT_SECRET`, `ORDER_PAY_SECRET`, `YOOKASSA_WEBHOOK_SECRET`, пароль Postgres + `DATABASE_URL`, `ADMIN_SEED_PASSWORD` (и смена пароля админа в БД).
+После DNS cutover, если секреты когда-либо лежали на ноутбуке или в чате — **ротация**: `JWT_SECRET`, `ORDER_PAY_SECRET`, `YOOKASSA_WEBHOOK_SECRET`, `REVALIDATE_SECRET`, пароль Postgres + `DATABASE_URL`, `ADMIN_SEED_PASSWORD` (и смена пароля админа в БД).
 
 Сборка и старт:
 

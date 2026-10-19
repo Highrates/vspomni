@@ -16,10 +16,10 @@ import {
 describe('email templates', () => {
   it('registration OTP includes code and Vspomni layout', () => {
     const e = buildRegistrationOtpEmail({ code: '123456', siteUrl: 'http://localhost:5173' });
-    expect(e.subject).toContain('Vspomni');
+    expect(e.subject).toContain('ВСПОМНИ');
     expect(e.text).toContain('123456');
     expect(e.html).toContain('123456');
-    expect(e.html).toContain('Vspomni');
+    expect(e.html).toContain('logo-vspomni.png');
     expect(e.html).not.toContain('Jcos');
   });
 
@@ -77,7 +77,7 @@ describe('email templates', () => {
     expect(gift.html).toContain('CODE-1');
     expect(gift.html).toContain('CODE-2');
     expect(gift.text).toContain('1\u00a0500');
-    expect(gift.html).toContain('Vspomni');
+    expect(gift.html).toContain('logo-vspomni.png');
 
     const issued = buildGiftCertificateIssuedEmail({
       items: [{ code: 'CODE-2', faceValue: 1000, expiresAt: null }],

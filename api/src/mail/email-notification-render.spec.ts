@@ -45,9 +45,9 @@ describe('email-notification-render', () => {
       siteUrl: 'https://example.com',
     });
     expect(mail.subject).toContain('MF-9');
-    expect(mail.subject).toContain('Vspomni');
+    expect(mail.subject).toContain('ВСПОМНИ');
     expect(mail.text).toContain('MF-9');
-    expect(mail.html).toContain('Vspomni');
+    expect(mail.html).toContain('logo-vspomni.png');
     expect(mail.html).toContain('MF-9');
     expect(mail.html).not.toContain('{{');
   });

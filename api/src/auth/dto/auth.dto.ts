@@ -104,3 +104,33 @@ export class PasswordResetConfirmDto {
   @MaxLength(128)
   password!: string;
 }
+
+export class YandexOauthStartDto {
+  /** Куда вернуть после входа (relative path). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  next?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  guestId?: string | null;
+}
+
+export class YandexOauthCompleteDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2048)
+  code!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4096)
+  state!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  guestId?: string | null;
+}

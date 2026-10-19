@@ -303,6 +303,122 @@ describe('SettingsAdminService', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  it('replaceHero принимает полную plaque; пустой href → /catalog', async () => {
+    const now = new Date('2026-01-01T00:00:00.000Z');
+    const created = {
+      id: 'n1',
+      imageUrl: '/uploads/a.jpg',
+      mobileImageUrl: null,
+      href: '/catalog',
+      badgeTitle: 'T',
+      badgeSubtitle: 'S',
+      badgeImageUrl: '/uploads/p.jpg',
+      badgeHref: '/catalog',
+      sortOrder: 0,
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const tx = {
+      heroSlide: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn(),
+        update: vi.fn(),
+        create: vi.fn().mockResolvedValue(created),
+      },
+    };
+    prisma.$transaction.mockImplementation(async (fn: (t: typeof tx) => unknown) => fn(tx));
+
+    const res = await svc.replaceHero({
+      items: [
+        {
+          imageUrl: '/uploads/a.jpg',
+          plaque: {
+            title: 'T',
+            subtitle: 'S',
+            imageUrl: '/uploads/p.jpg',
+            href: '  ',
+          },
+        },
+      ],
+    });
+
+    expect(tx.heroSlide.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        badgeTitle: 'T',
+        badgeSubtitle: 'S',
+        badgeImageUrl: '/uploads/p.jpg',
+        badgeHref: '/catalog',
+      }),
+    });
+    expect(res.items[0]!.plaque).toEqual({
+      title: 'T',
+      subtitle: 'S',
+      imageUrl: '/uploads/p.jpg',
+      href: '/catalog',
+    });
+  });
+
+  it('replaceHero отклоняет неполную plaque (только title) → 400', async () => {
+    await expect(
+      svc.replaceHero({
+        items: [
+          {
+            imageUrl: '/uploads/a.jpg',
+            plaque: {
+              title: 'Only title',
+              subtitle: '',
+              imageUrl: '',
+              href: '/x',
+            },
+          },
+        ],
+      }),
+    ).rejects.toThrow(/плашка/i);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('replaceHero принимает plaque: null', async () => {
+    const now = new Date('2026-01-01T00:00:00.000Z');
+    const created = {
+      id: 'n1',
+      imageUrl: '/uploads/a.jpg',
+      mobileImageUrl: null,
+      href: '/catalog',
+      badgeTitle: null,
+      badgeSubtitle: null,
+      badgeImageUrl: null,
+      badgeHref: null,
+      sortOrder: 0,
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const tx = {
+      heroSlide: {
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn(),
+        update: vi.fn(),
+        create: vi.fn().mockResolvedValue(created),
+      },
+    };
+    prisma.$transaction.mockImplementation(async (fn: (t: typeof tx) => unknown) => fn(tx));
+
+    const res = await svc.replaceHero({
+      items: [{ imageUrl: '/uploads/a.jpg', plaque: null }],
+    });
+
+    expect(tx.heroSlide.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        badgeTitle: null,
+        badgeSubtitle: null,
+        badgeImageUrl: null,
+        badgeHref: null,
+      }),
+    });
+    expect(res.items[0]!.plaque).toBeNull();
+  });
+
   it('replaceHomePromo обновляет существующие, создаёт новые, удаляет лишние', async () => {
     const now = new Date('2026-01-01T00:00:00.000Z');
     const updatedA = {
@@ -764,5 +880,58 @@ describe('SettingsPublicService', () => {
     expect(res.titleLeft).toBe('НАШИ');
     expect(res.items).toHaveLength(1);
     expect(res.items[0]!.id).toBe('a');
+  });
+
+  it('listHero: полная plaque → объект; неполная/пустая → null', async () => {
+    const prisma = makePrisma();
+    prisma.heroSlide.findMany.mockResolvedValue([
+      {
+        id: 'full',
+        imageUrl: '/uploads/a.jpg',
+        mobileImageUrl: null,
+        href: '/catalog',
+        badgeTitle: 'T',
+        badgeSubtitle: 'S',
+        badgeImageUrl: '/uploads/p.jpg',
+        badgeHref: '/aroma',
+      },
+      {
+        id: 'partial',
+        imageUrl: '/uploads/b.jpg',
+        mobileImageUrl: null,
+        href: '/catalog',
+        badgeTitle: 'Only title',
+        badgeSubtitle: null,
+        badgeImageUrl: null,
+        badgeHref: '/x',
+      },
+      {
+        id: 'none',
+        imageUrl: '/uploads/c.jpg',
+        mobileImageUrl: '/uploads/c-m.jpg',
+        href: '/about',
+        badgeTitle: null,
+        badgeSubtitle: null,
+        badgeImageUrl: null,
+        badgeHref: null,
+      },
+    ]);
+    const svc = new SettingsPublicService(prisma as never);
+    const res = await svc.listHero();
+
+    expect(prisma.heroSlide.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { active: true } }),
+    );
+    expect(res.items).toHaveLength(3);
+    expect(res.items[0]!.plaque).toEqual({
+      title: 'T',
+      subtitle: 'S',
+      imageUrl: '/uploads/p.jpg',
+      href: '/aroma',
+    });
+    expect(res.items[0]!.mobileImageUrl).toBe('/uploads/a.jpg');
+    expect(res.items[1]!.plaque).toBeNull();
+    expect(res.items[2]!.plaque).toBeNull();
+    expect(res.items[2]!.mobileImageUrl).toBe('/uploads/c-m.jpg');
   });
 });

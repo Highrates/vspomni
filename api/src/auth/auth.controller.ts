@@ -10,6 +10,7 @@ import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { UserRole } from '@prisma/client';
 import { AuthService } from './auth.service';
 import { RegistrationService } from './registration.service';
+import { YandexOauthService } from './yandex-oauth.service';
 import {
   AdminLoginDto,
   BuyerLoginDto,
@@ -18,6 +19,8 @@ import {
   RegisterCompleteDto,
   RegisterStartDto,
   RegisterVerifyDto,
+  YandexOauthCompleteDto,
+  YandexOauthStartDto,
 } from './dto/auth.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -32,6 +35,7 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly registration: RegistrationService,
+    private readonly yandexOauth: YandexOauthService,
     private readonly staffAccess: StaffAccessService,
   ) {}
 
@@ -55,6 +59,35 @@ export class AuthController {
     if (!user) throw new UnauthorizedException('Неверный email или пароль');
     await this.auth.claimGuestOrders(user.id, dto.guestId, user.email);
     return this.auth.login(user);
+  }
+
+  /** Яндекс ID: доступен ли OAuth (для кнопки на витрине). */
+  @Public()
+  @Get('yandex/status')
+  yandexStatus() {
+    return this.yandexOauth.status();
+  }
+
+  /** Яндекс ID: URL авторизации + state. */
+  @Public()
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('yandex/start')
+  yandexStart(@Body() dto: YandexOauthStartDto) {
+    return this.yandexOauth.start({ next: dto.next, guestId: dto.guestId });
+  }
+
+  /** Яндекс ID: обмен code → JWT (cookie ставит Front BFF). */
+  @Public()
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('yandex/complete')
+  yandexComplete(@Body() dto: YandexOauthCompleteDto) {
+    return this.yandexOauth.complete({
+      code: dto.code,
+      state: dto.state,
+      guestId: dto.guestId,
+    });
   }
 
   /**

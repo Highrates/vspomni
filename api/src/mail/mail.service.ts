@@ -1,7 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { existsSync } from 'node:fs';
 import { resolve4 } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { join } from 'node:path';
 import * as nodemailer from 'nodemailer';
 import {
   getEmailNotificationEventDef,
@@ -119,6 +121,40 @@ export class MailService {
     });
   }
 
+  /** PNG логотипа для inline CID в письмах. */
+  private resolveLogoPngPath(): string | null {
+    const candidates = [
+      join(process.cwd(), 'assets/mail/logo-vspomni.png'),
+      join(process.cwd(), 'api/assets/mail/logo-vspomni.png'),
+      join(process.cwd(), '../Front/public/logo/logo-vspomni.png'),
+      join(process.cwd(), 'Front/public/logo/logo-vspomni.png'),
+    ];
+    for (const p of candidates) {
+      if (existsSync(p)) return p;
+    }
+    return null;
+  }
+
+  /** Внешний URL лого → cid:, чтобы клиенты показывали картинку, а не текст. */
+  private htmlWithInlineLogo(html: string): {
+    html: string;
+    logoPath: string | null;
+  } {
+    const logoPath = this.resolveLogoPngPath();
+    if (!logoPath) return { html, logoPath: null };
+    const cidSrc = `cid:${MAIL_BRAND.logoCid}`;
+    const next = html
+      .replace(
+        /https?:\/\/[^"'<\s]+\/logo\/logo-vspomni\.png/gi,
+        cidSrc,
+      )
+      .replace(
+        /(?:src=["'])\/logo\/logo-vspomni\.png(["'])/gi,
+        `src="${cidSrc}$1`,
+      );
+    return { html: next, logoPath };
+  }
+
   private async send(params: {
     to: string;
     subject: string;
@@ -138,13 +174,27 @@ export class MailService {
     }
     const endpoint = await this.smtpConnectTarget(configuredHost);
     const transport = this.transporter(endpoint);
+    const { html, logoPath } = this.htmlWithInlineLogo(params.html);
     await transport.sendMail({
       from,
       ...(replyTo ? { replyTo } : {}),
       to: params.to,
       subject: params.subject,
       text: params.text,
-      html: params.html,
+      html,
+      ...(logoPath
+        ? {
+            attachments: [
+              {
+                filename: 'logo-vspomni.png',
+                path: logoPath,
+                cid: MAIL_BRAND.logoCid,
+                contentType: 'image/png',
+                contentDisposition: 'inline',
+              },
+            ],
+          }
+        : {}),
     });
   }
 

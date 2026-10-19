@@ -59,7 +59,10 @@ Bootstrap OK.
    $ROOT/api/.env          (TRUST_PROXY=1, YOOKASSA_*, SMTP_*, DATABASE_URL → :5432)
    $ROOT/Admin/.env.local
    $ROOT/Front/.env.local  (NEXT_PUBLIC_API_URL=http://127.0.0.1:3011/api/v1
-                            NEXT_PUBLIC_SITE_URL=https://vspomni.store)
+                            NEXT_PUBLIC_SITE_URL=https://vspomni.store
+                            REVALIDATE_SECRET=…)
+   $ROOT/Admin/.env.local  (STOREFRONT_URL=http://127.0.0.1:3001
+                            тот же REVALIDATE_SECRET)
 
 2) С Mac: ./deploy/scripts/deploy.sh --skip-upload   # или полный deploy.sh
 

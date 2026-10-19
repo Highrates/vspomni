@@ -46,7 +46,7 @@ export default function ProductCard({ product, isNew = false, hideAromas = false
                 alt={product.name}
                 fill
                 sizes="(max-width: 640px) 50vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, (max-width: 1600px) 25vw, 369px"
-                className="rounded-[12px] sm:rounded-[16px] object-cover transition-transform duration-500 group-hover:scale-105"
+                className="rounded-[12px] sm:rounded-[16px] object-cover"
                 draggable={false}
               />
             )}
@@ -150,7 +150,7 @@ export default function ProductCard({ product, isNew = false, hideAromas = false
   return (
     <Link
       href={detailHref}
-      className="rounded-xl bg-white sm:hover:shadow-xl sm:hover:-translate-y-1 transition-all duration-300 flex h-full flex-col group"
+      className="rounded-xl bg-white flex h-full flex-col group sm:transition-shadow sm:duration-200 sm:hover:shadow-[0_4px_20px_rgba(0,0,0,0.06)]"
       draggable={false}
     >
       {cardBody}
