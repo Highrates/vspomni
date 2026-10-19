@@ -62,7 +62,8 @@ export async function POST(req: NextRequest) {
     revalidatePath(path)
   }
   for (const tag of tags) {
-    revalidateTag(tag)
+    // Next.js 16: profile обязателен (`max` = сброс кэша тега сразу).
+    revalidateTag(tag, 'max')
   }
 
   return NextResponse.json({
