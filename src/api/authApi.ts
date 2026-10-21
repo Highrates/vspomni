@@ -86,6 +86,46 @@ export async function signUpService(
   };
 }
 
+/** Яндекс ID: URL авторизации. */
+export async function startYandexOauth(next?: string): Promise<{ url: string }> {
+  return apiJson<{ url: string; state?: string }>(
+    '/auth/yandex/start',
+    'POST',
+    {
+      ...(next?.trim() ? { next: next.trim() } : {}),
+      guestId: getOrCreateGuestId() || undefined,
+    },
+    { skipAuth: true },
+  );
+}
+
+/** Яндекс ID: обмен code/state → JWT (cookie ставит BFF). */
+export async function completeYandexOauth(
+  code: string,
+  state: string,
+): Promise<{
+  access_token: string;
+  next?: string;
+  user?: { email?: string | null };
+}> {
+  const data = await apiJson<{
+    access_token: string;
+    next?: string;
+    user?: { email?: string | null };
+  }>(
+    '/auth/yandex/complete',
+    'POST',
+    {
+      code,
+      state,
+      guestId: getOrCreateGuestId() || undefined,
+    },
+    { skipAuth: true },
+  );
+  if (data.access_token) setAccessToken(data.access_token);
+  return data;
+}
+
 /** Login → JWT. */
 /** Login / register FE throws this when fields empty. */
 export async function getToken(email: string, password: string): Promise<AuthTokenResult> {

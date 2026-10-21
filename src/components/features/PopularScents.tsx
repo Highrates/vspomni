@@ -91,12 +91,12 @@ export default function PopularScents() {
               className="group relative w-full max-w-[369px] mx-auto cursor-pointer"
             >
               {/* Изображение */}
-              <div className="relative w-full aspect-[369/384] overflow-hidden rounded-xl sm:rounded-2xl bg-neutral-100 transition-all duration-500 group-hover:shadow-lg group-hover:-translate-y-[2px]">
+              <div className="relative w-full aspect-[369/384] overflow-hidden rounded-xl sm:rounded-2xl bg-neutral-100 sm:transition-shadow sm:duration-200 sm:group-hover:shadow-[0_4px_20px_rgba(0,0,0,0.06)]">
                 <Image
                   src={item.img}
                   alt={item.name}
                   fill
-                  className="object-cover transition-transform duration-500 group-hover:scale-105"
+                  className="object-cover"
                   sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 369px"
                 />
 
@@ -107,10 +107,10 @@ export default function PopularScents() {
               </div>
 
               {/* Подписи под карточкой */}
-              <div className="mt-4 sm:mt-5 transition-all duration-300 group-hover:-translate-y-[2px]">
+              <div className="mt-4 sm:mt-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-[18px] sm:text-[20px] font-semibold text-black leading-tight group-hover:text-neutral-800 transition">
+                    <h3 className="text-[18px] sm:text-[20px] font-semibold text-black leading-tight">
                       {item.name}
                     </h3>
 

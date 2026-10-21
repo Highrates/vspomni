@@ -46,4 +46,5 @@ export function nestApiV1Base(): string {
 export const BUYER_AUTH_SET_COOKIE_PATHS = new Set([
   'auth/login',
   'auth/register/complete',
+  'auth/yandex/complete',
 ])

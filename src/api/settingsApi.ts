@@ -39,13 +39,6 @@ export type NestFaqItem = {
   answer: string
 }
 
-export type HeroSlide = {
-  id: string
-  imageUrl: string
-  mobileImageUrl: string | null
-  href?: string | null
-}
-
 export type NestStorySlide = {
   id: string
   url: string
@@ -78,39 +71,6 @@ export async function getStories(): Promise<NestStory[]> {
 export async function getFaqItems(): Promise<NestFaqItem[]> {
   const res = await apiFetch<{ items: NestFaqItem[] }>('/settings/faq')
   return res.items ?? []
-}
-
-export async function getHeroSlides(): Promise<HeroSlide[]> {
-  const res = await apiFetch<{ items: HeroSlide[] }>('/settings/hero')
-  return (res.items ?? []).map((s) => ({
-    ...s,
-    imageUrl: uploadsUrl(s.imageUrl) || s.imageUrl,
-    mobileImageUrl: s.mobileImageUrl ? uploadsUrl(s.mobileImageUrl) || s.mobileImageUrl : null,
-    href: s.href?.trim() || '/catalog',
-  }))
-}
-
-export type HeroSecondaryBanner = {
-  title: string
-  subtitle: string
-  imageUrl: string
-  href: string
-}
-
-export async function getHeroSecondaryBanner(): Promise<HeroSecondaryBanner | null> {
-  try {
-    const res = await apiFetch<HeroSecondaryBanner>('/settings/hero-secondary')
-    if (!res?.title || !res?.imageUrl) return null
-    const imageUrl = uploadsUrl(res.imageUrl) || res.imageUrl
-    return {
-      title: res.title,
-      subtitle: res.subtitle || '',
-      imageUrl,
-      href: res.href?.trim() || '/catalog/aroma/teplichka-u-babuli',
-    }
-  } catch {
-    return null
-  }
 }
 
 export type CartSettings = {

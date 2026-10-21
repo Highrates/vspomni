@@ -23,6 +23,7 @@ import { loadAllCategories } from '@/lib/category/loadAllCategories'
 import { getCandlesSoonBanner } from '@/graphql/queries/candlesSoon.service'
 import { getChoiceProducts } from '@/graphql/queries/product.service'
 import { getAllFaqs } from '@/graphql/queries/faq.service'
+import { loadHeroSlides } from '@/lib/hero/loadHeroSlides'
 
 // Обновляем главную страницу по данным моделей раз в минуту
 export const revalidate = 60
@@ -39,12 +40,14 @@ export const metadata: Metadata = buildPageMetadata({
 })
 
 export default async function Home() {
-  const [candlesSoon, choiceProducts, allCategories, faqs] = await Promise.all([
-    getCandlesSoonBanner().catch(() => null),
-    getChoiceProducts().catch(() => []),
-    loadAllCategories(),
-    getAllFaqs().catch(() => []),
-  ])
+  const [candlesSoon, choiceProducts, allCategories, faqs, heroSlides] =
+    await Promise.all([
+      getCandlesSoonBanner().catch(() => null),
+      getChoiceProducts().catch(() => []),
+      loadAllCategories(),
+      getAllFaqs().catch(() => []),
+      loadHeroSlides().catch(() => []),
+    ])
 
   const comingSoonCategories = pickComingSoonCategories(allCategories)
   const giftPackagesCategory = pickGiftPackagesCategory(allCategories)
@@ -59,7 +62,7 @@ export default async function Home() {
         />
       ) : null}
       <FaqNoscript faqs={faqs} />
-      <Hero />
+      <Hero initialSlides={heroSlides} />
       <StoryBlock />
       <PopularScentsAlt title={HOME_TITLE} heading="h1" />
       <ComingSoon initialCategories={comingSoonCategories} />

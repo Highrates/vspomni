@@ -6,8 +6,8 @@ import { ProductCardItem } from '@/types/product'
 import { getProductsByCollectionId } from '@/graphql/queries/product.service'
 import { interleaveProductsByCategoryAndAroma } from '@/lib/product/interleaveProducts'
 
-const COLLECTION_NOSE_ID = 'Q29sbGVjdGlvbjo1' // Ваши вкусовые сосочки будут в восторге
-const TITLE = 'Ваши вкусовые сосочки будут в восторге'
+const COLLECTION_NOSE_ID = 'Q29sbGVjdGlvbjo1' // Ваши носовые сосочки будут в восторге
+const TITLE = 'Ваши носовые сосочки будут в восторге'
 
 export default function CollectionNoseBlock() {
   const [products, setProducts] = useState<ProductCardItem[]>([])
